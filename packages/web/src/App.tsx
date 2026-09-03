@@ -10,7 +10,7 @@ import { FIXTURES, type SurfaceId } from "./lib/constants.js";
 
 export default function App() {
   const [active, setActive] = useState<SurfaceId>("allocation");
-  const [fixtureId, setFixtureId] = useState("healthy");
+  const [fixtureId, setFixtureId] = useState("live");
   const fixture = FIXTURES.find((f) => f.id === fixtureId) ?? FIXTURES[0]!;
   const { snapshot, loading, error } = useSnapshot(fixture.url);
 

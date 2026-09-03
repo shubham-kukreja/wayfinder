@@ -10,6 +10,7 @@
     "backfill": "tsx scripts/backfill.ts"
   },
   "dependencies": {
+    "@fastify/cors": "^11.3.0",
     "@wayfinder/engine": "workspace:*",
     "better-sqlite3": "^11.5.0",
     "cheerio": "^1.2.0",
