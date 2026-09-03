@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { registerSnapshotRoute } from "./routes/snapshot.js";
 import { registerHealthRoute } from "./routes/health.js";
+import { registerRefreshRoute } from "./routes/refresh.js";
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -12,6 +13,7 @@ async function main() {
 
   registerSnapshotRoute(app);
   registerHealthRoute(app);
+  registerRefreshRoute(app);
 
   await app.listen({ port: PORT, host: "0.0.0.0" });
 }
