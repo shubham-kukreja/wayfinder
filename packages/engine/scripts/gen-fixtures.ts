@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { computeAllocation } from "../src/compute.js";
 import { DEFAULT_PARAMS, SECTOR_NODES, TILT_GROUP_NODES } from "../src/constants.js";
+import { SCORE_PROVENANCE } from "../src/scoreProvenance.js";
 import { DEBT_SIGNALS, EQUITY_SIGNALS, L1_SIGNALS, METALS_SIGNALS, SECTOR_SIGNALS } from "../src/types.js";
 import type {
   NodeId,
@@ -49,8 +50,9 @@ function buildScoreStates(
     out[key] = {
       value,
       provenance,
-      derivedFrom: provenance === "default" ? [] : ["series:example"],
-      transform: provenance === "static" ? "static" : provenance === "default" ? "none" : "percentile",
+      derivedFrom: provenance === "default" || provenance === "manual" ? [] : ["series:example"],
+      transform:
+        provenance === "static" ? "static" : provenance === "default" ? "none" : provenance === "rubric" ? "rubric" : provenance === "manual" ? "none" : "percentile",
       computedAt: provenance === "default" ? null : "2026-09-03T06:00:00Z",
       enteredAt: provenance === "manual" ? "2026-08-15T00:00:00Z" : null,
       staleDays: opts.staleDays ? opts.staleDays(key) : 0,
@@ -170,7 +172,10 @@ function writeSnapshot(filename: string, snapshot: Snapshot) {
     asOf: "2026-09-03T06:00:00Z",
     schemaVersion: "1.0",
     series: buildSeriesStates("ok"),
-    scores: buildScoreStates(scores),
+    scores: buildScoreStates(scores, {
+      provenance: (key) => SCORE_PROVENANCE[key] ?? "auto",
+      staleDays: (key) => (SCORE_PROVENANCE[key] === "manual" ? 12 : 0),
+    }),
     vetoes: buildVetoStates(vetoes, allocation),
     params: DEFAULT_PARAMS,
     allocation,
