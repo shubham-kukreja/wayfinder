@@ -30,7 +30,7 @@ interface MetalsDevResponse {
   currency: string;
   unit: string;
   metals: Record<string, number>;
-  timestamp: string;
+  timestamps: { metal: string; currency: string };
 }
 
 function requireApiKey(apiKey: string | undefined): string {
@@ -82,11 +82,16 @@ export function createBullionAdapter(config: { apiKey: string | undefined; serie
     async fetchLatest(): Promise<Observation[]> {
       const apiKey = requireApiKey(config.apiKey);
       const data = await fetchLatestPrices(apiKey);
-      const asOfDate = lastBusinessDay(new Date(data.timestamp)).toISOString().slice(0, 10);
+      const asOfDate = lastBusinessDay(new Date(data.timestamps.metal)).toISOString().slice(0, 10);
 
       const out: Observation[] = [];
       for (const s of series) {
-        const price = data.metals[s.metal];
+        // §10.2: IBJA is the benchmark. metals.dev's plain "gold"/"silver"
+        // keys are a generic/LBMA-derived spot price, not the IBJA print —
+        // read the ibja_* keys specifically so this series actually tracks
+        // what the framework's other IBJA-referenced logic (SGB issuance,
+        // RBI lending-against-jewellery norms) is benchmarked against.
+        const price = data.metals[`ibja_${s.metal}`];
         if (price === undefined) continue;
         out.push({
           seriesId: s.internalSeriesId,

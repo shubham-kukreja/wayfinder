@@ -46,7 +46,7 @@ describe("Bullion adapter — config", () => {
 });
 
 describe("Bullion adapter — parsing", () => {
-  it("fetchLatest maps gold and silver prices to their internal series IDs", async () => {
+  it("fetchLatest reads the ibja_gold/ibja_silver keys (the actual IBJA benchmark), not the generic gold/silver spot keys", async () => {
     const client = mockAgent.get("https://api.metals.dev");
     client
       .intercept({ path: /\/v1\/latest.*/, method: "GET" })
@@ -56,8 +56,20 @@ describe("Bullion adapter — parsing", () => {
           status: "success",
           currency: "INR",
           unit: "g",
-          metals: { gold: 7250.5, silver: 91.3 },
-          timestamp: "2026-09-03T05:00:00Z",
+          // Real metals.dev /v1/latest response (verified 2026-09-03): plain
+          // "gold"/"silver" are generic spot, NOT the IBJA print — those live
+          // under ibja_gold/ibja_silver. Includes other metals/keys the real
+          // API returns, to guard against the adapter accidentally matching
+          // the wrong one.
+          metals: {
+            gold: 13376.4002,
+            silver: 199.5872,
+            mcx_gold: 15240.2002,
+            mcx_silver: 236.2659,
+            ibja_gold: 15118.0179,
+            ibja_silver: 228.3922,
+          },
+          timestamps: { metal: "2026-09-03T01:14:11.391Z", currency: "2026-09-03T01:14:14.812Z" },
         },
         { headers: { "content-type": "application/json" } }
       );
@@ -67,8 +79,8 @@ describe("Bullion adapter — parsing", () => {
 
     expect(observations).toHaveLength(2);
     const bySeries = Object.fromEntries(observations.map((o) => [o.seriesId, o.value]));
-    expect(bySeries["gold_inr"]).toBe(7250.5);
-    expect(bySeries["silver_inr"]).toBe(91.3);
+    expect(bySeries["gold_inr"]).toBe(15118.0179);
+    expect(bySeries["silver_inr"]).toBe(228.3922);
   });
 
   it("throws a descriptive error on non-200 response", async () => {
