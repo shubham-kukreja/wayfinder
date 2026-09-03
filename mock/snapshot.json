@@ -1,0 +1,1724 @@
+{
+  "asOf": "2026-09-03T06:00:00Z",
+  "schemaVersion": "1.0",
+  "series": {
+    "earnings_yield_gap": {
+      "id": "earnings_yield_gap",
+      "latest": 101.90933372468827,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "NSE",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "nifty50_pe": {
+      "id": "nifty50_pe",
+      "latest": 106.97902273701226,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "NSE",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "nifty100_pe": {
+      "id": "nifty100_pe",
+      "latest": 101.87366804922469,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "NSE",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "midcap150_pe": {
+      "id": "midcap150_pe",
+      "latest": 104.11761397596842,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "NSE",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "smallcap250_pe": {
+      "id": "smallcap250_pe",
+      "latest": 104.45880199192086,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "NSE",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "real_gsec_10y": {
+      "id": "real_gsec_10y",
+      "latest": 104.00360165720548,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "NSE",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "gsec_10y": {
+      "id": "gsec_10y",
+      "latest": 100.51868211994606,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "NSE",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "tbill_1y": {
+      "id": "tbill_1y",
+      "latest": 108.46152389255566,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "NSE",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "aaa_3y": {
+      "id": "aaa_3y",
+      "latest": 106.2091926260967,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "NSE",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "aaa_spread": {
+      "id": "aaa_spread",
+      "latest": 108.8863988457187,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "NSE",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "real_gold_price": {
+      "id": "real_gold_price",
+      "latest": 107.53073661239159,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "NSE",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "gold_inr": {
+      "id": "gold_inr",
+      "latest": 106.04831781883779,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "IBJA",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "silver_inr": {
+      "id": "silver_inr",
+      "latest": 105.42892314912012,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "IBJA",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "gold_silver_ratio": {
+      "id": "gold_silver_ratio",
+      "latest": 103.15459520056268,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "IBJA",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "us_real_10y": {
+      "id": "us_real_10y",
+      "latest": 107.80409707665129,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "FRED",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "nifty50_tr": {
+      "id": "nifty50_tr",
+      "latest": 101.47514664936952,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "NSE",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "bond_index_tr": {
+      "id": "bond_index_tr",
+      "latest": 109.4030953324405,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "NSE",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "flow_equity_3m": {
+      "id": "flow_equity_3m",
+      "latest": 101.19077061768809,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "AMFI",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "flow_duration_3m": {
+      "id": "flow_duration_3m",
+      "latest": 104.15728392397226,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "AMFI",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    },
+    "flow_goldetf_3m": {
+      "id": "flow_goldetf_3m",
+      "latest": 109.47558465657406,
+      "latestDate": "2026-09-01",
+      "percentile": 55,
+      "observations": 180,
+      "windowStart": "2016-09-01",
+      "source": "AMFI",
+      "status": "ok",
+      "staleDays": 2,
+      "error": null
+    }
+  },
+  "scores": {
+    "l1.equity::valuation": {
+      "value": 45,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "l1.equity::macro": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "l1.equity::fundamentals": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "l1.equity::flows": {
+      "value": 40,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "l1.equity::momentum": {
+      "value": 60,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "l1.debt::valuation": {
+      "value": 65,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "l1.debt::macro": {
+      "value": 60,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "l1.debt::fundamentals": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "l1.debt::flows": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "l1.debt::momentum": {
+      "value": 45,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "l1.metals::valuation": {
+      "value": 35,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "l1.metals::macro": {
+      "value": 60,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "l1.metals::fundamentals": {
+      "value": 65,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "l1.metals::flows": {
+      "value": 30,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "l1.metals::momentum": {
+      "value": 75,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.large::valuation": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.large::relvalue": {
+      "value": 60,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.large::revisions": {
+      "value": 50,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.large::growth_diff": {
+      "value": 45,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.large::margin_cycle": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.mid::valuation": {
+      "value": 35,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.mid::relvalue": {
+      "value": 30,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.mid::revisions": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.mid::growth_diff": {
+      "value": 60,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.mid::margin_cycle": {
+      "value": 40,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.small::valuation": {
+      "value": 25,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.small::relvalue": {
+      "value": 20,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.small::revisions": {
+      "value": 45,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.small::growth_diff": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.small::margin_cycle": {
+      "value": 30,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.intl::valuation": {
+      "value": 40,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.intl::relvalue": {
+      "value": 45,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.intl::revisions": {
+      "value": 60,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.intl::growth_diff": {
+      "value": 65,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "equity.intl::margin_cycle": {
+      "value": 50,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "debt.liquid::carry": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "debt.liquid::rate_cycle": {
+      "value": 40,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "debt.liquid::spread_cushion": {
+      "value": 50,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "debt.liquid::liquidity": {
+      "value": 90,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "debt.corporate::carry": {
+      "value": 60,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "debt.corporate::rate_cycle": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "debt.corporate::spread_cushion": {
+      "value": 45,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "debt.corporate::liquidity": {
+      "value": 65,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "debt.gilt::carry": {
+      "value": 65,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "debt.gilt::rate_cycle": {
+      "value": 70,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "debt.gilt::spread_cushion": {
+      "value": 50,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "debt.gilt::liquidity": {
+      "value": 75,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "metals.gold::ratio_position": {
+      "value": 40,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "metals.gold::real_rates": {
+      "value": 65,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "metals.gold::industrial": {
+      "value": 50,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "metals.silver::ratio_position": {
+      "value": 60,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "metals.silver::real_rates": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "metals.silver::industrial": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.banking::valuation": {
+      "value": 60,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.banking::revisions": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.banking::rel_momentum": {
+      "value": 50,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.banking::cycle_position": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.it::valuation": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.it::revisions": {
+      "value": 40,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.it::rel_momentum": {
+      "value": 35,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.it::cycle_position": {
+      "value": 45,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.pharma::valuation": {
+      "value": 50,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.pharma::revisions": {
+      "value": 65,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.pharma::rel_momentum": {
+      "value": 60,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.pharma::cycle_position": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.auto::valuation": {
+      "value": 45,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.auto::revisions": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.auto::rel_momentum": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.auto::cycle_position": {
+      "value": 60,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.capgoods::valuation": {
+      "value": 60,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.capgoods::revisions": {
+      "value": 75,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.capgoods::rel_momentum": {
+      "value": 80,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.capgoods::cycle_position": {
+      "value": 70,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.fmcg::valuation": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.fmcg::revisions": {
+      "value": 45,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.fmcg::rel_momentum": {
+      "value": 40,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.fmcg::cycle_position": {
+      "value": 50,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.energy::valuation": {
+      "value": 60,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.energy::revisions": {
+      "value": 50,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.energy::rel_momentum": {
+      "value": 45,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.energy::cycle_position": {
+      "value": 40,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.metals::valuation": {
+      "value": 55,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.metals::revisions": {
+      "value": 45,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.metals::rel_momentum": {
+      "value": 50,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    },
+    "sector.metals::cycle_position": {
+      "value": 35,
+      "provenance": "auto",
+      "derivedFrom": [
+        "series:example"
+      ],
+      "transform": "percentile",
+      "computedAt": "2026-09-03T06:00:00Z",
+      "enteredAt": null,
+      "staleDays": 0,
+      "note": null,
+      "confidence": null
+    }
+  },
+  "vetoes": {
+    "equity.small": {
+      "active": true,
+      "triggeredBy": [
+        "veto.earnings_collapse"
+      ],
+      "provenance": "manual",
+      "detail": "Manually flagged for this fixture.",
+      "hadEffect": false
+    }
+  },
+  "params": {
+    "signalWeights": {
+      "l1": {
+        "valuation": 0.3,
+        "macro": 0.2,
+        "fundamentals": 0.2,
+        "flows": 0.15,
+        "momentum": 0.15
+      },
+      "equity": {
+        "valuation": 0.3,
+        "relvalue": 0.2,
+        "revisions": 0.2,
+        "growth_diff": 0.15,
+        "margin_cycle": 0.15
+      },
+      "debt": {
+        "carry": 0.3,
+        "rate_cycle": 0.3,
+        "spread_cushion": 0.25,
+        "liquidity": 0.15
+      },
+      "metals": {
+        "ratio_position": 0.4,
+        "real_rates": 0.35,
+        "industrial": 0.25
+      },
+      "sector": {
+        "valuation": 0.3,
+        "revisions": 0.3,
+        "rel_momentum": 0.25,
+        "cycle_position": 0.15
+      }
+    },
+    "neutralWeights": {
+      "l1": {
+        "l1.equity": 0.55,
+        "l1.debt": 0.35,
+        "l1.metals": 0.1
+      },
+      "equity": {
+        "equity.large": 0.45,
+        "equity.mid": 0.2,
+        "equity.small": 0.15,
+        "equity.intl": 0.2
+      },
+      "debt": {
+        "debt.liquid": 0.4,
+        "debt.corporate": 0.35,
+        "debt.gilt": 0.25
+      },
+      "metals": {
+        "metals.gold": 0.75,
+        "metals.silver": 0.25
+      }
+    },
+    "maxTilt": {
+      "l1": 0.2,
+      "equity": 0.3,
+      "debt": 0.3,
+      "metals": 0.25
+    },
+    "sector": {
+      "sleeveCap": 0.15,
+      "maxSectors": 2,
+      "threshold": 70
+    },
+    "normalisation": "proportional",
+    "percentileWindowYears": 10,
+    "percentileMinObservations": 24,
+    "respectDefinitionBreaks": true
+  },
+  "allocation": {
+    "groups": {
+      "l1": {
+        "nodes": {
+          "l1.equity": {
+            "composite": 50.5,
+            "rawTilt": 0.002,
+            "tilt": 0.002,
+            "prelim": 0.5511,
+            "final": 0.5445114119158186,
+            "neutral": 0.55,
+            "vsNeutralRaw": 0.002,
+            "vsNeutralFinal": -0.0054885880841814005,
+            "vetoActive": false
+          },
+          "l1.debt": {
+            "composite": 57.5,
+            "rawTilt": 0.03,
+            "tilt": 0.03,
+            "prelim": 0.3605,
+            "final": 0.3561900997925106,
+            "neutral": 0.35,
+            "vsNeutralRaw": 0.03,
+            "vsNeutralFinal": 0.006190099792510617,
+            "vetoActive": false
+          },
+          "l1.metals": {
+            "composite": 51.25,
+            "rawTilt": 0.005000000000000001,
+            "tilt": 0.005000000000000001,
+            "prelim": 0.10049999999999999,
+            "final": 0.09929848829167078,
+            "neutral": 0.1,
+            "vsNeutralRaw": 0.005000000000000001,
+            "vsNeutralFinal": -0.0007015117083292305,
+            "vetoActive": false
+          }
+        }
+      },
+      "equity": {
+        "nodes": {
+          "equity.large": {
+            "composite": 53.5,
+            "rawTilt": 0.021,
+            "tilt": 0.021,
+            "prelim": 0.45944999999999997,
+            "final": 0.4661272731884242,
+            "neutral": 0.45,
+            "vsNeutralRaw": 0.021,
+            "vsNeutralFinal": 0.016127273188424163,
+            "vetoActive": false
+          },
+          "equity.mid": {
+            "composite": 42.5,
+            "rawTilt": -0.045,
+            "tilt": -0.045,
+            "prelim": 0.191,
+            "final": 0.19377583889212976,
+            "neutral": 0.2,
+            "vsNeutralRaw": -0.045,
+            "vsNeutralFinal": -0.006224161107870246,
+            "vetoActive": false
+          },
+          "equity.small": {
+            "composite": 33.25,
+            "rawTilt": -0.1005,
+            "tilt": -0.1005,
+            "prelim": 0.134925,
+            "final": 0.13688589037968904,
+            "neutral": 0.15,
+            "vsNeutralRaw": -0.1005,
+            "vsNeutralFinal": -0.013114109620310954,
+            "vetoActive": true
+          },
+          "equity.intl": {
+            "composite": 50.25,
+            "rawTilt": 0.0015,
+            "tilt": 0.0015,
+            "prelim": 0.20030000000000003,
+            "final": 0.20321099753975705,
+            "neutral": 0.2,
+            "vsNeutralRaw": 0.0015,
+            "vsNeutralFinal": 0.003210997539757038,
+            "vetoActive": false
+          }
+        }
+      },
+      "debt": {
+        "nodes": {
+          "debt.liquid": {
+            "composite": 54.5,
+            "rawTilt": 0.027,
+            "tilt": 0.027,
+            "prelim": 0.4108,
+            "final": 0.39359026563510513,
+            "neutral": 0.4,
+            "vsNeutralRaw": 0.027,
+            "vsNeutralFinal": -0.006409734364894892,
+            "vetoActive": false
+          },
+          "debt.corporate": {
+            "composite": 55.5,
+            "rawTilt": 0.033,
+            "tilt": 0.033,
+            "prelim": 0.3615499999999999,
+            "final": 0.3464035066708185,
+            "neutral": 0.35,
+            "vsNeutralRaw": 0.033,
+            "vsNeutralFinal": -0.0035964933291814938,
+            "vetoActive": false
+          },
+          "debt.gilt": {
+            "composite": 64.25,
+            "rawTilt": 0.08549999999999999,
+            "tilt": 0.08549999999999999,
+            "prelim": 0.271375,
+            "final": 0.26000622769407655,
+            "neutral": 0.25,
+            "vsNeutralRaw": 0.08549999999999999,
+            "vsNeutralFinal": 0.010006227694076553,
+            "vetoActive": false
+          }
+        }
+      },
+      "metals": {
+        "nodes": {
+          "metals.gold": {
+            "composite": 51.25,
+            "rawTilt": 0.00625,
+            "tilt": 0.00625,
+            "prelim": 0.7546875000000001,
+            "final": 0.7446808510638299,
+            "neutral": 0.75,
+            "vsNeutralRaw": 0.00625,
+            "vsNeutralFinal": -0.005319148936170137,
+            "vetoActive": false
+          },
+          "metals.silver": {
+            "composite": 57,
+            "rawTilt": 0.035,
+            "tilt": 0.035,
+            "prelim": 0.25875,
+            "final": 0.2553191489361702,
+            "neutral": 0.25,
+            "vsNeutralRaw": 0.035,
+            "vsNeutralFinal": 0.005319148936170193,
+            "vetoActive": false
+          }
+        }
+      }
+    },
+    "sector": {
+      "composites": {
+        "sector.banking": 55.25,
+        "sector.it": 44,
+        "sector.pharma": 57.75,
+        "sector.auto": 52.75,
+        "sector.capgoods": 71,
+        "sector.fmcg": 47.5,
+        "sector.energy": 50.25,
+        "sector.metals": 47.75
+      },
+      "qualifying": [
+        "sector.capgoods"
+      ],
+      "held": [
+        "sector.capgoods"
+      ],
+      "sleeve": 0.075,
+      "perSector": 0.075
+    },
+    "rollup": [
+      {
+        "id": "equity.large",
+        "label": "Large Cap",
+        "groupWeight": 0.5445114119158186,
+        "withinGroup": 0.4661272731884242,
+        "portfolioWeight": 0.2347757481820769
+      },
+      {
+        "id": "equity.mid",
+        "label": "Mid Cap",
+        "groupWeight": 0.5445114119158186,
+        "withinGroup": 0.19377583889212976,
+        "portfolioWeight": 0.09759966895805135
+      },
+      {
+        "id": "equity.small",
+        "label": "Small Cap",
+        "groupWeight": 0.5445114119158186,
+        "withinGroup": 0.13688589037968904,
+        "portfolioWeight": 0.06894573473384857
+      },
+      {
+        "id": "equity.intl",
+        "label": "International",
+        "groupWeight": 0.5445114119158186,
+        "withinGroup": 0.20321099753975705,
+        "portfolioWeight": 0.10235190414815544
+      },
+      {
+        "id": "sleeve.capgoods",
+        "label": "Capital Goods",
+        "groupWeight": 0.5445114119158186,
+        "withinGroup": 0.075,
+        "portfolioWeight": 0.040838355893686396
+      },
+      {
+        "id": "debt.liquid",
+        "label": "Liquid",
+        "groupWeight": 0.3561900997925106,
+        "withinGroup": 0.39359026563510513,
+        "portfolioWeight": 0.14019295599392884
+      },
+      {
+        "id": "debt.corporate",
+        "label": "Corporate",
+        "groupWeight": 0.3561900997925106,
+        "withinGroup": 0.3464035066708185,
+        "portfolioWeight": 0.12338549960955444
+      },
+      {
+        "id": "debt.gilt",
+        "label": "Gilt",
+        "groupWeight": 0.3561900997925106,
+        "withinGroup": 0.26000622769407655,
+        "portfolioWeight": 0.09261164418902736
+      },
+      {
+        "id": "metals.gold",
+        "label": "Gold",
+        "groupWeight": 0.09929848829167078,
+        "withinGroup": 0.7446808510638299,
+        "portfolioWeight": 0.07394568277039314
+      },
+      {
+        "id": "metals.silver",
+        "label": "Silver",
+        "groupWeight": 0.09929848829167078,
+        "withinGroup": 0.2553191489361702,
+        "portfolioWeight": 0.02535280552127764
+      }
+    ],
+    "total": 1.0000000000000002
+  },
+  "fetchLog": [
+    {
+      "source": "FRED",
+      "startedAt": "2026-09-03T06:00:00Z",
+      "finishedAt": "2026-09-03T06:00:02Z",
+      "status": "ok",
+      "error": null,
+      "rowsWritten": 1
+    },
+    {
+      "source": "IBJA",
+      "startedAt": "2026-09-03T06:00:00Z",
+      "finishedAt": "2026-09-03T06:00:03Z",
+      "status": "ok",
+      "error": null,
+      "rowsWritten": 2
+    },
+    {
+      "source": "RBI",
+      "startedAt": "2026-09-03T06:00:00Z",
+      "finishedAt": "2026-09-03T06:00:04Z",
+      "status": "ok",
+      "error": null,
+      "rowsWritten": 5
+    },
+    {
+      "source": "NSE",
+      "startedAt": "2026-09-03T06:00:00Z",
+      "finishedAt": "2026-09-03T06:00:06Z",
+      "status": "ok",
+      "error": null,
+      "rowsWritten": 20
+    },
+    {
+      "source": "AMFI",
+      "startedAt": "2026-09-03T06:00:00Z",
+      "finishedAt": "2026-09-03T06:00:08Z",
+      "status": "ok",
+      "error": null,
+      "rowsWritten": 8
+    }
+  ],
+  "warnings": []
+}
