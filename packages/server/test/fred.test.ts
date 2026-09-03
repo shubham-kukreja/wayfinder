@@ -2,6 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MockAgent, setGlobalDispatcher, getGlobalDispatcher } from "undici";
 import { createFredAdapter, FredConfigError, FRED_SERIES } from "../src/adapters/fred.js";
 
+// Parsing tests use a single-series config rather than the real,
+// multi-series FRED_SERIES constant — each MockAgent interceptor here
+// handles exactly one request, and the adapter fires one request per
+// configured series, so testing parsing logic in isolation doesn't need
+// to know how many real series are configured.
+const SINGLE_SERIES = [{ fredSeriesId: "DFII10", internalSeriesId: "us_real_10y" }];
+
 let mockAgent: MockAgent;
 let originalDispatcher: ReturnType<typeof getGlobalDispatcher>;
 
@@ -47,7 +54,7 @@ describe("FRED adapter — parsing", () => {
         { headers: { "content-type": "application/json" } }
       );
 
-    const adapter = createFredAdapter({ apiKey: "test-key", series: FRED_SERIES });
+    const adapter = createFredAdapter({ apiKey: "test-key", series: SINGLE_SERIES });
     const observations = await adapter.fetchHistory(new Date("2026-06-01"), new Date("2026-06-03"));
 
     expect(observations).toHaveLength(2);
@@ -70,7 +77,7 @@ describe("FRED adapter — parsing", () => {
         { headers: { "content-type": "application/json" } }
       );
 
-    const adapter = createFredAdapter({ apiKey: "test-key", series: FRED_SERIES });
+    const adapter = createFredAdapter({ apiKey: "test-key", series: SINGLE_SERIES });
     const observations = await adapter.fetchLatest();
 
     expect(observations).toHaveLength(1);

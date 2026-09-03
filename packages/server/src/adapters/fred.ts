@@ -132,5 +132,17 @@ export function createFredAdapter(config: { apiKey: string | undefined; series: 
   };
 }
 
-// Series used by this dashboard (§7.1, §8.4): DFII10 -> us_real_10y (US 10Y TIPS real yield).
-export const FRED_SERIES: FredSeriesConfig[] = [{ fredSeriesId: "DFII10", internalSeriesId: "us_real_10y" }];
+// Series used by this dashboard:
+//   DFII10 -> us_real_10y (US 10Y TIPS real yield, §7.1/§8.4)
+//   INDIRLTLT01STM -> gsec_10y (India 10Y government bond yield, monthly,
+//     OECD-sourced). §10.3 originally targeted RBI DBIE for this series,
+//     but the only "yield" page found on the dbie.rbihub.in mirror
+//     (yield-of-sgl-transactions-in-government-dated-securities) turned
+//     out to be a price/turnover index (values ~100-280), not a yield —
+//     confirmed live 2026-09-03. INDIRLTLT01STM is the correct magnitude
+//     (6-7%) and current; using FRED here is more reliable than scraping
+//     a series that isn't actually on the RBI mirror.
+export const FRED_SERIES: FredSeriesConfig[] = [
+  { fredSeriesId: "DFII10", internalSeriesId: "us_real_10y" },
+  { fredSeriesId: "INDIRLTLT01STM", internalSeriesId: "gsec_10y" },
+];

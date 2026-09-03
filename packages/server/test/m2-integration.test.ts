@@ -3,8 +3,13 @@ import Database from "better-sqlite3";
 import { MockAgent, setGlobalDispatcher, getGlobalDispatcher } from "undici";
 import { migrate } from "../src/store/schema.js";
 import { insertObservations, seriesCoverage } from "../src/store/observations.js";
-import { createFredAdapter, FRED_SERIES } from "../src/adapters/fred.js";
+import { createFredAdapter } from "../src/adapters/fred.js";
 import { deriveRealRatesScores, usReal10y6mChangeBp } from "../src/pipeline/derive.js";
+
+// This test specifically gates the DFII10 -> us_real_10y path (§8.4), so
+// it uses a single-series config rather than the real FRED_SERIES
+// constant, which now also includes gsec_10y.
+const DFII10_ONLY = [{ fredSeriesId: "DFII10", internalSeriesId: "us_real_10y" }];
 
 let db: Database.Database;
 let mockAgent: MockAgent;
@@ -48,7 +53,7 @@ describe("M2 — FRED backfill -> store -> metals.*::real_rates end-to-end", () 
       .intercept({ path: /\/fred\/series\/observations.*/, method: "GET" })
       .reply(200, { observations: rows }, { headers: { "content-type": "application/json" } });
 
-    const adapter = createFredAdapter({ apiKey: "test-key", series: FRED_SERIES });
+    const adapter = createFredAdapter({ apiKey: "test-key", series: DFII10_ONLY });
     const observations = await adapter.fetchHistory(new Date("2006-09-01"), new Date("2026-09-01"));
 
     expect(observations.length).toBe(240);

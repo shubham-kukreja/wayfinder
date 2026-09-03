@@ -16,38 +16,73 @@ import type { HealthStatus, Observation, SourceAdapter } from "./types.js";
 //
 // The mirror itself has no JSON API either — series pages render an
 // AG Grid data table server-side with no export button. This adapter
-// drives the grid with a real (headless) browser: select "All months"
-// in the period dropdown, then page through AG Grid's built-in
-// pagination (data-ref="btNext"/aria-disabled), collecting rows keyed
-// by row-id since AG Grid splits pinned-left columns (month, commodity)
-// from scrollable data columns (ruralIndex, combinedIndex, etc.) into
-// separate DOM containers that must be joined by row-id, not read as
-// one contiguous row.
+// drives the grid with a real (headless) browser, paging through AG
+// Grid's built-in pagination (data-ref="btNext"/aria-disabled) and
+// collecting rows keyed by row-id since AG Grid splits pinned-left
+// columns from scrollable data columns into separate DOM containers that
+// must be joined by row-id, not read as one contiguous row. Two distinct
+// page shapes have been found so far (RBI_PAGES handles both):
+//   - CPI defaults to showing one month; needs "All months" picked
+//     explicitly in a <select>, and its columns are semantic col-ids
+//     (month, commodity, combinedIndex, ...).
+//   - The treasury-bills yield page has NO select controls at all —
+//     shows its full ~300-observation history by default — and AG
+//     Grid's col-ids there are bare numeric indices ("0", "1", ...), not
+//     semantic names.
 const RBIHUB_BASE_URL = "https://dbie.rbihub.in";
 
-export type RbiSeriesId = "cpi_index" | "cpi_yoy" | "tbill_1y" | "gsec_10y";
+// gsec_10y is deliberately NOT here — the only "yield" page found on this
+// mirror (yield-of-sgl-transactions-in-government-dated-securities) turned
+// out to be a price/turnover index, not a yield (confirmed live
+// 2026-09-03; see adapters/fred.ts, which sources gsec_10y from FRED's
+// INDIRLTLT01STM instead). repo_rate has no dedicated series anywhere in
+// this mirror's ~350-page catalog as of the same date.
+export type RbiSeriesId = "cpi_index" | "cpi_yoy" | "tbill_1y";
 
 interface RbiPageConfig {
   path: string;
-  // The AG Grid col-id to read per internal series, and which "Month"
-  // select option label enables the full time series (as opposed to
-  // the single-month default view).
-  monthSelectLabel: string;
+  // The AG Grid col-id to read per internal series. Pages differ in
+  // whether they need a month/period selector at all: CPI defaults to a
+  // single-month view and needs "All months" picked explicitly; the
+  // treasury-bills yield page (verified 2026-09-03) shows its full
+  // ~300-observation history by default with no selector present.
+  // monthSelectLabel is only applied when the page actually has selects.
+  monthSelectLabel?: string;
+  dateColId: string; // the col-id holding the period/date for each row
   commodityFilter?: string; // for pages with a commodity/instrument column
   columnMap: Partial<Record<RbiSeriesId, string>>;
 }
 
-// Verified 2026-09-03 against the live mirror: /prices/consumer-price-index
-// renders an AG Grid with columns month, commodity, status, ruralIndex,
-// ruralInflation, urbanIndex, urbanInflation, combinedIndex,
-// combinedInflation. "All months" is a real option in the second <select>
-// on the page (the first is the CPI base-year selector).
+// Verified 2026-09-03 against the live mirror.
 const RBI_PAGES: RbiPageConfig[] = [
   {
+    // /prices/consumer-price-index renders an AG Grid with columns month,
+    // commodity, status, ruralIndex, ruralInflation, urbanIndex,
+    // urbanInflation, combinedIndex, combinedInflation. "All months" is a
+    // real option in the second <select> on the page (the first is the
+    // CPI base-year selector) — without picking it, the grid defaults to
+    // showing only the latest month.
     path: "/prices/consumer-price-index",
     monthSelectLabel: "All months",
+    dateColId: "month",
     commodityFilter: "A) General Index",
     columnMap: { cpi_index: "combinedIndex", cpi_yoy: "combinedInflation" },
+  },
+  {
+    // /tables/yield-of-sgl-transactions-in-treasury-bills has NO select
+    // controls at all — it shows its full history (306 observations as
+    // of 2026-09-03) by default, paginated. Columns are period plus one
+    // yield column per maturity bucket in days, but (unlike CPI's page)
+    // AG Grid's col-ids here are bare numeric indices, not semantic
+    // names — verified live: col-id "0" = header "183TO364 (INR)"
+    // (yield %), "1" = "92TO182 (INR)", "2" = "15TO91 (INR)", "3" =
+    // "UPTOTO14 (INR)". The 183-364 day bucket (col "0") is the closest
+    // available match to a 1-year T-bill yield — RBI doesn't auction
+    // exactly 365-day bills, so this is the nearest real bucket, not an
+    // exact 1y tenor.
+    path: "/tables/yield-of-sgl-transactions-in-treasury-bills",
+    dateColId: "period",
+    columnMap: { tbill_1y: "0" },
   },
 ];
 
@@ -62,7 +97,7 @@ interface GridRow {
   [colId: string]: string | undefined;
 }
 
-async function extractAllPages(page: Page, commodityFilter: string | undefined): Promise<GridRow[]> {
+async function extractAllPages(page: Page, dateColId: string, commodityFilter: string | undefined): Promise<GridRow[]> {
   const collected = new Map<string, GridRow>();
   const nextBtn = page.locator("[data-ref='btNext']");
 
@@ -80,9 +115,9 @@ async function extractAllPages(page: Page, commodityFilter: string | undefined):
     });
 
     for (const row of rows as GridRow[]) {
-      if (!row["month"]) continue;
+      if (!row[dateColId]) continue;
       if (commodityFilter && row["commodity"] !== commodityFilter) continue;
-      collected.set(row["month"]!, row);
+      collected.set(row[dateColId]!, row);
     }
 
     const ariaDisabled = await nextBtn.getAttribute("aria-disabled").catch(() => "true");
@@ -99,23 +134,30 @@ async function extractAllPages(page: Page, commodityFilter: string | undefined):
 
 async function scrapePage(page: Page, config: RbiPageConfig): Promise<GridRow[]> {
   await page.goto(`${RBIHUB_BASE_URL}${config.path}`, { waitUntil: "networkidle", timeout: 30000 });
-  const selects = await page.$$("select");
-  if (selects.length < 2) {
-    throw new RbiScrapeError(
-      `Expected at least 2 <select> controls on ${config.path}, found ${selects.length}. The mirror's page layout may have changed.`
-    );
-  }
-  // The second select is the period/month selector on the pages this
-  // adapter targets (verified live 2026-09-03); the first is a base-year
-  // or unit selector. This ordering assumption is exactly the kind of
-  // thing that breaks silently on a redesign — health() below is meant
-  // to catch that early.
-  await selects[1]!.selectOption({ label: config.monthSelectLabel }).catch(() => {
-    throw new RbiScrapeError(`"${config.monthSelectLabel}" option not found in the period selector on ${config.path}.`);
-  });
-  await page.waitForTimeout(1500);
 
-  const rows = await extractAllPages(page, config.commodityFilter);
+  // Only pages that declare monthSelectLabel need the period-select step
+  // (verified live: CPI defaults to a single month and needs "All
+  // months" picked; the treasury-bills yield page has no selects at all
+  // and shows its full history by default).
+  if (config.monthSelectLabel) {
+    const selects = await page.$$("select");
+    if (selects.length < 2) {
+      throw new RbiScrapeError(
+        `Expected at least 2 <select> controls on ${config.path}, found ${selects.length}. The mirror's page layout may have changed.`
+      );
+    }
+    // The second select is the period/month selector on the pages this
+    // adapter targets (verified live 2026-09-03); the first is a base-year
+    // or unit selector. This ordering assumption is exactly the kind of
+    // thing that breaks silently on a redesign — health() below is meant
+    // to catch that early.
+    await selects[1]!.selectOption({ label: config.monthSelectLabel }).catch(() => {
+      throw new RbiScrapeError(`"${config.monthSelectLabel}" option not found in the period selector on ${config.path}.`);
+    });
+    await page.waitForTimeout(1500);
+  }
+
+  const rows = await extractAllPages(page, config.dateColId, config.commodityFilter);
   if (rows.length === 0) {
     throw new RbiScrapeError(`No rows extracted from ${config.path} — the grid's column IDs or structure may have changed.`);
   }
@@ -166,9 +208,15 @@ export function createRbiAdapter(config: RbiAdapterConfig = {}): SourceAdapter {
           for (const row of rows) {
             const value = parseNumeric(row[colId!]);
             if (value === null) continue;
+            const rawDate = row[pageConfig.dateColId]!;
+            // CPI's dateColId ("month") holds "YYYY-MM" and needs a day
+            // appended; the treasury-bills page's dateColId ("period")
+            // already holds a full "YYYY-MM-DD" date. Normalise on
+            // whichever shape is present rather than assuming one.
+            const date = /^\d{4}-\d{2}$/.test(rawDate) ? `${rawDate}-01` : rawDate;
             out.push({
               seriesId: internalId,
-              date: `${row["month"]}-01`, // month strings are "YYYY-MM"
+              date,
               value,
               raw: row,
             });

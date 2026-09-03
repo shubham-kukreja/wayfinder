@@ -35,6 +35,17 @@ describe.skipIf(!shouldRun)("RBI adapter — live against dbie.rbihub.in", () =>
     expect(cpiIndex.date).toMatch(/^\d{4}-\d{2}-01$/);
   }, 60000);
 
+  it("scrapes tbill_1y from the treasury-bills yield page (no select controls, different date format)", async () => {
+    const adapter = createRbiAdapter({ executablePath, headless: true });
+    const observations = await adapter.fetchLatest();
+
+    const tbill = observations.find((o) => o.seriesId === "tbill_1y");
+    expect(tbill).toBeDefined();
+    expect(tbill!.value).toBeGreaterThan(0); // real yield %, not a price/index magnitude
+    expect(tbill!.value).toBeLessThan(20);
+    expect(tbill!.date).toMatch(/^\d{4}-\d{2}-\d{2}$/); // already a full date on this page, no "-01" append needed
+  }, 60000);
+
   it("health() reports ok:true against the live mirror", async () => {
     const adapter = createRbiAdapter({ executablePath, headless: true });
     const health = await adapter.health();

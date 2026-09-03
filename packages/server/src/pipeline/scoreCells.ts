@@ -12,12 +12,19 @@ export interface ScoreCellResult {
 }
 
 // §7 — every score cell computable end-to-end from the series this
-// project's adapters (FRED, bullion/IBJA, AMFI) actually fetch as of this
-// build. Deliberately NOT the full 85 cells: NSE (~19 cells) and RBI
-// beyond CPI (repo_rate, gsec_10y, tbill_1y — the mirror's page-per-series
-// scrape only covers CPI so far, see adapters/rbi.ts) aren't wired into
-// the refresh route yet. Cells this can't compute are left for the
-// caller to default to 50/manual — this module never guesses.
+// project's adapters (FRED, bullion/IBJA, AMFI, RBI) actually fetch as of
+// this build. Deliberately NOT the full 85 cells: NSE (~19 cells,
+// equity/sector valuation and momentum) isn't built. RBI now covers
+// cpi_index, cpi_yoy, and tbill_1y (see adapters/rbi.ts); gsec_10y comes
+// from FRED instead (the only RBI-mirror "yield" page turned out to be a
+// price/turnover index, not a yield); repo_rate has no source found on
+// either RBI's own portal or the mirror as of 2026-09-03. None of
+// cpi_index/cpi_yoy/tbill_1y/gsec_10y are wired into a score cell here
+// yet either — they feed §8.1/§8.2 macro rubrics (inflation direction,
+// rate-path expectations) whose inputs are still manual selections, not
+// automatically derived from a raw series trend; that derivation is
+// separate, not-yet-built work. Cells this can't compute are left for
+// the caller to default to 50/manual — this module never guesses.
 export function computeAutoScoreCells(db: Database.Database, params: Params, asOfDate: string): ScoreCellResult[] {
   const out: ScoreCellResult[] = [];
 
