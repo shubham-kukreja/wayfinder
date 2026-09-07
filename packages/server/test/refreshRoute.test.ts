@@ -3,9 +3,9 @@ import { parseRequestedSources, buildAdapters, AVAILABLE_SOURCES } from "../src/
 import { loadConfig } from "../src/config.js";
 
 describe("parseRequestedSources — POST /api/refresh?sources=... (§13.1, §11.5)", () => {
-  it("defaults to fred, bullion, amfi — RBI is opt-in only", () => {
+  it("defaults to fred, bullion, amfi, nse — RBI is opt-in only (headless browser)", () => {
     const result = parseRequestedSources(undefined);
-    expect(result).toEqual(["fred", "bullion", "amfi"]);
+    expect(result).toEqual(["fred", "bullion", "amfi", "nse"]);
   });
 
   it("accepts a comma-separated list, trimmed and lowercased", () => {
@@ -26,8 +26,8 @@ describe("parseRequestedSources — POST /api/refresh?sources=... (§13.1, §11.
   it("every available source name is buildable", () => {
     const config = loadConfig();
     const adapters = buildAdapters([...AVAILABLE_SOURCES], config);
-    expect(adapters).toHaveLength(4);
-    expect(adapters.map((a) => a.id).sort()).toEqual(["AMFI", "FRED", "IBJA", "RBI"]);
+    expect(adapters).toHaveLength(5);
+    expect(adapters.map((a) => a.id).sort()).toEqual(["AMFI", "FRED", "IBJA", "NSE", "RBI"]);
   });
 
   it("buildAdapters only includes the requested sources", () => {

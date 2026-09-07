@@ -5,5 +5,7 @@ dist/
 .env.local
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 .DS_Store
 .claude/scheduled_tasks.lock

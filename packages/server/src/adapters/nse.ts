@@ -1,216 +1,195 @@
+import { request } from "undici";
 import type { HealthStatus, Observation, SourceAdapter } from "./types.js";
 
-// §10.4 — NSE / niftyindices.com. NOT YET IMPLEMENTED. Live-investigated
-// 2026-09-03; findings kept here so a future attempt doesn't restart from
-// zero.
+// §10.4 — NSE. Live-investigated across 4 sessions before this adapter
+// was built; the first 3 sessions (2026-09-03, 2026-09-08 x2) tried
+// niftyindices.com's historical-data reports page — a 2-step
+// dropdown-driven flow behind Akamai bot-manager whose drill-down
+// payload was never cracked (that dead end's full blow-by-blow is
+// preserved in git history / HANDOFF.md, not repeated here since it's
+// no longer the active approach).
 //
-// Status: no official API (confirmed, matches §10.4). The undocumented
-// endpoint historically referenced by third-party scrapers
-// (Backpage.aspx/getpepbHistoricaldataDBtoString) no longer exists — it
-// now redirects to a Sitefinity login page and drops the POST body,
-// producing a 411 from plain HTTP clients. The site is NOT IP-banned:
-// a real headless-browser session reaches https://www.niftyindices.com
-// /reports/historical-data fine (200 OK).
+// SESSION 4 (2026-09-08) FINDING — a DIFFERENT domain, nseindia.com
+// (not niftyindices.com), exposes index-level P/E, P/B, and dividend
+// yield through a much simpler cookie-then-fetch pattern with NO
+// Akamai challenge on this specific endpoint:
 //
-// The REAL current data flow (found via live network-request sniffing,
-// not documentation) is a two-step cascade on that page:
-//   1. User selects an index type in <select id="ddlHistoricaltypee">
-//      (Equity / Fixed Income / Multi Asset). This fires a POST to
-//      /BackPage/gethistoricaltypeSubindexdata with body
-//      {"cinfo":{"indextype":"Equity","indexgroup":"Historical Index Data"}}
-//      which is meant to populate <select id="ddlHistoricaltypeeindex">
-//      with the actual list of indices (NIFTY 50, NIFTY BANK, etc.).
-//   2. Presumably a further selection + the "Submit" button
-//      (#btndailyreport) triggers the actual P/E/P/B/TRI data fetch —
-//      NOT YET REACHED, see below.
+//   1. GET a real page (e.g. /market-data/live-market-indices) to
+//      harvest Set-Cookie headers.
+//   2. GET /api/allIndices with those cookies + a browser-like
+//      User-Agent + Referer. Returns clean JSON, ~139 indices, one
+//      request, confirmed repeatable on this session (no rotation/
+//      expiry hit).
 //
-// BLOCKER (session 1, 2026-09-03): step 1's change handler is bound via
-// jQuery (`events: ["change"]` confirmed via jQuery._data() on the live
-// page) but firing it programmatically (Playwright's selectOption(),
-// native dispatchEvent, and an explicit jQuery .trigger("change") —
-// including all three at once) was UNRELIABLE: it fired the real request
-// in roughly 1 of 8 attempts with no code difference between attempts.
+// Each row carries pe/pb/dy as strings for every real index —
+// confirmed live for NIFTY 50, NIFTY 100, NIFTY MIDCAP 150, NIFTY
+// SMALLCAP 250, NIFTY BANK, NIFTY IT, NIFTY PHARMA, NIFTY AUTO, NIFTY
+// FMCG, NIFTY ENERGY, NIFTY METAL. No "Capital Goods" index exists in
+// the 139-row list (closest: Infrastructure, Capital Markets,
+// Commodities — none is a direct match) — dropped rather than guessed,
+// per this project's "never guess" invariant.
 //
-// SESSION 2 (2026-09-08) FINDINGS — real progress, still not cracked:
-//
-//   1. COOKIE TRANSPLANT WORKS. Navigate once with a real (headless)
-//      browser to https://www.niftyindices.com/reports/historical-data,
-//      extract context.cookies() (the load-bearing ones are Akamai's
-//      bot-manager tokens: bm_sv, ak_bmsc, plus ASP.NET_SessionId), then
-//      make ALL subsequent requests with a plain HTTP client (undici) —
-//      NOT another browser page. Verified live: this got a real 200
-//      with real JSON from /BackPage/gethistoricaltypeSubindexdata.
-//      This fully sidesteps the flaky jQuery-trigger problem from
-//      session 1 — you never need to fire that event again once you
-//      have the cookies, only replicate the request shape.
-//
-//   2. Calling fetch() FROM INSIDE THE PAGE'S OWN JS CONTEXT (via
-//      page.evaluate) does NOT work reliably — confirmed live that the
-//      request is sent (observed via the `request` event) but the page
-//      silently closes before any response/requestfinished event fires,
-//      with no crash event, no dialog, no console error, no navigation
-//      logged. This looks like active anti-automation reacting to a
-//      script-initiated fetch to that specific endpoint (as opposed to
-//      one fired by a real DOM event), not a timing race. Don't pursue
-//      this path further — use the cookie-transplant approach (finding
-//      1) instead, which avoids page.evaluate entirely after the
-//      initial cookie-harvesting navigation.
-//
-//   3. THE EXACT cinfo PAYLOAD FOR THE INDEX-LIST STEP IS STILL UNKNOWN.
-//      {"cinfo":{"indextype":"Equity","indexgroup":"Broad Market Indices"}}
-//      (a guess based on the visible category names: "Broad Market
-//      Indices", "Sectoral Indices", "Strategy Indices", "Thematic
-//      Indices" — captured live from the actual first-level response)
-//      returned the SAME category list back, not an index list — so
-//      "indexgroup" alone isn't the right key/value to drill down with.
-//      The correct 2nd request's payload was never captured because the
-//      flaky change-trigger (finding as of session 1) didn't fire during
-//      the session-2 attempts to watch it happen. NEXT STEP: retry
-//      watching the real UI click-through (patiently, possibly many
-//      attempts) SPECIFICALLY to capture the exact request body for
-//      when ddlHistoricaltypeeSubindex successfully populates — once
-//      that shape is known, the whole remaining chain can likely be
-//      replicated via cookie-transplant + undici with no further browser
-//      interaction needed.
-//
-//   4. RATE LIMITING IS REAL AND RECURRING. Both sessions independently
-//      hit a point where the site became unreachable (curl timeout /
-//      ERR_ABORTED / connection refused) after a burst of ~10-15
-//      requests within a few minutes, recovering only after a pause.
-//      Any future attempt should space out requests deliberately (a few
-//      seconds minimum between calls) rather than iterating quickly.
-//
-// SESSION 3 (2026-09-08, same day) — one retry attempt, real new finding:
-//
-//   5. THE "Broad Market Indices" GUESS WAS WRONG IN A NEW WAY. Replayed
-//      the exact confirmed-real payload
-//      {"cinfo":{"indextype":"Equity","indexgroup":"Historical Index Data"}}
-//      via cookie-transplant — got the same 4-category list again
-//      (Broad Market Indices / Sectoral / Strategy / Thematic),
-//      confirming that part is solid and repeatable. Then tried
-//      CHAINING it — same endpoint, same "indextype":"Equity", with
-//      "indexgroup" set to "Broad Market Indices" (one of the returned
-//      category names) hoping it would drill down to actual index
-//      names. It did NOT: got the exact same 4-category list back
-//      again. This proves gethistoricaltypeSubindexdata does NOT branch
-//      on indexgroup value in the way assumed — it appears to be a
-//      near-static lookup keyed only on indextype, always returning the
-//      same category list for "Equity" regardless of indexgroup. The
-//      actual "index list within a category" step (e.g. getting to
-//      "NIFTY 50", "NIFTY BANK") is very likely a DIFFERENT, still-
-//      unidentified endpoint or a different field in this same one
-//      (e.g. maybe "category" needs to be set, not "indexgroup" — the
-//      response objects have both fields, both null in every response
-//      seen so far, which is itself a clue neither has been exercised
-//      correctly yet).
-//
-//   6. The flaky UI trigger reproduced its session-1 behavior exactly:
-//      selectOption() fired multiple real requests (visible in network
-//      capture) but ddlHistoricaltypeeSubindex never actually populated
-//      with options across ~6 attempts including a manual reset-and-
-//      retry, and no response body was ever captured for any of those
-//      in-browser attempts (only requests, no responses) — a different
-//      and arguably worse symptom than session 1's "fires 1-in-8"
-//      description, suggesting this may vary session to session, not
-//      just attempt to attempt. Site became unreachable again
-//      (ERR_ABORTED / ERR_TIMED_OUT) shortly after, consistent with
-//      finding 4 — this session used well under 15 requests before
-//      hitting it, so the rate-limit threshold may be lower/stricter
-//      than previously estimated, or cumulative across recent sessions
-//      rather than a fresh per-session budget.
-//
-//   NEXT STEP, refined: don't keep guessing indexgroup/category values
-//   against gethistoricaltypeSubindexdata — it looks like a dead end for
-//   the drill-down step. Instead, capture the network tab from a REAL
-//   HUMAN browser session (not automated) clicking all the way through
-//   to a populated index dropdown and a submitted report, to get the
-//   actual endpoint(s) and payload shape(s) involved beyond this one
-//   call — automation-driven attempts have now twice failed to trigger
-//   the site's own JS reliably enough to observe this itself.
-//
-// BSE INVESTIGATED AS AN ALTERNATIVE (2026-09-08) — DEAD END, DON'T
-// RETRY WITHOUT NEW INFORMATION. api.bseindia.com's
-// IndexArchMnthYr_PAR endpoint is genuinely easy to call (just a
-// User-Agent + Referer header, no cookies/bot-challenge, real JSON
-// back to 1997) and an adapter was fully built and live-tested against
-// it. BUT: direct cross-checking (not done until late in that session)
-// showed its I_PE/I_PB/I_yl columns are IDENTICAL across completely
-// unrelated indices for the same period — confirmed live comparing
-// SENSEX, BANKEX, FMCG, and AUTO for Jan-Mar 2023, all returning the
-// exact same 22.34/22.45/22.40 despite wildly different price levels
-// in the same response rows. Only the OHLC/turnover columns are
-// genuinely per-index; the ratio columns appear broken/shared on BSE's
-// own backend, not a client-side bug. This is NOT a rate-limiting or
-// caching artifact — it reproduces on fully-settled 2005/2015/2023
-// historical data, not just recent months. The built adapter and its
-// wiring were reverted in full. Do not resume this path unless BSE's
-// API demonstrably fixes this (verify by comparing two DIFFERENT
-// sector indices for the SAME historical period before building
-// anything on top of it again).
-//
-// Until the index-list payload is cracked, all ~19 NSE-dependent score
-// cells (§7.2 equity segment valuation/relvalue, §7.5 sector valuation/
-// rel_momentum) are MANUAL — same provenance as PMI (§10.6). Do not
-// build a partial/silent adapter around this; an adapter that throws
-// honestly is better than one that returns stale or wrong data.
+// CAVEATS (do not build past these without new evidence):
+//   - LATEST ONLY. Guessed historical-index endpoint names
+//     (/api/historical/generateIndexWiseHistoricalData,
+//     /api/historical/indicesHistory) both hit Akamai's real challenge
+//     wall (503s with injected bot-manager sensor JS) — that stricter
+//     tier does exist on this domain too, just gated behind different
+//     paths than /api/allIndices. No historical index-level source
+//     found. fetchHistory() is a deliberate no-op, same pattern as
+//     bullion.ts's metals.dev limitation — history must accumulate via
+//     repeated fetchLatest() calls over time (a daily refresh/cron),
+//     not a backfill.
+//   - NO TRI (total-return-index) FIELD ANYWHERE in this payload —
+//     only price-return figures (last/previousClose/perChange365d/
+//     perChange30d). The sector_tr_* / nifty50_tr score cells stay
+//     unreachable from this source; only the *_pe cells are unlocked.
+//   - nseindia.com is a known bot-protected surface in general — this
+//     one endpoint being reachable today is not a guarantee it stays
+//     that way. health() below is a real live check, not a static ok.
+const NSE_BASE_URL = "https://www.nseindia.com";
+const COOKIE_HARVEST_PATH = "/market-data/live-market-indices";
+const ALL_INDICES_PATH = "/api/allIndices";
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-export class NseNotImplementedError extends Error {
-  constructor() {
-    super(
-      "NSE adapter is not implemented — see src/adapters/nse.ts for the investigation notes. " +
-        "All NSE-dependent scores are manual for now."
-    );
-    this.name = "NseNotImplementedError";
+export class NseFetchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NseFetchError";
   }
 }
 
-// Series this adapter WOULD cover once built, so the score pipeline and
-// UI can already reference these IDs as "known but currently manual"
-// rather than as an unknown string.
-export const NSE_SERIES_IDS = [
-  "nifty50_pe",
-  "nifty100_pe",
-  "midcap150_pe",
-  "smallcap250_pe",
-  "nifty50_tr",
-  "sector_pe_banking",
-  "sector_pe_it",
-  "sector_pe_pharma",
-  "sector_pe_auto",
-  "sector_pe_capgoods",
-  "sector_pe_fmcg",
-  "sector_pe_energy",
-  "sector_pe_metals",
-  "sector_tr_banking",
-  "sector_tr_it",
-  "sector_tr_pharma",
-  "sector_tr_auto",
-  "sector_tr_capgoods",
-  "sector_tr_fmcg",
-  "sector_tr_energy",
-  "sector_tr_metals",
-] as const;
+// NSE index display name -> internal series ID, for the two figures
+// each row carries that this adapter reads (pe -> *_pe, dy is also
+// present but no score cell references a dividend-yield series yet).
+// Only indices confirmed present in a live /api/allIndices response are
+// mapped; "Capital Goods" has no matching index and is intentionally
+// absent (see file-level note above).
+const INDEX_SERIES_MAP: Record<string, string> = {
+  "NIFTY 50": "nifty50_pe",
+  "NIFTY 100": "nifty100_pe",
+  "NIFTY MIDCAP 150": "midcap150_pe",
+  "NIFTY SMALLCAP 250": "smallcap250_pe",
+  "NIFTY BANK": "sector_pe_banking",
+  "NIFTY IT": "sector_pe_it",
+  "NIFTY PHARMA": "sector_pe_pharma",
+  "NIFTY AUTO": "sector_pe_auto",
+  "NIFTY FMCG": "sector_pe_fmcg",
+  "NIFTY ENERGY": "sector_pe_energy",
+  "NIFTY METAL": "sector_pe_metals",
+};
+
+interface NseIndexRow {
+  index: string;
+  pe?: string;
+  pb?: string;
+  dy?: string;
+}
+
+interface AllIndicesResponse {
+  data: NseIndexRow[];
+}
+
+// Pure mapping step, split out from the network call so the row-parsing
+// logic (which index names map to which series, which pe values are
+// dropped as non-numeric) can be unit-tested against fixture JSON
+// without hitting the network — same split AMFI's adapter uses between
+// parseAmfiCategoryReport (pure) and fetchLatest (network + parse).
+export function mapIndexRowsToObservations(rows: NseIndexRow[], asOfDate: string): Observation[] {
+  const out: Observation[] = [];
+  for (const row of rows) {
+    const seriesId = INDEX_SERIES_MAP[row.index];
+    if (!seriesId || row.pe === undefined) continue;
+    const value = Number(row.pe);
+    if (!Number.isFinite(value)) continue; // "-"/non-numeric pe: dropped, not guessed
+    out.push({ seriesId, date: asOfDate, value, raw: row });
+  }
+  return out;
+}
+
+// Parses only the cookie name=value pairs out of Set-Cookie headers —
+// attributes (Path, Expires, HttpOnly, ...) are dropped since this
+// adapter only needs to replay the cookies on the next request, not
+// honour their full semantics.
+function parseSetCookieHeader(setCookie: string | string[] | undefined): string {
+  if (!setCookie) return "";
+  const headers = Array.isArray(setCookie) ? setCookie : [setCookie];
+  return headers.map((h) => h.split(";")[0]).join("; ");
+}
+
+async function harvestCookies(): Promise<string> {
+  const res = await request(`${NSE_BASE_URL}${COOKIE_HARVEST_PATH}`, {
+    method: "GET",
+    headers: { "User-Agent": USER_AGENT, Accept: "text/html" },
+  });
+  // Drain the body even though it's unused — undici requires the
+  // response body be consumed before the connection is reusable.
+  await res.body.text();
+  const cookies = parseSetCookieHeader(res.headers["set-cookie"]);
+  if (!cookies) {
+    throw new NseFetchError(`No cookies returned from ${COOKIE_HARVEST_PATH} (status ${res.statusCode})`);
+  }
+  return cookies;
+}
+
+async function fetchAllIndices(): Promise<NseIndexRow[]> {
+  const cookies = await harvestCookies();
+  const res = await request(`${NSE_BASE_URL}${ALL_INDICES_PATH}`, {
+    method: "GET",
+    headers: {
+      "User-Agent": USER_AGENT,
+      Accept: "application/json, text/plain, */*",
+      Referer: `${NSE_BASE_URL}${COOKIE_HARVEST_PATH}`,
+      Cookie: cookies,
+    },
+  });
+  if (res.statusCode !== 200) {
+    const body = await res.body.text();
+    throw new NseFetchError(`${ALL_INDICES_PATH} failed (${res.statusCode}): ${body.slice(0, 300)}`);
+  }
+  const data = (await res.body.json()) as AllIndicesResponse;
+  return data.data ?? [];
+}
 
 export function createNseAdapter(): SourceAdapter {
   return {
     id: "NSE",
-    series: [...NSE_SERIES_IDS],
+    series: Object.values(INDEX_SERIES_MAP),
 
     async fetchLatest(): Promise<Observation[]> {
-      throw new NseNotImplementedError();
+      const rows = await fetchAllIndices();
+      const asOfDate = new Date().toISOString().slice(0, 10);
+      return mapIndexRowsToObservations(rows, asOfDate);
     },
 
+    // No historical index-level endpoint found on this domain either
+    // (see file-level caveats) — history must accumulate via repeated
+    // fetchLatest() calls over time, same limitation as bullion.ts.
     async fetchHistory(): Promise<Observation[]> {
-      throw new NseNotImplementedError();
+      throw new NseFetchError(
+        "nseindia.com exposes no historical index-level P/E/P/B endpoint found so far — only /api/allIndices (latest). " +
+          "History must accumulate via repeated fetchLatest() calls (daily refresh), not backfill."
+      );
     },
 
     async health(): Promise<HealthStatus> {
-      return {
-        source: "NSE",
-        ok: false,
-        lastChecked: new Date().toISOString(),
-        detail: "Adapter not implemented. See src/adapters/nse.ts investigation notes.",
-      };
+      try {
+        const rows = await fetchAllIndices();
+        return {
+          source: "NSE",
+          ok: rows.length > 0,
+          lastChecked: new Date().toISOString(),
+          detail: rows.length > 0 ? null : "allIndices returned zero rows",
+        };
+      } catch (err) {
+        return {
+          source: "NSE",
+          ok: false,
+          lastChecked: new Date().toISOString(),
+          detail: err instanceof Error ? err.message : String(err),
+        };
+      }
     },
   };
 }

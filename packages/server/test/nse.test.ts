@@ -1,33 +1,85 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createNseAdapter, NseNotImplementedError, NSE_SERIES_IDS } from "../src/adapters/nse.js";
+import { createNseAdapter, mapIndexRowsToObservations } from "../src/adapters/nse.js";
 
-// §9: "A failed fetch is a warning, never an exception. The allocation
-// always computes." This adapter deliberately throws rather than
-// returning fabricated/stale data — the pipeline layer (not built yet)
-// is responsible for catching this and converting it into a warning +
-// falling back to manual/default scores, per the same contract every
-// other adapter's failure path follows.
-describe("NSE adapter — not yet implemented, fails loudly rather than silently", () => {
-  it("fetchLatest throws NseNotImplementedError", async () => {
-    const adapter = createNseAdapter();
-    await expect(adapter.fetchLatest()).rejects.toThrow(NseNotImplementedError);
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const fixturesDir = join(__dirname, "fixtures");
+
+function loadFixtureRows() {
+  const raw = readFileSync(join(fixturesDir, "nse_allIndices_sample.json"), "utf-8");
+  return JSON.parse(raw).data;
+}
+
+// §10.4 — NSE adapter, built against nseindia.com's /api/allIndices
+// (a different, less-protected domain than niftyindices.com, which
+// remains unreachable — see the file-level comment in adapters/nse.ts).
+// This fixture is a trimmed real response captured live 2026-09-08.
+describe("NSE adapter — maps nseindia.com/api/allIndices rows to observations", () => {
+  it("maps confirmed broad + sector indices to their internal series IDs", () => {
+    const observations = mapIndexRowsToObservations(loadFixtureRows(), "2026-09-08");
+
+    const nifty50 = observations.find((o) => o.seriesId === "nifty50_pe");
+    expect(nifty50?.value).toBe(20.1);
+
+    const nifty100 = observations.find((o) => o.seriesId === "nifty100_pe");
+    expect(nifty100?.value).toBe(19.92);
+
+    const midcap150 = observations.find((o) => o.seriesId === "midcap150_pe");
+    expect(midcap150?.value).toBe(28.84);
+
+    const smallcap250 = observations.find((o) => o.seriesId === "smallcap250_pe");
+    expect(smallcap250?.value).toBe(34.11);
+
+    const bankPe = observations.find((o) => o.seriesId === "sector_pe_banking");
+    expect(bankPe?.value).toBe(13.51);
+
+    expect(observations.find((o) => o.seriesId === "sector_pe_it")?.value).toBe(19.14);
+    expect(observations.find((o) => o.seriesId === "sector_pe_pharma")?.value).toBe(41.3);
+    expect(observations.find((o) => o.seriesId === "sector_pe_auto")?.value).toBe(32.18);
+    expect(observations.find((o) => o.seriesId === "sector_pe_fmcg")?.value).toBe(31.63);
+    expect(observations.find((o) => o.seriesId === "sector_pe_energy")?.value).toBe(14.73);
+    expect(observations.find((o) => o.seriesId === "sector_pe_metals")?.value).toBe(16.01);
   });
 
-  it("fetchHistory throws NseNotImplementedError", async () => {
-    const adapter = createNseAdapter();
-    await expect(adapter.fetchHistory(new Date(), new Date())).rejects.toThrow(NseNotImplementedError);
+  it("drops unmapped indices (e.g. NIFTY NEXT 50 — not in this project's 85-cell schema) rather than guessing a series ID", () => {
+    const observations = mapIndexRowsToObservations(loadFixtureRows(), "2026-09-08");
+    expect(observations.some((o) => (o.raw as { index?: string })?.index === "NIFTY NEXT 50")).toBe(false);
+    // 11 mapped indices in the fixture; NIFTY NEXT 50 and the "-" g-sec row are excluded.
+    expect(observations.length).toBe(11);
   });
 
-  it("health() reports ok:false with a clear, actionable message", async () => {
-    const adapter = createNseAdapter();
-    const health = await adapter.health();
-    expect(health.ok).toBe(false);
-    expect(health.detail).toMatch(/not implemented/i);
+  it("drops rows with a non-numeric pe ('-') instead of guessing a value", () => {
+    const observations = mapIndexRowsToObservations(loadFixtureRows(), "2026-09-08");
+    const gsec = observations.find((o) => (o.raw as { index?: string })?.index === "NIFTY COMPOSITE G-SEC INDEX");
+    expect(gsec).toBeUndefined();
   });
 
-  it("declares the ~19 series it will eventually cover, so the pipeline can reference them as known-but-manual", () => {
+  it("stamps every observation with the given asOfDate (latest-only source, no historical date in the payload)", () => {
+    const observations = mapIndexRowsToObservations(loadFixtureRows(), "2026-09-08");
+    expect(observations.every((o) => o.date === "2026-09-08")).toBe(true);
+  });
+
+  it("declares the 11 series it currently covers (P/E only — no TRI field on this source, no Capital Goods index match)", () => {
     const adapter = createNseAdapter();
-    expect(adapter.series).toEqual(NSE_SERIES_IDS);
-    expect(adapter.series.length).toBe(21); // 4 broad indices + TR + 8 sector PE + 8 sector TR
+    expect(adapter.series).toEqual([
+      "nifty50_pe",
+      "nifty100_pe",
+      "midcap150_pe",
+      "smallcap250_pe",
+      "sector_pe_banking",
+      "sector_pe_it",
+      "sector_pe_pharma",
+      "sector_pe_auto",
+      "sector_pe_fmcg",
+      "sector_pe_energy",
+      "sector_pe_metals",
+    ]);
+  });
+
+  it("fetchHistory() throws honestly — no historical index-level endpoint found on this domain", async () => {
+    const adapter = createNseAdapter();
+    await expect(adapter.fetchHistory(new Date(), new Date())).rejects.toThrow(/no historical/i);
   });
 });

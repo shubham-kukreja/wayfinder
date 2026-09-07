@@ -4,25 +4,27 @@ import { createFredAdapter, FRED_SERIES } from "../adapters/fred.js";
 import { createBullionAdapter, BULLION_SERIES } from "../adapters/bullion.js";
 import { createAmfiAdapter } from "../adapters/amfi.js";
 import { createRbiAdapter } from "../adapters/rbi.js";
+import { createNseAdapter } from "../adapters/nse.js";
 import { runRefresh } from "../pipeline/refresh.js";
 import { buildCurrentSnapshot } from "../pipeline/currentSnapshot.js";
 import { loadConfig } from "../config.js";
 import type { SourceAdapter } from "../adapters/types.js";
 
-// §11.5 / §13.1 POST /api/refresh[?sources=fred,bullion,amfi,rbi].
+// §11.5 / §13.1 POST /api/refresh[?sources=fred,bullion,amfi,rbi,nse].
 // Default (no query param) fans out to the fast, non-browser adapters
-// (FRED, bullion, AMFI) — RBI is opt-in via ?sources=... because it
-// spins up a real headless browser per call (multi-second; NSE would be
-// too, once built) and shouldn't silently slow down every quick refresh
-// click. §13.1 documents this exact pattern ("POST /api/refresh?series=
-// a,b,c -> partial refresh"); this uses source names rather than series
-// names since that's the granularity a user/scheduler actually chooses
-// at (§11.5: "per-source refresh exposed").
-export const AVAILABLE_SOURCES = ["fred", "bullion", "amfi", "rbi"] as const;
+// (FRED, bullion, AMFI, NSE — all plain HTTP requests, no headless
+// browser) — RBI is opt-in via ?sources=... because it spins up a real
+// headless browser per call (multi-second) and shouldn't silently slow
+// down every quick refresh click. §13.1 documents this exact pattern
+// ("POST /api/refresh?series=a,b,c -> partial refresh"); this uses
+// source names rather than series names since that's the granularity a
+// user/scheduler actually chooses at (§11.5: "per-source refresh
+// exposed").
+export const AVAILABLE_SOURCES = ["fred", "bullion", "amfi", "rbi", "nse"] as const;
 export type SourceName = (typeof AVAILABLE_SOURCES)[number];
 
 export function parseRequestedSources(sourcesParam: string | undefined): SourceName[] | { error: string } {
-  const requested = sourcesParam ? sourcesParam.split(",").map((s) => s.trim().toLowerCase()) : ["fred", "bullion", "amfi"];
+  const requested = sourcesParam ? sourcesParam.split(",").map((s) => s.trim().toLowerCase()) : ["fred", "bullion", "amfi", "nse"];
   const invalid = requested.filter((s) => !AVAILABLE_SOURCES.includes(s as SourceName));
   if (invalid.length > 0) {
     return { error: `Unknown source(s): ${invalid.join(", ")}. Available: ${AVAILABLE_SOURCES.join(", ")}` };
@@ -36,6 +38,7 @@ export function buildAdapters(names: SourceName[], config: ReturnType<typeof loa
   if (names.includes("bullion")) out.push(createBullionAdapter({ apiKey: config.metalsDevApiKey, series: BULLION_SERIES }));
   if (names.includes("amfi")) out.push(createAmfiAdapter());
   if (names.includes("rbi")) out.push(createRbiAdapter({ executablePath: config.chromiumExecutablePath }));
+  if (names.includes("nse")) out.push(createNseAdapter());
   return out;
 }
 

@@ -1,0 +1,82 @@
+{
+  "data": [
+    {
+      "index": "NIFTY 50",
+      "pe": "20.1",
+      "pb": "2.88",
+      "dy": "1.19"
+    },
+    {
+      "index": "NIFTY NEXT 50",
+      "pe": "19.19",
+      "pb": "3.23",
+      "dy": "1"
+    },
+    {
+      "index": "NIFTY BANK",
+      "pe": "13.51",
+      "pb": "1.71",
+      "dy": "0.69"
+    },
+    {
+      "index": "NIFTY 100",
+      "pe": "19.92",
+      "pb": "2.94",
+      "dy": "1.16"
+    },
+    {
+      "index": "NIFTY MIDCAP 150",
+      "pe": "28.84",
+      "pb": "4.35",
+      "dy": "0.58"
+    },
+    {
+      "index": "NIFTY SMALLCAP 250",
+      "pe": "34.11",
+      "pb": "3.59",
+      "dy": "0.55"
+    },
+    {
+      "index": "NIFTY AUTO",
+      "pe": "32.18",
+      "pb": "4.23",
+      "dy": "1.05"
+    },
+    {
+      "index": "NIFTY FMCG",
+      "pe": "31.63",
+      "pb": "7.61",
+      "dy": "1.04"
+    },
+    {
+      "index": "NIFTY IT",
+      "pe": "19.14",
+      "pb": "5.28",
+      "dy": "2.68"
+    },
+    {
+      "index": "NIFTY METAL",
+      "pe": "16.01",
+      "pb": "2.63",
+      "dy": "1.29"
+    },
+    {
+      "index": "NIFTY PHARMA",
+      "pe": "41.3",
+      "pb": "5.01",
+      "dy": "0.53"
+    },
+    {
+      "index": "NIFTY ENERGY",
+      "pe": "14.73",
+      "pb": "2.05",
+      "dy": "1.86"
+    },
+    {
+      "index": "NIFTY COMPOSITE G-SEC INDEX",
+      "pe": "-",
+      "pb": "-",
+      "dy": "-"
+    }
+  ]
+}

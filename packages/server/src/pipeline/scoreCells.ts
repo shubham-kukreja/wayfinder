@@ -12,9 +12,12 @@ export interface ScoreCellResult {
 }
 
 // §7 — every score cell computable end-to-end from the series this
-// project's adapters (FRED, bullion/IBJA, AMFI, RBI) actually fetch as of
-// this build. Deliberately NOT the full 85 cells: NSE (~19 cells,
-// equity/sector valuation and momentum) isn't built. RBI now covers
+// project's adapters (FRED, bullion/IBJA, AMFI, RBI, NSE) actually fetch
+// as of this build. Deliberately NOT the full 85 cells: NSE's adapter
+// (adapters/nse.ts) covers P/E-based valuation only (nseindia.com's
+// /api/allIndices has no TRI field), so sector.*::rel_momentum and
+// l1.equity::momentum stay unreachable from this source; sector.capgoods
+// has no matching NSE index and stays manual too. RBI now covers
 // cpi_index, cpi_yoy, and tbill_1y (see adapters/rbi.ts); gsec_10y comes
 // from FRED instead (the only RBI-mirror "yield" page turned out to be a
 // price/turnover index, not a yield); repo_rate has no source found on
@@ -50,9 +53,42 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
     out.push({ scoreId: "l1.metals::flows", value: result.value, status: result.status, derivedFrom: ["flow_goldetf"], transform: "inverted" });
   }
 
-  // §7.2 equity.{large,mid,small}::valuation — inverted index P/E.
-  // NOT computable: NSE P/E series (nifty100_pe etc.) aren't fetched by
-  // any working adapter yet.
+  // §7.2 equity.{large,mid,small}::valuation — inverted index P/E, from
+  // nseindia.com's /api/allIndices (see adapters/nse.ts). large uses
+  // nifty100_pe (broader large-cap proxy than nifty50_pe, matching the
+  // NIFTY 100 fund category AMFI's flow cells already key off of); mid
+  // and small use the exact NSE index the §7.2 table names.
+  // equity.intl::valuation stays manual — no source for that segment.
+  {
+    const result = autoScore(db, "nifty100_pe", params, "inverted");
+    out.push({ scoreId: "equity.large::valuation", value: result.value, status: result.status, derivedFrom: ["nifty100_pe"], transform: "inverted" });
+  }
+  {
+    const result = autoScore(db, "midcap150_pe", params, "inverted");
+    out.push({ scoreId: "equity.mid::valuation", value: result.value, status: result.status, derivedFrom: ["midcap150_pe"], transform: "inverted" });
+  }
+  {
+    const result = autoScore(db, "smallcap250_pe", params, "inverted");
+    out.push({ scoreId: "equity.small::valuation", value: result.value, status: result.status, derivedFrom: ["smallcap250_pe"], transform: "inverted" });
+  }
+
+  // §7.5 sector.{banking,it,pharma,auto,fmcg,energy,metals}::valuation —
+  // inverted sector index P/E, same source. sector.capgoods::valuation
+  // stays manual: no NSE index matches "Capital Goods" (closest indices
+  // — Infrastructure, Capital Markets, Commodities — aren't the same
+  // thing; not substituted, see adapters/nse.ts).
+  for (const [sector, seriesId] of [
+    ["banking", "sector_pe_banking"],
+    ["it", "sector_pe_it"],
+    ["pharma", "sector_pe_pharma"],
+    ["auto", "sector_pe_auto"],
+    ["fmcg", "sector_pe_fmcg"],
+    ["energy", "sector_pe_energy"],
+    ["metals", "sector_pe_metals"],
+  ] as const) {
+    const result = autoScore(db, seriesId, params, "inverted");
+    out.push({ scoreId: `sector.${sector}::valuation`, value: result.value, status: result.status, derivedFrom: [seriesId], transform: "inverted" });
+  }
 
   // §7.4 metals.gold::ratio_position / metals.silver::ratio_position —
   // gold_silver_ratio, inverted for gold / as-is for silver.
