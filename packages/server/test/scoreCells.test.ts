@@ -93,4 +93,43 @@ describe("computeAutoScoreCells — §7 cells computable from live-fetchable ser
       expect(r.derivedFrom.length).toBeGreaterThan(0);
     }
   });
+
+  it("debt.gilt::carry and debt.liquid::carry are NOT inverted — high yield scores HIGH (§15.1 trap)", () => {
+    // Yields ramping up; the latest is the highest ever seen -> should
+    // score near 100, the OPPOSITE convention from equity valuation.
+    const gsecYields = Array.from({ length: 30 }, (_, i) => 5 + i * 0.1);
+    const tbillYields = Array.from({ length: 30 }, (_, i) => 4 + i * 0.05);
+    seedMonthlySeries("gsec_10y", "FRED", gsecYields);
+    seedMonthlySeries("tbill_1y", "RBI", tbillYields);
+
+    const results = computeAutoScoreCells(db, DEFAULT_PARAMS, "2026-09-01");
+    const gilt = results.find((r) => r.scoreId === "debt.gilt::carry")!;
+    const liquid = results.find((r) => r.scoreId === "debt.liquid::carry")!;
+
+    expect(gilt.status).toBe("ok");
+    expect(gilt.value).toBeGreaterThan(90); // high yield, as-is (not inverted) -> high score
+    expect(liquid.status).toBe("ok");
+    expect(liquid.value).toBeGreaterThan(90);
+  });
+
+  it("l1.debt::valuation derives a real yield from gsec_10y - cpi_yoy, joined by year-month not exact date", () => {
+    // gsec_10y published on the 1st (FRED convention here); cpi_yoy
+    // published on a different day of the month (RBI's month-end) —
+    // this must still join correctly by year-month.
+    const gsecYields = Array.from({ length: 30 }, (_, i) => 6 + i * 0.05);
+    seedMonthlySeries("gsec_10y", "FRED", gsecYields, 2020, 1);
+
+    const cpiRows = Array.from({ length: 30 }, (_, i) => {
+      const monthIdx = i;
+      const year = 2020 + Math.floor(monthIdx / 12);
+      const month = (monthIdx % 12) + 1;
+      // Publish on the 28th, not the 1st, to prove the join is by month.
+      return { seriesId: "cpi_yoy", date: `${year}-${String(month).padStart(2, "0")}-28`, value: 4.0, basis: null, source: "RBI", fetchedAt: "2026-09-03T00:00:00Z" };
+    });
+    insertObservations(db, cpiRows);
+
+    const results = computeAutoScoreCells(db, DEFAULT_PARAMS, "2026-09-01");
+    const debtValuation = results.find((r) => r.scoreId === "l1.debt::valuation")!;
+    expect(debtValuation.status).toBe("ok"); // would be insufficient_history if the join silently produced 0 matches
+  });
 });

@@ -60,6 +60,30 @@ export function derivedRatioSeries(
   return out;
 }
 
+// A difference series (e.g. gsec_10y - cpi_yoy for a real-yield
+// approximation) computed from two stored series. Joins by YEAR-MONTH,
+// not exact date — different sources publish on different days of the
+// month (FRED's OECD-sourced gsec_10y vs. RBI's month-end CPI release),
+// so an exact-date join (like derivedRatioSeries uses for same-source
+// AMFI pairs) would silently produce zero matches here.
+export function derivedDifferenceSeries(
+  db: Database.Database,
+  minuendId: string,
+  subtrahendId: string
+): Array<{ date: string; value: number }> {
+  const minuendRows = latestObservations(db, minuendId);
+  const subtrahendRows = latestObservations(db, subtrahendId);
+  const subtrahendByMonth = new Map(subtrahendRows.map((r) => [r.date.slice(0, 7), r.value]));
+
+  const out: Array<{ date: string; value: number }> = [];
+  for (const m of minuendRows) {
+    const s = subtrahendByMonth.get(m.date.slice(0, 7));
+    if (s === undefined) continue;
+    out.push({ date: m.date, value: m.value - s });
+  }
+  return out;
+}
+
 export function autoScoreFromSeries(
   observations: Array<{ date: string; value: number }>,
   params: Params,

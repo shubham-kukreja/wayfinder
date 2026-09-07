@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import type { Params } from "@wayfinder/engine";
-import { autoScore, autoScoreFromSeries, derivedRatioSeries } from "./scoreEngine.js";
+import { autoScore, autoScoreFromSeries, derivedRatioSeries, derivedDifferenceSeries } from "./scoreEngine.js";
 import { deriveRealRatesScores } from "./derive.js";
 
 export interface ScoreCellResult {
@@ -83,10 +83,36 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
     }
   }
 
-  // §7.1 l1.debt::valuation — real_gsec_10y percentile, NOT inverted
-  // (§15.1 trap: high yield = attractive carry). NOT computable yet:
-  // gsec_10y isn't fetched by the RBI adapter's current single-page
-  // scrape (CPI only) — see adapters/rbi.ts's RBI_PAGES.
+  // §7.1 l1.debt::valuation — real_gsec_10y (gsec_10y - cpi_yoy)
+  // percentile, NOT inverted (§15.1 trap: high yield = attractive carry,
+  // opposite of the equity valuation convention). gsec_10y is FRED's
+  // INDIRLTLT01STM; cpi_yoy is RBI's combinedInflation column — both are
+  // monthly, so subtracting them date-for-date is a reasonable real-yield
+  // approximation without needing a dedicated inflation-adjusted series.
+  {
+    const realGsec = derivedDifferenceSeries(db, "gsec_10y", "cpi_yoy");
+    const result = autoScoreFromSeries(realGsec, params, "percentile");
+    out.push({ scoreId: "l1.debt::valuation", value: result.value, status: result.status, derivedFrom: ["gsec_10y", "cpi_yoy"], transform: "percentile" });
+  }
+
+  // §7.3 debt.gilt::carry — gsec_10y percentile, NOT inverted (high
+  // yield = attractive carry).
+  {
+    const result = autoScore(db, "gsec_10y", params, "percentile");
+    out.push({ scoreId: "debt.gilt::carry", value: result.value, status: result.status, derivedFrom: ["gsec_10y"], transform: "percentile" });
+  }
+
+  // §7.3 debt.liquid::carry — tbill_1y percentile, NOT inverted. Uses the
+  // RBI mirror's 183-364 day T-bill bucket (closest available match to a
+  // 1y liquid-fund carry proxy — see adapters/rbi.ts).
+  {
+    const result = autoScore(db, "tbill_1y", params, "percentile");
+    out.push({ scoreId: "debt.liquid::carry", value: result.value, status: result.status, derivedFrom: ["tbill_1y"], transform: "percentile" });
+  }
+
+  // §7.3 debt.corporate::carry (aaa_3y) is NOT computable — no adapter
+  // fetches AAA corporate bond yields yet (FIMMDA/CCIL, per §7.3's table,
+  // has no free programmatic source found so far).
 
   return out;
 }

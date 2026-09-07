@@ -48,9 +48,9 @@ export function buildAdapters(names: SourceName[], config: ReturnType<typeof loa
 
 // Honesty gap, stated plainly rather than hidden: only the score cells
 // computeAutoScoreCells() actually implements (§7 cells reachable from
-// FRED/bullion/AMFI series — see pipeline/scoreCells.ts, currently 9 of
-// 85) are recomputed from the newly stored observations. Every other
-// cell still comes from the mock baseline unchanged. This is real
+// FRED/bullion/AMFI/RBI series — see pipeline/scoreCells.ts, currently
+// 12 of 85) are recomputed from the newly stored observations. Every
+// other cell still comes from the mock baseline unchanged. This is real
 // progress over serving a static file (the pipeline that WOULD compute
 // the rest doesn't exist yet — NSE and most of RBI aren't wired in), but
 // it is not the full 85-cell pipeline; the response's warnings say so
