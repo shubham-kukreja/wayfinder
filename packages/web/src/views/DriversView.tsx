@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { Snapshot } from "@wayfinder/engine";
 import { NODE_LABELS, TILT_GROUP_NODES, GROUP_LABELS, computeAllocation } from "@wayfinder/engine";
 import { scoresFromSnapshot, vetoesFromSnapshot } from "../hooks/useLocalAllocation.js";
+import { useLatestReview } from "../hooks/useLatestReview.js";
 import { DivergingBar } from "../components/DivergingBar.js";
 import { computeSensitivity } from "../lib/sensitivity.js";
 import { attributeChanges } from "../lib/attribution.js";
@@ -12,23 +13,28 @@ const TILT_GROUPS = ["l1", "equity", "debt", "metals"] as const;
 export function DriversView({ snapshot }: { snapshot: Snapshot }) {
   const scores = scoresFromSnapshot(snapshot.scores);
   const vetoes = vetoesFromSnapshot(snapshot.vetoes);
+  const { review, loading: reviewLoading } = useLatestReview();
 
   const allocation = useMemo(() => computeAllocation(scores, vetoes, snapshot.params), [scores, vetoes, snapshot.params]);
 
   const sensitivity = useMemo(() => computeSensitivity(scores, vetoes, snapshot.params).slice(0, 10), [scores, vetoes, snapshot.params]);
 
-  // Attribution demo: current allocation vs. an all-neutral (score=50)
-  // baseline. Once History & Review has real saved snapshots, this
-  // compares current vs. the last saved review instead.
+  // §12.5 principle 4: distinguish looking from deciding — attribution
+  // compares against the last SAVED review, not just whatever the
+  // current live snapshot happens to be. Falls back to an all-neutral
+  // (score=50) baseline when no review has been saved yet, so the
+  // surface is still informative on first use rather than empty.
+  const baselineScores = review ? scoresFromSnapshot(review.scores) : Object.fromEntries(Object.keys(scores).map((k) => [k, 50]));
+  const baselineVetoes = review ? vetoesFromSnapshot(review.vetoes) : {};
+
   const attribution = useMemo(() => {
-    const neutralScores = Object.fromEntries(Object.keys(scores).map((k) => [k, 50]));
-    const neutralAllocation = computeAllocation(neutralScores, {}, snapshot.params);
-    const scoreDeltas = Object.fromEntries(Object.keys(scores).map((k) => [k, scores[k]! - 50]));
-    return attributeChanges(neutralAllocation, allocation, scoreDeltas)
+    const baselineAllocation = computeAllocation(baselineScores, baselineVetoes, snapshot.params);
+    const scoreDeltas = Object.fromEntries(Object.keys(scores).map((k) => [k, scores[k]! - (baselineScores[k] ?? 50)]));
+    return attributeChanges(baselineAllocation, allocation, scoreDeltas)
       .filter((r) => Math.abs(r.delta) > 0.001)
       .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
       .slice(0, 8);
-  }, [scores, allocation, snapshot.params]);
+  }, [scores, baselineScores, baselineVetoes, allocation, snapshot.params]);
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
@@ -67,9 +73,13 @@ export function DriversView({ snapshot }: { snapshot: Snapshot }) {
       </section>
 
       <section className="mb-10">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Change attribution (vs. neutral baseline)</h2>
-        {attribution.length === 0 ? (
-          <p className="text-sm text-neutral-400">No line item differs from neutral by more than 0.1pp.</p>
+        <h2 className="mb-3 text-sm font-semibold text-neutral-700">
+          Change attribution {review ? "(vs. last saved review)" : "(vs. neutral baseline — no review saved yet)"}
+        </h2>
+        {reviewLoading ? (
+          <p className="text-sm text-neutral-400">Loading baseline…</p>
+        ) : attribution.length === 0 ? (
+          <p className="text-sm text-neutral-400">No line item differs from the baseline by more than 0.1pp.</p>
         ) : (
           <ul className="space-y-1.5 text-sm">
             {attribution.map((row) => (

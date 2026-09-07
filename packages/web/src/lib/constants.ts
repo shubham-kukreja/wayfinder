@@ -12,7 +12,7 @@ export const SURFACES: Array<{ id: SurfaceId; label: string }> = [
 // snapshot so far (GET /api/snapshot — see routes/snapshot.ts), so the
 // mock fixtures remain how the other four required states (§12.4) are
 // reached and demoed until the server can produce them itself.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3001";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3001";
 
 export const FIXTURES: Array<{ id: string; label: string; url: string }> = [
   { id: "live", label: "Live server", url: `${API_BASE_URL}/api/snapshot` },

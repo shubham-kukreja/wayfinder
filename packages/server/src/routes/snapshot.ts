@@ -1,28 +1,25 @@
 import type { FastifyInstance } from "fastify";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-import { snapshotSchema } from "@wayfinder/engine";
+import { openDb } from "../store/db.js";
+import { buildCurrentSnapshot } from "../pipeline/currentSnapshot.js";
+import { loadConfig } from "../config.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-// §13.1 GET /api/snapshot — "cached, fast, no fetching." The real
-// pipeline that assembles a Snapshot from live store state (scores,
-// series, allocation) doesn't exist yet (§13's ScoreState/SeriesState
-// population from the store is a bigger, not-yet-built piece — see
-// pipeline/derive.ts for the one series that's wired end-to-end so far).
-// Until that lands, this serves the same healthy mock fixture the web
-// app's dev-mode fixture switcher uses — real data, computed by the real
-// engine, schema-valid — just not live-fetched from the store yet.
-const MOCK_SNAPSHOT_PATH = join(__dirname, "../../../../mock/snapshot.json");
-
+// §13.1 GET /api/snapshot — "cached, fast, no fetching." Uses the same
+// buildCurrentSnapshot() as POST /api/refresh and POST /api/snapshots,
+// so this always reflects whatever the store currently holds (including
+// anything a prior refresh call fetched and stored), not a separate
+// static copy that could silently drift from what refresh last computed.
 export function registerSnapshotRoute(app: FastifyInstance): void {
   app.get("/api/snapshot", async (_req, reply) => {
-    const raw = JSON.parse(readFileSync(MOCK_SNAPSHOT_PATH, "utf-8"));
-    const result = snapshotSchema.safeParse(raw);
-    if (!result.success) {
+    const config = loadConfig();
+    const db = openDb(config.dbPath);
+    try {
+      const { snapshot } = buildCurrentSnapshot(db);
+      return snapshot;
+    } catch (err) {
       reply.code(500);
-      return { error: "Snapshot failed schema validation", issues: result.error.issues };
+      return { error: err instanceof Error ? err.message : String(err) };
+    } finally {
+      db.close();
     }
-    return result.data;
   });
 }
