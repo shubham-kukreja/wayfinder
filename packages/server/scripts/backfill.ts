@@ -9,6 +9,7 @@ import { openDb } from "../src/store/db.js";
 import { insertObservations, seriesCoverage } from "../src/store/observations.js";
 import { insertFetchLog } from "../src/store/fetchLog.js";
 import { createFredAdapter, FRED_SERIES } from "../src/adapters/fred.js";
+import { createAmfiAdapter } from "../src/adapters/amfi.js";
 import { loadConfig } from "../src/config.js";
 import { DEFAULT_PARAMS } from "@wayfinder/engine";
 
@@ -71,6 +72,57 @@ async function backfillFred(db: ReturnType<typeof openDb>, apiKey: string | unde
   });
 }
 
+async function backfillAmfi(db: ReturnType<typeof openDb>, years = 10): Promise<CoverageReport[]> {
+  const adapter = createAmfiAdapter();
+  const to = new Date();
+  const from = new Date();
+  from.setFullYear(from.getFullYear() - years);
+
+  const startedAt = new Date().toISOString();
+  try {
+    const observations = await adapter.fetchHistory(from, to);
+    const fetchedAt = new Date().toISOString();
+    const written = insertObservations(
+      db,
+      observations.map((o) => ({
+        seriesId: o.seriesId,
+        date: o.date,
+        value: o.value,
+        basis: o.basis ?? null,
+        source: "AMFI",
+        fetchedAt,
+      }))
+    );
+    insertFetchLog(db, {
+      source: "AMFI",
+      startedAt,
+      finishedAt: fetchedAt,
+      status: "ok",
+      error: null,
+      rowsWritten: written,
+    });
+  } catch (err) {
+    insertFetchLog(db, {
+      source: "AMFI",
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      status: "failed",
+      error: err instanceof Error ? err.message : String(err),
+      rowsWritten: 0,
+    });
+    console.error(`AMFI backfill failed: ${err instanceof Error ? err.message : err}`);
+  }
+
+  return adapter.series.map((seriesId) => {
+    const coverage = seriesCoverage(db, seriesId);
+    return {
+      seriesId,
+      ...coverage,
+      meetsMinimum: coverage.observations >= DEFAULT_PARAMS.percentileMinObservations,
+    };
+  });
+}
+
 async function main() {
   const config = loadConfig();
   const db = openDb(config.dbPath);
@@ -84,19 +136,24 @@ async function main() {
   console.log("-- FRED --");
   reports.push(...(await backfillFred(db, config.fredApiKey)));
 
+  console.log("-- AMFI --");
+  reports.push(...(await backfillAmfi(db)));
+
   // Bullion (IBJA/metals.dev) has no historical range endpoint on the free
   // tier (see adapters/bullion.ts fetchHistory) — its backfill needs a
   // supplementary archive source, out of scope for this script until one
-  // is selected. RBI/NSE/AMFI backfill land in Phase 4 alongside those
-  // adapters.
+  // is selected.
   console.log("-- Bullion (IBJA/metals.dev) --");
-  console.log("  SKIPPED: no historical range endpoint on the free tier; needs a supplementary archive (Phase 4).");
+  console.log("  SKIPPED: no historical range endpoint on the free tier; needs a supplementary archive.");
+  // RBI's fetchHistory only returns whatever trailing window the scraped
+  // mirror displays (~15 months for CPI) — not a true long-range backfill,
+  // so there is nothing this script can usefully request beyond that.
   console.log("-- RBI --");
-  console.log("  SKIPPED: adapter not yet built (Phase 4).");
+  console.log("  SKIPPED: adapter only exposes a short trailing window (no true historical range) — nothing to backfill.");
+  // No working adapter exists yet — see NSE investigation notes in
+  // adapters/nse.ts.
   console.log("-- NSE --");
-  console.log("  SKIPPED: adapter not yet built (Phase 4).");
-  console.log("-- AMFI --");
-  console.log("  SKIPPED: adapter not yet built (Phase 4).");
+  console.log("  SKIPPED: adapter not yet built.");
 
   console.log();
   console.log("=== Coverage report ===");
