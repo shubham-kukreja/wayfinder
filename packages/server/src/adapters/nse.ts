@@ -80,6 +80,54 @@ import type { HealthStatus, Observation, SourceAdapter } from "./types.js";
 //      Any future attempt should space out requests deliberately (a few
 //      seconds minimum between calls) rather than iterating quickly.
 //
+// SESSION 3 (2026-09-08, same day) — one retry attempt, real new finding:
+//
+//   5. THE "Broad Market Indices" GUESS WAS WRONG IN A NEW WAY. Replayed
+//      the exact confirmed-real payload
+//      {"cinfo":{"indextype":"Equity","indexgroup":"Historical Index Data"}}
+//      via cookie-transplant — got the same 4-category list again
+//      (Broad Market Indices / Sectoral / Strategy / Thematic),
+//      confirming that part is solid and repeatable. Then tried
+//      CHAINING it — same endpoint, same "indextype":"Equity", with
+//      "indexgroup" set to "Broad Market Indices" (one of the returned
+//      category names) hoping it would drill down to actual index
+//      names. It did NOT: got the exact same 4-category list back
+//      again. This proves gethistoricaltypeSubindexdata does NOT branch
+//      on indexgroup value in the way assumed — it appears to be a
+//      near-static lookup keyed only on indextype, always returning the
+//      same category list for "Equity" regardless of indexgroup. The
+//      actual "index list within a category" step (e.g. getting to
+//      "NIFTY 50", "NIFTY BANK") is very likely a DIFFERENT, still-
+//      unidentified endpoint or a different field in this same one
+//      (e.g. maybe "category" needs to be set, not "indexgroup" — the
+//      response objects have both fields, both null in every response
+//      seen so far, which is itself a clue neither has been exercised
+//      correctly yet).
+//
+//   6. The flaky UI trigger reproduced its session-1 behavior exactly:
+//      selectOption() fired multiple real requests (visible in network
+//      capture) but ddlHistoricaltypeeSubindex never actually populated
+//      with options across ~6 attempts including a manual reset-and-
+//      retry, and no response body was ever captured for any of those
+//      in-browser attempts (only requests, no responses) — a different
+//      and arguably worse symptom than session 1's "fires 1-in-8"
+//      description, suggesting this may vary session to session, not
+//      just attempt to attempt. Site became unreachable again
+//      (ERR_ABORTED / ERR_TIMED_OUT) shortly after, consistent with
+//      finding 4 — this session used well under 15 requests before
+//      hitting it, so the rate-limit threshold may be lower/stricter
+//      than previously estimated, or cumulative across recent sessions
+//      rather than a fresh per-session budget.
+//
+//   NEXT STEP, refined: don't keep guessing indexgroup/category values
+//   against gethistoricaltypeSubindexdata — it looks like a dead end for
+//   the drill-down step. Instead, capture the network tab from a REAL
+//   HUMAN browser session (not automated) clicking all the way through
+//   to a populated index dropdown and a submitted report, to get the
+//   actual endpoint(s) and payload shape(s) involved beyond this one
+//   call — automation-driven attempts have now twice failed to trigger
+//   the site's own JS reliably enough to observe this itself.
+//
 // Until the index-list payload is cracked, all ~19 NSE-dependent score
 // cells (§7.2 equity segment valuation/relvalue, §7.5 sector valuation/
 // rel_momentum) are MANUAL — same provenance as PMI (§10.6). Do not
