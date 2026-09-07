@@ -5,13 +5,22 @@ import { scoresFromSnapshot, vetoesFromSnapshot, useLocalAllocation } from "../h
 import { WeightEditor } from "../components/WeightEditor.js";
 import { runFragilityTest } from "../lib/fragility.js";
 import { formatPct } from "../lib/format.js";
+import { saveParams } from "../lib/paramsApi.js";
 
 const TILT_GROUPS = ["l1", "equity", "debt", "metals"] as const;
 
 export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
   const [params, setParams] = useState<Params>(snapshot.params);
+  // Tracks what's actually persisted server-side (starts as the loaded
+  // snapshot's params, updates on a successful save) — comparing `params`
+  // against the ORIGINAL snapshot.params prop would keep isDirty stuck
+  // true forever after a save, since that prop never changes within this
+  // component's lifetime.
+  const [lastSavedParams, setLastSavedParams] = useState<Params>(snapshot.params);
   const [neutralEditUnlocked, setNeutralEditUnlocked] = useState(false);
   const [showFragility, setShowFragility] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const scores = scoresFromSnapshot(snapshot.scores);
   const vetoes = vetoesFromSnapshot(snapshot.vetoes);
@@ -30,23 +39,48 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
     setParams((p) => ({ ...p, neutralWeights: { ...p.neutralWeights, [group]: next } as Params["neutralWeights"] }));
   }
 
-  const isDirty = JSON.stringify(params) !== JSON.stringify(snapshot.params);
+  const isDirty = JSON.stringify(params) !== JSON.stringify(lastSavedParams);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await saveParams(params);
+      setLastSavedParams(params);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
       <div className="mb-8 flex items-start justify-between">
         <div>
           <h1 className="mb-1 text-xl font-semibold text-neutral-900">Parameters</h1>
-          <p className="text-sm text-neutral-500">Every weight, cap and threshold is editable. Recomputes locally, no network call.</p>
+          <p className="text-sm text-neutral-500">
+            Every weight, cap and threshold is editable. Recomputes locally, no network call — saving writes it to the
+            server so it applies everywhere and survives a reload.
+          </p>
         </div>
         <div className="flex items-center gap-3">
-          {isDirty && <span className="text-xs text-amber-600">Unsaved — not yet a review</span>}
+          {saveError && <span className="text-xs text-rose-600">Save failed: {saveError}</span>}
+          {!saveError && !isDirty && <span className="text-xs text-emerald-600">Saved</span>}
+          {isDirty && <span className="text-xs text-amber-600">Unsaved changes</span>}
           <button
-            onClick={() => setParams(snapshot.params)}
+            onClick={() => setParams(lastSavedParams)}
             disabled={!isDirty}
             className="rounded-md border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 disabled:opacity-40"
           >
             Reset
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!isDirty || saving}
+            className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-40"
+          >
+            {saving ? "Saving…" : "Save"}
           </button>
         </div>
       </div>

@@ -5,6 +5,7 @@ import { scoresFromSnapshot, vetoesFromSnapshot } from "../hooks/useLocalAllocat
 import { computeSensitivity } from "../lib/sensitivity.js";
 import { formatScore } from "../lib/format.js";
 import { RubricPicker } from "../components/RubricPicker.js";
+import { saveScore } from "../lib/scoresApi.js";
 
 const PROVENANCE_LABELS: Record<ScoreProvenance, string> = {
   auto: "Auto (fetched)",
@@ -26,11 +27,16 @@ function staleBadge(staleDays: number | null): { label: string; className: strin
 export function InputsView({ snapshot }: { snapshot: Snapshot }) {
   const [expandedProvenance, setExpandedProvenance] = useState<ScoreProvenance | null>("manual");
   const [expandedRubricKey, setExpandedRubricKey] = useState<string | null>(null);
-  // Rubric-picker selections are local-only for now (no POST /api/scores
-  // yet to persist them) — they recompute the LOCAL sensitivity/impact
-  // preview instantly (§12.5 principle 2) but a page reload loses them.
-  // Shown honestly via the "not yet saved" note below, not silently.
+  // Picking conditions updates this local preview instantly (§12.5
+  // principle 2 — no network call just to see the resulting score), but
+  // it's only written to the server (and so only survives a reload / is
+  // visible elsewhere) once the picker's own "Save" button is clicked —
+  // matching §12.5 principle 3 ("data changes are explicit").
   const [rubricOverrides, setRubricOverrides] = useState<Record<string, number>>({});
+
+  async function handleSaveRubric(values: Record<string, number>) {
+    await Promise.all(Object.entries(values).map(([id, value]) => saveScore(id, value)));
+  }
 
   const scores = useMemo(() => ({ ...scoresFromSnapshot(snapshot.scores), ...rubricOverrides }), [snapshot.scores, rubricOverrides]);
   const vetoes = vetoesFromSnapshot(snapshot.vetoes);
@@ -65,8 +71,8 @@ export function InputsView({ snapshot }: { snapshot: Snapshot }) {
 
       {hasUnsavedRubricPicks && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
-          Rubric selections below update the live preview (Drivers/Allocation) instantly, but are not yet saved to the
-          server — there's no persistence endpoint for scores yet. A page reload will lose them.
+          Rubric selections below update the live preview instantly. Click "Save" inside a picker to persist it to the
+          server — until then it's local to this page and a reload will lose it.
         </div>
       )}
 
@@ -125,6 +131,7 @@ export function InputsView({ snapshot }: { snapshot: Snapshot }) {
                             scoreId={key}
                             currentValue={state.value}
                             onEvaluate={(values) => setRubricOverrides((prev) => ({ ...prev, ...values }))}
+                            onSave={handleSaveRubric}
                           />
                         </div>
                       )}

@@ -8,13 +8,18 @@ export function RubricPicker({
   scoreId,
   currentValue,
   onEvaluate,
+  onSave,
 }: {
   spec: RubricUiSpec;
   scoreId: string;
   currentValue: number;
   onEvaluate: (values: Record<string, number>) => void;
+  onSave: (values: Record<string, number>) => Promise<void>;
 }) {
   const [selection, setSelection] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
 
   const result = spec.evaluate(selection);
   const isComplete = result !== null;
@@ -23,8 +28,23 @@ export function RubricPicker({
   function setField(key: string, value: string) {
     const next = { ...selection, [key]: value };
     setSelection(next);
+    setSaved(false);
     const evaluated = spec.evaluate(next);
     if (evaluated) onEvaluate(evaluated);
+  }
+
+  async function handleSave() {
+    if (!result) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onSave(result);
+      setSaved(true);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -50,8 +70,19 @@ export function RubricPicker({
       ))}
       <div className="flex items-center justify-between border-t border-neutral-200 pt-2 text-xs">
         <span className="text-neutral-500">{isComplete ? "Resulting score" : "Pick every condition to compute a score"}</span>
-        <span className={`font-medium tabular-nums ${isComplete ? "text-neutral-900" : "text-neutral-400"}`}>{previewValue.toFixed(1)}</span>
+        <div className="flex items-center gap-2">
+          <span className={`font-medium tabular-nums ${isComplete ? "text-neutral-900" : "text-neutral-400"}`}>{previewValue.toFixed(1)}</span>
+          <button
+            onClick={handleSave}
+            disabled={!isComplete || saving}
+            className="rounded-md bg-neutral-900 px-2 py-1 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-40"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
       </div>
+      {saveError && <p className="text-xs text-rose-600">Save failed: {saveError}</p>}
+      {saved && !saveError && <p className="text-xs text-emerald-600">Saved to server.</p>}
     </div>
   );
 }

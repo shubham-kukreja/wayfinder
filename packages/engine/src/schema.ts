@@ -86,7 +86,7 @@ const allocationSchema = z.object({
   total: z.number(),
 });
 
-const paramsSchema = z.object({
+export const paramsSchema = z.object({
   signalWeights: z.object({
     l1: z.record(z.number()),
     equity: z.record(z.number()),
