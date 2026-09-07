@@ -128,6 +128,26 @@ import type { HealthStatus, Observation, SourceAdapter } from "./types.js";
 //   call — automation-driven attempts have now twice failed to trigger
 //   the site's own JS reliably enough to observe this itself.
 //
+// BSE INVESTIGATED AS AN ALTERNATIVE (2026-09-08) — DEAD END, DON'T
+// RETRY WITHOUT NEW INFORMATION. api.bseindia.com's
+// IndexArchMnthYr_PAR endpoint is genuinely easy to call (just a
+// User-Agent + Referer header, no cookies/bot-challenge, real JSON
+// back to 1997) and an adapter was fully built and live-tested against
+// it. BUT: direct cross-checking (not done until late in that session)
+// showed its I_PE/I_PB/I_yl columns are IDENTICAL across completely
+// unrelated indices for the same period — confirmed live comparing
+// SENSEX, BANKEX, FMCG, and AUTO for Jan-Mar 2023, all returning the
+// exact same 22.34/22.45/22.40 despite wildly different price levels
+// in the same response rows. Only the OHLC/turnover columns are
+// genuinely per-index; the ratio columns appear broken/shared on BSE's
+// own backend, not a client-side bug. This is NOT a rate-limiting or
+// caching artifact — it reproduces on fully-settled 2005/2015/2023
+// historical data, not just recent months. The built adapter and its
+// wiring were reverted in full. Do not resume this path unless BSE's
+// API demonstrably fixes this (verify by comparing two DIFFERENT
+// sector indices for the SAME historical period before building
+// anything on top of it again).
+//
 // Until the index-list payload is cracked, all ~19 NSE-dependent score
 // cells (§7.2 equity segment valuation/relvalue, §7.5 sector valuation/
 // rel_momentum) are MANUAL — same provenance as PMI (§10.6). Do not
