@@ -3,9 +3,9 @@ import { parseRequestedSources, buildAdapters, AVAILABLE_SOURCES } from "../src/
 import { loadConfig } from "../src/config.js";
 
 describe("parseRequestedSources — POST /api/refresh?sources=... (§13.1, §11.5)", () => {
-  it("defaults to fred, bullion, amfi, nse, rbi_homepage — the slow headless-browser RBI mirror is opt-in only", () => {
+  it("defaults to every registered source — a full refresh now includes the slow headless-browser adapters too", () => {
     const result = parseRequestedSources(undefined);
-    expect(result).toEqual(["fred", "bullion", "amfi", "nse", "rbi_homepage"]);
+    expect(result).toEqual([...AVAILABLE_SOURCES]);
   });
 
   it("accepts a comma-separated list, trimmed and lowercased", () => {

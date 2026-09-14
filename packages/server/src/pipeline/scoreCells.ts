@@ -2,7 +2,17 @@ import type Database from "better-sqlite3";
 import type { Params } from "@wayfinder/engine";
 import { metalsFundamentalsScore } from "@wayfinder/engine";
 import { autoScore, autoScoreFromSeries, derivedRatioSeries, derivedDifferenceSeries } from "./scoreEngine.js";
-import { deriveRealRatesScores, deriveNiftyMomentumSeries, goldEtfHoldingsTrend, centralBankGoldBuyingTrend } from "./derive.js";
+import {
+  deriveRealRatesScores,
+  deriveNiftyMomentumSeries,
+  goldEtfHoldingsTrend,
+  centralBankGoldBuyingTrend,
+  deriveEarningsYieldGapSeries,
+  deriveRealGoldPriceSeries,
+  deriveMidLargeSpreadSeries,
+  deriveSmallLargeSpreadSeries,
+  deriveSectorRelMomentumSeries,
+} from "./derive.js";
 import { latestObservations } from "../store/observations.js";
 
 export interface ScoreCellResult {
@@ -10,34 +20,26 @@ export interface ScoreCellResult {
   value: number;
   status: "ok" | "insufficient_history";
   derivedFrom: string[];
-  transform: "percentile" | "inverted" | "rubric";
+  transform: "percentile" | "inverted" | "rubric" | "average";
 }
 
 // §7 — every score cell computable end-to-end from the series this
-// project's adapters (FRED, bullion/IBJA, AMFI, RBI, NSE, niftyindices)
-// actually fetch as of this build. Deliberately NOT the full 85 cells:
-// nse.ts covers P/E-based valuation only (nseindia.com's /api/allIndices
-// has no TRI field), so sector.*::rel_momentum stays unreachable from
-// that source — niftyindices.ts's Daily Snapshot carries a closing index
-// VALUE per sector (sector_close_*) which COULD support relative-return
-// calculation, but that derivation isn't wired here yet either (same
-// "data exists, rubric wiring is separate, not-yet-built work" pattern
-// as cpi_yoy/tbill_1y below). l1.equity::momentum IS now wired (see
-// deriveNiftyMomentumSeries below) using a TRI approximation (no free
-// real Nifty 50 TRI source exists — see derive.ts's doc comment).
-// sector.capgoods now has real P/E data via niftyindices.ts (nse.ts's
-// source still has no matching index, but niftyindices.ts's Daily
-// Snapshot does — see that adapter's file comment). RBI now covers
-// cpi_index, cpi_yoy, and tbill_1y (see adapters/rbi.ts); gsec_10y comes
-// from FRED instead (the only RBI-mirror "yield" page turned out to be a
-// price/turnover index, not a yield); repo_rate has no source found on
-// either RBI's own portal or the mirror as of 2026-09-03. None of
-// cpi_index/cpi_yoy/tbill_1y/gsec_10y are wired into a score cell here
-// yet either — they feed §8.1/§8.2 macro rubrics (inflation direction,
-// rate-path expectations) whose inputs are still manual selections, not
-// automatically derived from a raw series trend; that derivation is
-// separate, not-yet-built work. Cells this can't compute are left for
-// the caller to default to 50/manual — this module never guesses.
+// project's adapters (FRED, bullion/IBJA, AMFI, RBI, NSE, niftyindices,
+// yahoo/yahooMetals, dbnomics) actually fetch as of this build.
+// sector.*::rel_momentum is now wired via niftyindices.ts's sector_close_*
+// history against nifty50_close (deriveSectorRelMomentumSeries).
+// l1.equity::momentum is wired (see deriveNiftyMomentumSeries below)
+// using a TRI approximation (no free real Nifty 50 TRI source exists —
+// see derive.ts's doc comment). l1.equity::valuation (earnings-yield gap)
+// and l1.metals::valuation (real INR gold price) are wired via
+// deriveEarningsYieldGapSeries/deriveRealGoldPriceSeries.
+// equity.{large,mid,small}::relvalue are wired via the Mid/Small-Large
+// P/E spread series (Data Trackers rows 5-8). Still NOT computable:
+// debt.corporate::carry/spread_cushion (no free aaa_3y source — FIMMDA/
+// FBIL both confirmed dead ends, see docs/SESSION_SUMMARY_2026-09-15.md)
+// and l1.debt::momentum (needs a CRISIL/Nifty composite bond index return
+// — no adapter fetches this). Cells this can't compute are left for the
+// caller to default to 50/manual — this module never guesses.
 export function computeAutoScoreCells(db: Database.Database, params: Params, asOfDate: string): ScoreCellResult[] {
   const out: ScoreCellResult[] = [];
 
@@ -63,6 +65,24 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
     out.push({ scoreId: "l1.metals::flows", value: result.value, status: result.status, derivedFrom: ["flow_goldetf"], transform: "inverted" });
   }
 
+  // §8.1 (Calculation Guide row 7) l1.equity::valuation — earnings-yield
+  // gap = (100 / Nifty 50 trailing P/E) - 10Y G-sec yield, percentile
+  // vs history, AS-IS (high gap = equity cheap vs bonds = attractive).
+  {
+    const series = deriveEarningsYieldGapSeries(db);
+    const result = autoScoreFromSeries(series, params, "percentile");
+    out.push({ scoreId: "l1.equity::valuation", value: result.value, status: result.status, derivedFrom: ["nifty50_pe", "gsec_10y"], transform: "percentile" });
+  }
+
+  // §8.4 (Calculation Guide row 21) l1.metals::valuation — real INR gold
+  // price (gold_inr deflated by cpi_index), percentile vs history,
+  // INVERTED (expensive in real terms = unattractive).
+  {
+    const series = deriveRealGoldPriceSeries(db);
+    const result = autoScoreFromSeries(series, params, "inverted");
+    out.push({ scoreId: "l1.metals::valuation", value: result.value, status: result.status, derivedFrom: ["gold_inr", "cpi_index"], transform: "inverted" });
+  }
+
   // §7.2 equity.{large,mid,small}::valuation — inverted index P/E, from
   // nseindia.com's /api/allIndices (see adapters/nse.ts). large uses
   // nifty100_pe (broader large-cap proxy than nifty50_pe, matching the
@@ -80,6 +100,31 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
   {
     const result = autoScore(db, "smallcap250_pe", params, "inverted");
     out.push({ scoreId: "equity.small::valuation", value: result.value, status: result.status, derivedFrom: ["smallcap250_pe"], transform: "inverted" });
+  }
+
+  // Calculation Guide row 29 / Data Trackers rows 5-8 —
+  // equity.{large,mid,small}::relvalue. "Mid Cap score = 100 − Mid
+  // Spread %ile. Small Cap score = 100 − Small Spread %ile. Large Cap
+  // score = average of the two raw spread %iles" (i.e. NOT inverted for
+  // Large — a wide spread favoring Large means Large itself looks
+  // relatively cheap, so Large's score moves WITH the spread percentile,
+  // opposite of Mid/Small's own "high spread = expensive vs Large" framing).
+  {
+    const midSpread = deriveMidLargeSpreadSeries(db);
+    const smallSpread = deriveSmallLargeSpreadSeries(db);
+    const midResult = autoScoreFromSeries(midSpread, params, "inverted");
+    const smallResult = autoScoreFromSeries(smallSpread, params, "inverted");
+    out.push({ scoreId: "equity.mid::relvalue", value: midResult.value, status: midResult.status, derivedFrom: ["midcap150_pe", "nifty100_pe"], transform: "inverted" });
+    out.push({ scoreId: "equity.small::relvalue", value: smallResult.value, status: smallResult.status, derivedFrom: ["smallcap250_pe", "nifty100_pe"], transform: "inverted" });
+
+    if (midResult.status === "ok" && smallResult.status === "ok") {
+      const midRawPercentile = 100 - midResult.value;
+      const smallRawPercentile = 100 - smallResult.value;
+      const largeValue = (midRawPercentile + smallRawPercentile) / 2;
+      out.push({ scoreId: "equity.large::relvalue", value: largeValue, status: "ok", derivedFrom: ["midcap150_pe", "smallcap250_pe", "nifty100_pe"], transform: "average" });
+    } else {
+      out.push({ scoreId: "equity.large::relvalue", value: 50, status: "insufficient_history", derivedFrom: ["midcap150_pe", "smallcap250_pe", "nifty100_pe"], transform: "average" });
+    }
   }
 
   // §7.5 sector.{banking,it,pharma,auto,fmcg,energy,metals,capgoods}::valuation
@@ -108,6 +153,28 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
   ] as const) {
     const result = autoScore(db, seriesId, params, "inverted");
     out.push({ scoreId: `sector.${sector}::valuation`, value: result.value, status: result.status, derivedFrom: [seriesId], transform: "inverted" });
+  }
+
+  // Calculation Guide row 48 — sector.*::rel_momentum: average of the
+  // sector index's 6M and 12M return minus Nifty's over the same
+  // windows, percentile vs history, AS-IS. Uses sector_close_* (real
+  // closing index values, adapters/niftyindices.ts) against
+  // nifty50_close — nse.ts's sector_pe_* series has no matching close
+  // value, so this reads a different series family than the valuation
+  // loop above despite the shared sector list.
+  for (const [sector, closeSeriesId] of [
+    ["banking", "sector_close_banking"],
+    ["it", "sector_close_it"],
+    ["pharma", "sector_close_pharma"],
+    ["auto", "sector_close_auto"],
+    ["fmcg", "sector_close_fmcg"],
+    ["energy", "sector_close_energy"],
+    ["metals", "sector_close_metals"],
+    ["capgoods", "sector_close_capgoods"],
+  ] as const) {
+    const series = deriveSectorRelMomentumSeries(db, closeSeriesId);
+    const result = autoScoreFromSeries(series, params, "percentile");
+    out.push({ scoreId: `sector.${sector}::rel_momentum`, value: result.value, status: result.status, derivedFrom: [closeSeriesId, "nifty50_close"], transform: "percentile" });
   }
 
   // §7.4 metals.gold::ratio_position / metals.silver::ratio_position —

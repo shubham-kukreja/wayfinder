@@ -189,3 +189,120 @@ export function deriveRealRatesScores(
     "l1.metals::macro": realRatesScore(changeBp, "gold"), // §8.4: same table drives the gold column of l1.metals::macro
   };
 }
+
+// Calculation Guide row 7 — l1.equity::valuation: "Earnings-yield gap =
+// (100 / Nifty 50 trailing P/E) − 10Y G-sec yield. Build monthly history
+// of this gap; attractiveness = PERCENTRANK of current gap × 100, AS-IS."
+// Month-joined against gsec_10y (FRED, monthly) same as
+// derivedDifferenceSeries — nifty50_pe (NSE) publishes daily, gsec_10y
+// doesn't, so an exact-date join would silently drop almost every row.
+export function deriveEarningsYieldGapSeries(db: Database.Database): Array<{ date: string; value: number }> {
+  const peRows = latestObservations(db, "nifty50_pe");
+  const gsecRows = latestObservations(db, "gsec_10y");
+  if (peRows.length === 0 || gsecRows.length === 0) return [];
+
+  const gsecByMonth = new Map(gsecRows.map((r) => [r.date.slice(0, 7), r.value]));
+
+  const out: Array<{ date: string; value: number }> = [];
+  for (const peRow of peRows) {
+    if (peRow.value === 0) continue;
+    const gsecYield = gsecByMonth.get(peRow.date.slice(0, 7));
+    if (gsecYield === undefined) continue;
+    out.push({ date: peRow.date, value: (100 / peRow.value) - gsecYield });
+  }
+  return out;
+}
+
+// Calculation Guide row 21 — l1.metals::valuation: "INR gold price
+// deflated by CPI index (real gold price). Percentile vs 15–20Y history,
+// INVERTED." Month-joined against RBI's cpi_index (same reasoning as
+// deriveEarningsYieldGapSeries above — gold_inr/IBJA is daily,
+// cpi_index/RBI is monthly).
+export function deriveRealGoldPriceSeries(db: Database.Database): Array<{ date: string; value: number }> {
+  const goldRows = latestObservations(db, "gold_inr");
+  const cpiRows = latestObservations(db, "cpi_index");
+  if (goldRows.length === 0 || cpiRows.length === 0) return [];
+
+  const cpiByMonth = new Map(cpiRows.map((r) => [r.date.slice(0, 7), r.value]));
+
+  const out: Array<{ date: string; value: number }> = [];
+  for (const goldRow of goldRows) {
+    const cpi = cpiByMonth.get(goldRow.date.slice(0, 7));
+    if (cpi === undefined || cpi === 0) continue;
+    out.push({ date: goldRow.date, value: goldRow.value / cpi });
+  }
+  return out;
+}
+
+// Data Trackers rows 5-8 / Calculation Guide row 29 —
+// equity.{large,mid,small}::relvalue. "Mid–Large Spread" and
+// "Small–Large Spread" are simple differences of the same P/E series
+// equity.{mid,small}::valuation already percentile (midcap150_pe /
+// smallcap250_pe against nifty100_pe as the "Large" leg) — same-date
+// join is correct here since all three come from the same NSE/
+// niftyindices snapshot for a given day, unlike the cross-source month
+// joins above.
+export function deriveMidLargeSpreadSeries(db: Database.Database): Array<{ date: string; value: number }> {
+  const midRows = latestObservations(db, "midcap150_pe");
+  const largeRows = latestObservations(db, "nifty100_pe");
+  const largeByDate = new Map(largeRows.map((r) => [r.date, r.value]));
+  const out: Array<{ date: string; value: number }> = [];
+  for (const mid of midRows) {
+    const large = largeByDate.get(mid.date);
+    if (large === undefined) continue;
+    out.push({ date: mid.date, value: mid.value - large });
+  }
+  return out;
+}
+
+export function deriveSmallLargeSpreadSeries(db: Database.Database): Array<{ date: string; value: number }> {
+  const smallRows = latestObservations(db, "smallcap250_pe");
+  const largeRows = latestObservations(db, "nifty100_pe");
+  const largeByDate = new Map(largeRows.map((r) => [r.date, r.value]));
+  const out: Array<{ date: string; value: number }> = [];
+  for (const small of smallRows) {
+    const large = largeByDate.get(small.date);
+    if (large === undefined) continue;
+    out.push({ date: small.date, value: small.value - large });
+  }
+  return out;
+}
+
+// Calculation Guide row 48 — sector.*::rel_momentum: "Average of the
+// sector index's 6M and 12M return minus Nifty's over the same windows;
+// percentile vs history, AS-IS." Generates one relative-momentum
+// observation per date that has 12M of trailing history for BOTH the
+// sector close and nifty50_close — same "closest observation at or
+// before" calendar lookback as the TRI approximation above (niftyindices'
+// backfill window won't be a dense gap-free daily series from day one).
+function trailingReturn(rows: { date: string; value: number }[], asOfDate: string, monthsBack: number): number | null {
+  const asOf = new Date(asOfDate);
+  const past = new Date(asOf);
+  past.setMonth(past.getMonth() - monthsBack);
+
+  const currentRow = rows.filter((r) => new Date(r.date) <= asOf).pop();
+  if (!currentRow) return null;
+  const pastRow = rows.filter((r) => new Date(r.date) <= past).pop();
+  if (!pastRow || pastRow.value === 0) return null;
+
+  return currentRow.value / pastRow.value - 1;
+}
+
+export function deriveSectorRelMomentumSeries(db: Database.Database, sectorSeriesId: string): Array<{ date: string; value: number }> {
+  const sectorRows = latestObservations(db, sectorSeriesId);
+  const niftyRows = latestObservations(db, "nifty50_close");
+  if (sectorRows.length === 0 || niftyRows.length === 0) return [];
+
+  const out: Array<{ date: string; value: number }> = [];
+  for (const row of sectorRows) {
+    const sector6m = trailingReturn(sectorRows, row.date, 6);
+    const sector12m = trailingReturn(sectorRows, row.date, 12);
+    const nifty6m = trailingReturn(niftyRows, row.date, 6);
+    const nifty12m = trailingReturn(niftyRows, row.date, 12);
+    if (sector6m === null || sector12m === null || nifty6m === null || nifty12m === null) continue;
+
+    const relMomentum = ((sector6m - nifty6m) + (sector12m - nifty12m)) / 2;
+    out.push({ date: row.date, value: relMomentum });
+  }
+  return out;
+}

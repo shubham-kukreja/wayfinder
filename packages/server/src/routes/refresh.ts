@@ -18,12 +18,12 @@ import { loadConfig } from "../config.js";
 import type { SourceAdapter } from "../adapters/types.js";
 
 // §11.5 / §13.1 POST /api/refresh[?sources=fred,bullion,amfi,rbi,nse,yahoo].
-// Default (no query param) fans out to the fast, non-browser adapters
-// (FRED, bullion, AMFI, NSE, rbi_homepage — all plain HTTP requests, no
-// headless browser) — RBI (the dbie.rbihub.in mirror, adapters/rbi.ts)
-// is opt-in via ?sources=... because it spins up a real headless
-// browser per call (multi-second) and shouldn't silently slow down
-// every quick refresh click. rbi_homepage (adapters/rbiRepoRate.ts) is
+// Default (no query param) now fans out to EVERY registered adapter,
+// slow headless-browser ones (RBI, CCIL, Yahoo) included — a full
+// refresh is expected to take longer as a result; pass ?sources=... to
+// request a fast, partial subset instead. RBI (the dbie.rbihub.in
+// mirror, adapters/rbi.ts) spins up a real headless browser per call
+// (multi-second). rbi_homepage (adapters/rbiRepoRate.ts) is
 // a SEPARATE, fast, plain-HTTP source for just the repo rate — RBI's
 // DBIE mirror has no repo_rate series at all (confirmed 2026-09-03), so
 // this scrapes rbi.org.in's own homepage widget instead; distinct
@@ -32,22 +32,11 @@ import type { SourceAdapter } from "../adapters/types.js";
 // ("POST /api/refresh?series=a,b,c -> partial refresh"); this uses
 // source names rather than series names since that's the granularity a
 // user/scheduler actually chooses at (§11.5: "per-source refresh
-// exposed"). Yahoo is opt-in too — it fetches ~500 constituent quotes via
-// an unofficial API (2 batch requests) plus a Wikipedia page, noticeably
-// slower than the single-request sources. yahoo_metals, tradingeconomics,
-// niftyindices, and dbnomics are opt-in as newly-added sources — kept out
-// of the default set until they've proven reliable over time, same
-// caution as Yahoo/RBI (dbnomics itself is a stable, official-data mirror
-// with a documented API, unlike the others' scraped/unofficial nature —
-// still opt-in for now simply because it's new to this project, not
-// because of any reliability concern found). ccil (adapters/ccil.ts) is
-// opt-in for the same reason as rbi: it spins up a real headless browser
-// against ccilindia.com's Zero Coupon Yield Curve page per call. It
-// writes to the SAME tbill_1y series rbi.ts populates (a specific 364-day
-// security's real market yield, a better source than RBI's mirror's
-// 183-364-day bucket average) — not a new series, so it needs no
-// preference/fallback logic on top of the store's existing "latest
-// fetched_at wins" rule.
+// exposed"). ccil (adapters/ccil.ts) writes to the SAME tbill_1y series
+// rbi.ts populates (a specific 364-day security's real market yield, a
+// better source than RBI's mirror's 183-364-day bucket average) — not a
+// new series, so it needs no preference/fallback logic on top of the
+// store's existing "latest fetched_at wins" rule.
 export const AVAILABLE_SOURCES = [
   "fred",
   "bullion",
@@ -65,7 +54,7 @@ export const AVAILABLE_SOURCES = [
 export type SourceName = (typeof AVAILABLE_SOURCES)[number];
 
 export function parseRequestedSources(sourcesParam: string | undefined): SourceName[] | { error: string } {
-  const requested = sourcesParam ? sourcesParam.split(",").map((s) => s.trim().toLowerCase()) : ["fred", "bullion", "amfi", "nse", "rbi_homepage"];
+  const requested = sourcesParam ? sourcesParam.split(",").map((s) => s.trim().toLowerCase()) : [...AVAILABLE_SOURCES];
   const invalid = requested.filter((s) => !AVAILABLE_SOURCES.includes(s as SourceName));
   if (invalid.length > 0) {
     return { error: `Unknown source(s): ${invalid.join(", ")}. Available: ${AVAILABLE_SOURCES.join(", ")}` };

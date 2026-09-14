@@ -247,4 +247,73 @@ describe("computeAutoScoreCells — §7 cells computable from live-fetchable ser
     const debtValuation = results.find((r) => r.scoreId === "l1.debt::valuation")!;
     expect(debtValuation.status).toBe("ok"); // would be insufficient_history if the join silently produced 0 matches
   });
+
+  it("l1.equity::valuation computes the earnings-yield gap once nifty50_pe and gsec_10y both have enough history (Calculation Guide row 7)", () => {
+    const peValues = Array.from({ length: 30 }, (_, i) => 18 + i * 0.1);
+    seedMonthlySeries("nifty50_pe", "NSE", peValues, 2020, 1);
+    const gsecYields = Array.from({ length: 30 }, () => 6.75);
+    seedMonthlySeries("gsec_10y", "FRED", gsecYields, 2020, 1);
+
+    const results = computeAutoScoreCells(db, DEFAULT_PARAMS, "2026-09-01");
+    const equityValuation = results.find((r) => r.scoreId === "l1.equity::valuation")!;
+    expect(equityValuation.status).toBe("ok");
+    expect(equityValuation.transform).toBe("percentile"); // AS-IS, not inverted (high gap = cheap = attractive)
+  });
+
+  it("l1.metals::valuation computes the real (CPI-deflated) gold price once gold_inr and cpi_index both have enough history (Calculation Guide row 21)", () => {
+    const goldValues = Array.from({ length: 30 }, (_, i) => 60000 + i * 500);
+    seedMonthlySeries("gold_inr", "IBJA", goldValues, 2020, 1);
+    const cpiValues = Array.from({ length: 30 }, (_, i) => 180 + i * 0.5);
+    seedMonthlySeries("cpi_index", "RBI", cpiValues, 2020, 1);
+
+    const results = computeAutoScoreCells(db, DEFAULT_PARAMS, "2026-09-01");
+    const metalsValuation = results.find((r) => r.scoreId === "l1.metals::valuation")!;
+    expect(metalsValuation.status).toBe("ok");
+    expect(metalsValuation.transform).toBe("inverted"); // expensive in real terms = unattractive
+  });
+
+  it("equity.{mid,small}::relvalue score from the P/E spread vs large-cap, INVERTED (a wide spread = expensive vs large = unattractive)", () => {
+    const largeValues = Array.from({ length: 30 }, () => 22.5);
+    seedMonthlySeries("nifty100_pe", "NSE", largeValues, 2020, 1);
+    const midValues = Array.from({ length: 30 }, (_, i) => 30 + i * 0.2); // widening spread over time
+    seedMonthlySeries("midcap150_pe", "NSE", midValues, 2020, 1);
+    const smallValues = Array.from({ length: 30 }, (_, i) => 28 + i * 0.2);
+    seedMonthlySeries("smallcap250_pe", "NSE", smallValues, 2020, 1);
+
+    const results = computeAutoScoreCells(db, DEFAULT_PARAMS, "2026-09-01");
+    const mid = results.find((r) => r.scoreId === "equity.mid::relvalue")!;
+    const small = results.find((r) => r.scoreId === "equity.small::relvalue")!;
+    const large = results.find((r) => r.scoreId === "equity.large::relvalue")!;
+    expect(mid.status).toBe("ok");
+    expect(small.status).toBe("ok");
+    expect(large.status).toBe("ok");
+    // The widest/most-recent spread -> highest raw percentile -> mid/small's INVERTED score is lowest.
+    expect(mid.value).toBeLessThan(50);
+    expect(small.value).toBeLessThan(50);
+    // Large's score is the average of the two RAW (non-inverted) percentiles, so it moves opposite of mid/small.
+    expect(large.value).toBeGreaterThan(50);
+  });
+
+  it("sector.*::rel_momentum scores from the 6M/12M relative-return average vs Nifty, AS-IS", () => {
+    // Sector consistently outperforms Nifty every month -> relative
+    // momentum should trend positive and score above 50 once percentiled.
+    const sectorValues = Array.from({ length: 400 }, (_, i) => 100 * Math.pow(1.002, i)); // ~daily-ish compounding
+    const niftyValues = Array.from({ length: 400 }, (_, i) => 100 * Math.pow(1.001, i));
+
+    const seedDaily = (seriesId: string, source: string, values: number[]) => {
+      const rows = values.map((value, i) => {
+        const d = new Date("2024-01-01T00:00:00Z");
+        d.setDate(d.getDate() + i);
+        return { seriesId, date: d.toISOString().slice(0, 10), value, basis: null, source, fetchedAt: "2026-09-15T00:00:00Z" };
+      });
+      insertObservations(db, rows);
+    };
+    seedDaily("sector_close_banking", "NIFTYINDICES", sectorValues);
+    seedDaily("nifty50_close", "NIFTYINDICES", niftyValues);
+
+    const results = computeAutoScoreCells(db, DEFAULT_PARAMS, "2025-06-01");
+    const relMomentum = results.find((r) => r.scoreId === "sector.banking::rel_momentum")!;
+    expect(relMomentum.status).toBe("ok");
+    expect(relMomentum.transform).toBe("percentile"); // AS-IS, not inverted
+  });
 });

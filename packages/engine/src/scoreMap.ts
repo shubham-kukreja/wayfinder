@@ -34,4 +34,17 @@ export const SCORE_MAP: ScoreMapEntry[] = [
   { scoreId: "l1.debt::valuation", provenance: "auto", series: ["gsec_10y", "cpi_yoy"], transform: "percentile" },
   { scoreId: "debt.gilt::carry", provenance: "auto", series: ["gsec_10y"], transform: "percentile" },
   { scoreId: "debt.liquid::carry", provenance: "auto", series: ["tbill_1y"], transform: "percentile" },
+  { scoreId: "l1.equity::valuation", provenance: "auto", series: ["nifty50_pe", "gsec_10y"], transform: "percentile" },
+  { scoreId: "l1.metals::valuation", provenance: "auto", series: ["gold_inr", "cpi_index"], transform: "inverted" },
+  { scoreId: "equity.mid::relvalue", provenance: "auto", series: ["midcap150_pe", "nifty100_pe"], transform: "inverted" },
+  { scoreId: "equity.small::relvalue", provenance: "auto", series: ["smallcap250_pe", "nifty100_pe"], transform: "inverted" },
+  { scoreId: "equity.large::relvalue", provenance: "auto", series: ["midcap150_pe", "smallcap250_pe", "nifty100_pe"], transform: "average" },
+  ...["banking", "it", "pharma", "auto", "fmcg", "energy", "metals", "capgoods"].map(
+    (sector): ScoreMapEntry => ({
+      scoreId: `sector.${sector}::rel_momentum`,
+      provenance: "auto",
+      series: [`sector_close_${sector}`, "nifty50_close"],
+      transform: "percentile",
+    })
+  ),
 ];

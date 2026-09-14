@@ -7,6 +7,11 @@ import {
   niftyTriApprox12mReturn,
   deriveNiftyMomentumSeries,
   centralBankGoldBuyingTrend,
+  deriveEarningsYieldGapSeries,
+  deriveRealGoldPriceSeries,
+  deriveMidLargeSpreadSeries,
+  deriveSmallLargeSpreadSeries,
+  deriveSectorRelMomentumSeries,
 } from "../src/pipeline/derive.js";
 
 let db: Database.Database;
@@ -237,5 +242,99 @@ describe("centralBankGoldBuyingTrend — §8.5 (Calculation Guide row 23) above/
     seedMonthlyReserves(2025, 13, values);
 
     expect(centralBankGoldBuyingTrend(db, "2026-09-15")).not.toBeNull();
+  });
+});
+
+// Calculation Guide row 7 — l1.equity::valuation: "Earnings-yield gap =
+// (100 / Nifty 50 trailing P/E) − 10Y G-sec yield."
+describe("deriveEarningsYieldGapSeries — §8.1 (Calculation Guide row 7) earnings-yield gap history", () => {
+  it("returns an empty array when either series is missing", () => {
+    expect(deriveEarningsYieldGapSeries(db)).toEqual([]);
+    seed("nifty50_pe", "2026-01-01", 22);
+    expect(deriveEarningsYieldGapSeries(db)).toEqual([]);
+  });
+
+  it("computes (100 / P/E) - gsec yield for each month both series share", () => {
+    seed("nifty50_pe", "2026-01-15", 20); // 100/20 = 5
+    seed("gsec_10y", "2026-01-01", 6.75);
+    const result = deriveEarningsYieldGapSeries(db);
+    expect(result).toEqual([{ date: "2026-01-15", value: 5 - 6.75 }]);
+  });
+
+  it("skips a P/E row when no gsec_10y reading exists for that year-month", () => {
+    seed("nifty50_pe", "2026-01-15", 20);
+    seed("gsec_10y", "2026-02-01", 6.75);
+    expect(deriveEarningsYieldGapSeries(db)).toEqual([]);
+  });
+});
+
+// Calculation Guide row 21 — l1.metals::valuation: real INR gold price
+// (gold_inr deflated by CPI index), percentile vs history, INVERTED.
+describe("deriveRealGoldPriceSeries — §8.4 (Calculation Guide row 21) real gold price history", () => {
+  it("returns an empty array when either series is missing", () => {
+    expect(deriveRealGoldPriceSeries(db)).toEqual([]);
+    seed("gold_inr", "2026-01-01", 65000);
+    expect(deriveRealGoldPriceSeries(db)).toEqual([]);
+  });
+
+  it("computes gold_inr / cpi_index for each month both series share", () => {
+    seed("gold_inr", "2026-01-15", 65000);
+    seed("cpi_index", "2026-01-01", 185);
+    expect(deriveRealGoldPriceSeries(db)).toEqual([{ date: "2026-01-15", value: 65000 / 185 }]);
+  });
+});
+
+// Data Trackers rows 5-8 / Calculation Guide row 29 —
+// equity.{large,mid,small}::relvalue spread series.
+describe("deriveMidLargeSpreadSeries / deriveSmallLargeSpreadSeries — §7.2 P/E spread history", () => {
+  it("returns an empty array when either series is missing", () => {
+    expect(deriveMidLargeSpreadSeries(db)).toEqual([]);
+    expect(deriveSmallLargeSpreadSeries(db)).toEqual([]);
+  });
+
+  it("computes mid/small P/E minus large P/E for each shared date", () => {
+    seed("midcap150_pe", "2026-01-15", 33.1);
+    seed("smallcap250_pe", "2026-01-15", 30.2);
+    seed("nifty100_pe", "2026-01-15", 22.5);
+
+    expect(deriveMidLargeSpreadSeries(db)).toEqual([{ date: "2026-01-15", value: 33.1 - 22.5 }]);
+    expect(deriveSmallLargeSpreadSeries(db)).toEqual([{ date: "2026-01-15", value: 30.2 - 22.5 }]);
+  });
+
+  it("skips a date with no matching large-cap P/E reading", () => {
+    seed("midcap150_pe", "2026-01-15", 33.1);
+    expect(deriveMidLargeSpreadSeries(db)).toEqual([]);
+  });
+});
+
+// Calculation Guide row 48 — sector.*::rel_momentum: average of the
+// sector index's 6M and 12M return minus Nifty's over the same windows.
+describe("deriveSectorRelMomentumSeries — §7.5 sector relative momentum history", () => {
+  it("returns an empty array when either series is missing", () => {
+    expect(deriveSectorRelMomentumSeries(db, "sector_close_banking")).toEqual([]);
+    seed("sector_close_banking", "2026-01-01", 100);
+    expect(deriveSectorRelMomentumSeries(db, "sector_close_banking")).toEqual([]);
+  });
+
+  it("computes the average of 6M and 12M relative return once both windows have trailing history", () => {
+    // Sector: +20% over 12M, +10% over 6M. Nifty: +10% over 12M, +5% over 6M.
+    seed("sector_close_banking", "2025-01-15", 100); // 12M ago
+    seed("sector_close_banking", "2025-07-15", 109); // 6M ago
+    seed("sector_close_banking", "2026-01-15", 120); // now
+
+    seed("nifty50_close", "2025-01-15", 100);
+    seed("nifty50_close", "2025-07-15", 105);
+    seed("nifty50_close", "2026-01-15", 110);
+
+    const result = deriveSectorRelMomentumSeries(db, "sector_close_banking");
+    const last = result[result.length - 1]!;
+    expect(last.date).toBe("2026-01-15");
+
+    const sector12m = 120 / 100 - 1; // 0.20
+    const sector6m = 120 / 109 - 1; // ~0.1009
+    const nifty12m = 110 / 100 - 1; // 0.10
+    const nifty6m = 110 / 105 - 1; // ~0.0476
+    const expected = (sector6m - nifty6m + (sector12m - nifty12m)) / 2;
+    expect(last.value).toBeCloseTo(expected, 10);
   });
 });
