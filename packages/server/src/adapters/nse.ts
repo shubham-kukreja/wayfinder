@@ -80,6 +80,15 @@ const INDEX_SERIES_MAP: Record<string, string> = {
   "NIFTY METAL": "sector_pe_metals",
 };
 
+// P/B is only spec'd for Midcap 150 / Smallcap 250 (the two segments whose
+// valuation rubric references book value); the row already carries `pb`
+// for every index, this map just scopes which indices we actually emit it
+// for, same pattern as INDEX_SERIES_MAP for pe.
+const INDEX_PB_SERIES_MAP: Record<string, string> = {
+  "NIFTY MIDCAP 150": "midcap150_pb",
+  "NIFTY SMALLCAP 250": "smallcap250_pb",
+};
+
 interface NseIndexRow {
   index: string;
   pe?: string;
@@ -92,18 +101,24 @@ interface AllIndicesResponse {
 }
 
 // Pure mapping step, split out from the network call so the row-parsing
-// logic (which index names map to which series, which pe values are
+// logic (which index names map to which series, which pe/pb values are
 // dropped as non-numeric) can be unit-tested against fixture JSON
 // without hitting the network — same split AMFI's adapter uses between
 // parseAmfiCategoryReport (pure) and fetchLatest (network + parse).
 export function mapIndexRowsToObservations(rows: NseIndexRow[], asOfDate: string): Observation[] {
   const out: Observation[] = [];
   for (const row of rows) {
-    const seriesId = INDEX_SERIES_MAP[row.index];
-    if (!seriesId || row.pe === undefined) continue;
-    const value = Number(row.pe);
-    if (!Number.isFinite(value)) continue; // "-"/non-numeric pe: dropped, not guessed
-    out.push({ seriesId, date: asOfDate, value, raw: row });
+    const peSeriesId = INDEX_SERIES_MAP[row.index];
+    if (peSeriesId && row.pe !== undefined) {
+      const value = Number(row.pe);
+      if (Number.isFinite(value)) out.push({ seriesId: peSeriesId, date: asOfDate, value, raw: row }); // "-"/non-numeric pe: dropped, not guessed
+    }
+
+    const pbSeriesId = INDEX_PB_SERIES_MAP[row.index];
+    if (pbSeriesId && row.pb !== undefined) {
+      const value = Number(row.pb);
+      if (Number.isFinite(value)) out.push({ seriesId: pbSeriesId, date: asOfDate, value, raw: row }); // "-"/non-numeric pb: dropped, not guessed
+    }
   }
   return out;
 }
@@ -155,7 +170,7 @@ async function fetchAllIndices(): Promise<NseIndexRow[]> {
 export function createNseAdapter(): SourceAdapter {
   return {
     id: "NSE",
-    series: Object.values(INDEX_SERIES_MAP),
+    series: [...Object.values(INDEX_SERIES_MAP), ...Object.values(INDEX_PB_SERIES_MAP)],
 
     async fetchLatest(): Promise<Observation[]> {
       const rows = await fetchAllIndices();

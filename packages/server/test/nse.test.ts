@@ -43,11 +43,21 @@ describe("NSE adapter — maps nseindia.com/api/allIndices rows to observations"
     expect(observations.find((o) => o.seriesId === "sector_pe_metals")?.value).toBe(16.01);
   });
 
+  it("maps Midcap 150 / Smallcap 250 P/B (the only two indices this project scores against book value)", () => {
+    const observations = mapIndexRowsToObservations(loadFixtureRows(), "2026-09-08");
+
+    const midcapPb = observations.find((o) => o.seriesId === "midcap150_pb");
+    expect(midcapPb?.value).toBe(4.35);
+
+    const smallcapPb = observations.find((o) => o.seriesId === "smallcap250_pb");
+    expect(smallcapPb?.value).toBe(3.59);
+  });
+
   it("drops unmapped indices (e.g. NIFTY NEXT 50 — not in this project's 85-cell schema) rather than guessing a series ID", () => {
     const observations = mapIndexRowsToObservations(loadFixtureRows(), "2026-09-08");
     expect(observations.some((o) => (o.raw as { index?: string })?.index === "NIFTY NEXT 50")).toBe(false);
-    // 11 mapped indices in the fixture; NIFTY NEXT 50 and the "-" g-sec row are excluded.
-    expect(observations.length).toBe(11);
+    // 11 mapped pe series + 2 pb series in the fixture; NIFTY NEXT 50 and the "-" g-sec row are excluded.
+    expect(observations.length).toBe(13);
   });
 
   it("drops rows with a non-numeric pe ('-') instead of guessing a value", () => {
@@ -61,7 +71,7 @@ describe("NSE adapter — maps nseindia.com/api/allIndices rows to observations"
     expect(observations.every((o) => o.date === "2026-09-08")).toBe(true);
   });
 
-  it("declares the 11 series it currently covers (P/E only — no TRI field on this source, no Capital Goods index match)", () => {
+  it("declares the 13 series it currently covers (P/E for 11 indices + P/B for Midcap 150 / Smallcap 250 — no TRI field on this source, no Capital Goods index match)", () => {
     const adapter = createNseAdapter();
     expect(adapter.series).toEqual([
       "nifty50_pe",
@@ -75,6 +85,8 @@ describe("NSE adapter — maps nseindia.com/api/allIndices rows to observations"
       "sector_pe_fmcg",
       "sector_pe_energy",
       "sector_pe_metals",
+      "midcap150_pb",
+      "smallcap250_pb",
     ]);
   });
 

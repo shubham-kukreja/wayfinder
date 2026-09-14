@@ -57,6 +57,7 @@ export interface Params {
     sleeveCap: number;
     maxSectors: number;
     threshold: number;
+    maxConsecutiveQuarters: number;
   };
   normalisation: NormalisationMode;
   percentileWindowYears: number;
@@ -89,6 +90,8 @@ export interface Allocation {
     held: SectorNodeId[];
     sleeve: number;
     perSector: number;
+    rotatedOut: SectorNodeId[];
+    sleeveHistory: SleeveHistory;
   };
   rollup: Array<{
     id: string;
@@ -103,6 +106,12 @@ export interface Allocation {
 export type Vetoes = Partial<Record<NodeId, boolean>>;
 export type Scores = Record<string, number>;
 
+// Consecutive quarters a sector has been held in the sleeve, as of the
+// snapshot *before* this computation. A sector at the 4-quarter cap is
+// forced to exit this quarter regardless of composite score (§ governance
+// rule: mandatory rotation after 4 consecutive quarters in sleeve).
+export type SleeveHistory = Partial<Record<SectorNodeId, number>>;
+
 // §13 — the Snapshot payload.
 export type SeriesId = string;
 export type VetoId =
@@ -113,7 +122,19 @@ export type VetoId =
   | "veto.earnings_collapse"
   | "veto.credit_event";
 
-export type SeriesSource = "FRED" | "NSE" | "AMFI" | "RBI" | "IBJA" | "MANUAL";
+export type SeriesSource =
+  | "FRED"
+  | "NSE"
+  | "NIFTYINDICES"
+  | "AMFI"
+  | "RBI"
+  | "CCIL"
+  | "IBJA"
+  | "YAHOO"
+  | "YAHOO_METALS"
+  | "TRADINGECONOMICS"
+  | "DBNOMICS"
+  | "MANUAL";
 export type SeriesStatus = "ok" | "stale" | "failed" | "insufficient_history" | "manual";
 
 export interface SeriesState {

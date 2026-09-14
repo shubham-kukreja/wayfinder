@@ -117,6 +117,26 @@ export function metalsFundamentalsScore(input: MetalsFundamentalsInput): number 
   return Math.max(0, Math.min(100, score));
 }
 
+// §7.3 Debt bucket liquidity/redemption safety — static baseline per bucket,
+// manually overridable down to 50 for Liquid/Gilt during a credit stress
+// event (the Corporate baseline of 65 already prices in the credit-stress
+// case, so it has no override).
+export type DebtLiquidityNode = "liquid" | "corporate" | "gilt";
+
+const DEBT_LIQUIDITY_BASELINE: Record<DebtLiquidityNode, number> = {
+  liquid: 90,
+  corporate: 65,
+  gilt: 75,
+};
+
+export function debtLiquidityScore(node: DebtLiquidityNode, creditStressActive: boolean): number {
+  if (creditStressActive) {
+    if (node === "corporate") return 40;
+    return 50; // liquid, gilt
+  }
+  return DEBT_LIQUIDITY_BASELINE[node];
+}
+
 // §8.6 Equity growth differential — input: segment consensus FY+1 EPS growth
 // minus large cap's, in percentage points. Large cap is always 50 (§7.2).
 // International adds +5 for the structural INR-depreciation tailwind.

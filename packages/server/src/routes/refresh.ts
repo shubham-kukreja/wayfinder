@@ -4,27 +4,68 @@ import { createFredAdapter, FRED_SERIES } from "../adapters/fred.js";
 import { createBullionAdapter, BULLION_SERIES } from "../adapters/bullion.js";
 import { createAmfiAdapter } from "../adapters/amfi.js";
 import { createRbiAdapter } from "../adapters/rbi.js";
+import { createRbiRepoRateAdapter } from "../adapters/rbiRepoRate.js";
+import { createCcilAdapter } from "../adapters/ccil.js";
 import { createNseAdapter } from "../adapters/nse.js";
+import { createNiftyIndicesAdapter } from "../adapters/niftyindices.js";
+import { createYahooAdapter } from "../adapters/yahoo.js";
+import { createYahooMetalsAdapter } from "../adapters/yahooMetals.js";
+import { createTradingEconomicsAdapter } from "../adapters/tradingEconomics.js";
+import { createDbNomicsAdapter } from "../adapters/dbnomics.js";
 import { runRefresh } from "../pipeline/refresh.js";
 import { buildCurrentSnapshot } from "../pipeline/currentSnapshot.js";
 import { loadConfig } from "../config.js";
 import type { SourceAdapter } from "../adapters/types.js";
 
-// §11.5 / §13.1 POST /api/refresh[?sources=fred,bullion,amfi,rbi,nse].
+// §11.5 / §13.1 POST /api/refresh[?sources=fred,bullion,amfi,rbi,nse,yahoo].
 // Default (no query param) fans out to the fast, non-browser adapters
-// (FRED, bullion, AMFI, NSE — all plain HTTP requests, no headless
-// browser) — RBI is opt-in via ?sources=... because it spins up a real
-// headless browser per call (multi-second) and shouldn't silently slow
-// down every quick refresh click. §13.1 documents this exact pattern
+// (FRED, bullion, AMFI, NSE, rbi_homepage — all plain HTTP requests, no
+// headless browser) — RBI (the dbie.rbihub.in mirror, adapters/rbi.ts)
+// is opt-in via ?sources=... because it spins up a real headless
+// browser per call (multi-second) and shouldn't silently slow down
+// every quick refresh click. rbi_homepage (adapters/rbiRepoRate.ts) is
+// a SEPARATE, fast, plain-HTTP source for just the repo rate — RBI's
+// DBIE mirror has no repo_rate series at all (confirmed 2026-09-03), so
+// this scrapes rbi.org.in's own homepage widget instead; distinct
+// source name so it isn't bundled into RBI's slow headless-browser path.
+// §13.1 documents this exact pattern
 // ("POST /api/refresh?series=a,b,c -> partial refresh"); this uses
 // source names rather than series names since that's the granularity a
 // user/scheduler actually chooses at (§11.5: "per-source refresh
-// exposed").
-export const AVAILABLE_SOURCES = ["fred", "bullion", "amfi", "rbi", "nse"] as const;
+// exposed"). Yahoo is opt-in too — it fetches ~500 constituent quotes via
+// an unofficial API (2 batch requests) plus a Wikipedia page, noticeably
+// slower than the single-request sources. yahoo_metals, tradingeconomics,
+// niftyindices, and dbnomics are opt-in as newly-added sources — kept out
+// of the default set until they've proven reliable over time, same
+// caution as Yahoo/RBI (dbnomics itself is a stable, official-data mirror
+// with a documented API, unlike the others' scraped/unofficial nature —
+// still opt-in for now simply because it's new to this project, not
+// because of any reliability concern found). ccil (adapters/ccil.ts) is
+// opt-in for the same reason as rbi: it spins up a real headless browser
+// against ccilindia.com's Zero Coupon Yield Curve page per call. It
+// writes to the SAME tbill_1y series rbi.ts populates (a specific 364-day
+// security's real market yield, a better source than RBI's mirror's
+// 183-364-day bucket average) — not a new series, so it needs no
+// preference/fallback logic on top of the store's existing "latest
+// fetched_at wins" rule.
+export const AVAILABLE_SOURCES = [
+  "fred",
+  "bullion",
+  "amfi",
+  "rbi",
+  "rbi_homepage",
+  "ccil",
+  "nse",
+  "niftyindices",
+  "yahoo",
+  "yahoo_metals",
+  "tradingeconomics",
+  "dbnomics",
+] as const;
 export type SourceName = (typeof AVAILABLE_SOURCES)[number];
 
 export function parseRequestedSources(sourcesParam: string | undefined): SourceName[] | { error: string } {
-  const requested = sourcesParam ? sourcesParam.split(",").map((s) => s.trim().toLowerCase()) : ["fred", "bullion", "amfi", "nse"];
+  const requested = sourcesParam ? sourcesParam.split(",").map((s) => s.trim().toLowerCase()) : ["fred", "bullion", "amfi", "nse", "rbi_homepage"];
   const invalid = requested.filter((s) => !AVAILABLE_SOURCES.includes(s as SourceName));
   if (invalid.length > 0) {
     return { error: `Unknown source(s): ${invalid.join(", ")}. Available: ${AVAILABLE_SOURCES.join(", ")}` };
@@ -38,7 +79,14 @@ export function buildAdapters(names: SourceName[], config: ReturnType<typeof loa
   if (names.includes("bullion")) out.push(createBullionAdapter({ apiKey: config.metalsDevApiKey, series: BULLION_SERIES }));
   if (names.includes("amfi")) out.push(createAmfiAdapter());
   if (names.includes("rbi")) out.push(createRbiAdapter({ executablePath: config.chromiumExecutablePath }));
+  if (names.includes("rbi_homepage")) out.push(createRbiRepoRateAdapter());
+  if (names.includes("ccil")) out.push(createCcilAdapter({ executablePath: config.chromiumExecutablePath }));
   if (names.includes("nse")) out.push(createNseAdapter());
+  if (names.includes("niftyindices")) out.push(createNiftyIndicesAdapter());
+  if (names.includes("yahoo")) out.push(createYahooAdapter());
+  if (names.includes("yahoo_metals")) out.push(createYahooMetalsAdapter());
+  if (names.includes("tradingeconomics")) out.push(createTradingEconomicsAdapter());
+  if (names.includes("dbnomics")) out.push(createDbNomicsAdapter());
   return out;
 }
 
@@ -67,8 +115,10 @@ export function registerRefreshRoute(app: FastifyInstance): void {
       // RBI's live test (test/rbi.live.test.ts) took ~19s end-to-end
       // (browser launch + page navigation + AG Grid pagination) — give
       // every source in this batch a longer timeout when RBI is among
-      // them rather than let it get cut off by the default 15s.
-      const timeoutMs = requested.includes("rbi") ? 45000 : undefined;
+      // them rather than let it get cut off by the default 15s. Yahoo's
+      // constituent-aggregation (Wikipedia fetch + cookie/crumb handshake +
+      // 2 batch quote requests for ~500 tickers) gets the same treatment.
+      const timeoutMs = requested.includes("rbi") || requested.includes("yahoo") || requested.includes("ccil") ? 45000 : undefined;
 
       const { fetchLog, warnings } = await runRefresh(db, adapters, timeoutMs);
 

@@ -41,6 +41,90 @@ describe("computeAutoScoreCells — §7 cells computable from live-fetchable ser
     expect(equityFlows.value).toBe(50); // §1 invariant 4: missing signal scores 50, never a guess
   });
 
+  it("l1.metals::fundamentals is computable end-to-end once BOTH cbBuying and etfHoldings derive (Calculation Guide row 23)", () => {
+    // cbBuying = 'above_average': flat reserves for 60 months, sharp
+    // recent-12M acceleration (+50 tonnes/month).
+    let level = 30000;
+    const reserves: number[] = [];
+    for (let i = 0; i < 60; i++) {
+      reserves.push(level);
+      level += 1;
+    }
+    for (let i = 0; i < 12; i++) {
+      level += 50;
+      reserves.push(level);
+    }
+    for (let i = 0; i < 72; i++) {
+      const year = 2020 + Math.floor(i / 12);
+      const month = (i % 12) + 1;
+      seedMonthlySeries("cb_gold_reserves_tonnes", "DBNOMICS", [reserves[i]!], year, month);
+    }
+
+    // etfHoldings = 'rising': current sharesOutstanding higher than ~3
+    // months ago.
+    seedMonthlySeries("gold_etf_shares_outstanding", "YAHOO_METALS", [1_100_000_000], 2026, 6);
+    seedMonthlySeries("gold_etf_shares_outstanding", "YAHOO_METALS", [1_200_000_000], 2026, 9);
+
+    const results = computeAutoScoreCells(db, DEFAULT_PARAMS, "2026-09-15");
+    const fundamentals = results.find((r) => r.scoreId === "l1.metals::fundamentals");
+    expect(fundamentals).toBeDefined();
+    expect(fundamentals!.status).toBe("ok");
+    expect(fundamentals!.derivedFrom).toEqual(["cb_gold_reserves_tonnes", "gold_etf_shares_outstanding"]);
+    // metalsFundamentalsScore: start 50, above_average cbBuying +15,
+    // rising etfHoldings +10 -> 75.
+    expect(fundamentals!.value).toBe(75);
+  });
+
+  it("l1.metals::fundamentals is NOT included when only one of cbBuying/etfHoldings can be derived (never guess the other half)", () => {
+    // Only seed enough for etfHoldings to derive — no cb_gold_reserves_tonnes at all.
+    seedMonthlySeries("gold_etf_shares_outstanding", "YAHOO_METALS", [1_100_000_000], 2026, 6);
+    seedMonthlySeries("gold_etf_shares_outstanding", "YAHOO_METALS", [1_200_000_000], 2026, 9);
+
+    const results = computeAutoScoreCells(db, DEFAULT_PARAMS, "2026-09-15");
+    expect(results.some((r) => r.scoreId === "l1.metals::fundamentals")).toBe(false);
+  });
+
+  it("l1.equity::momentum is computable end-to-end (Calculation Guide row 11: Nifty 50 TRI 12M% minus gsec_10y, percentiled)", () => {
+    // Compounding (not linear) growth, accelerating over time: each
+    // month's close is a FIXED % higher than the prior month, so the
+    // trailing-12M % return itself trends upward across the series
+    // (a linear/arithmetic ramp would produce a DECREASING 12M % return
+    // over time, since the base grows while the absolute step stays
+    // fixed — verified by hand before picking this shape). Flat div
+    // yield and gsec yield so the trend is driven purely by price.
+    let close = 15000;
+    const closes = Array.from({ length: 42 }, () => {
+      const v = close;
+      close *= 1.01; // 1% compounding monthly growth
+      return v;
+    });
+    seedMonthlySeries("nifty50_close", "NIFTYINDICES", closes);
+    seedMonthlySeries("nifty50_div_yield", "NIFTYINDICES", Array.from({ length: 42 }, () => 1.2));
+    seedMonthlySeries("gsec_10y", "FRED", Array.from({ length: 42 }, () => 6.75));
+
+    const results = computeAutoScoreCells(db, DEFAULT_PARAMS, "2023-06-01");
+    const momentum = results.find((r) => r.scoreId === "l1.equity::momentum")!;
+    expect(momentum.status).toBe("ok");
+    expect(momentum.derivedFrom).toEqual(["nifty50_close", "nifty50_div_yield", "gsec_10y"]);
+    // asOfDate 2023-06-01 lands near the end of the seeded window (Jan
+    // 2020 start, 42 months -> Jun 2023) -> near the top of its own
+    // 12M-excess-return percentile history for a compounding series.
+    expect(momentum.value).toBeGreaterThan(50);
+  });
+
+  it("sector.capgoods::valuation is computable once sector_pe_capgoods has history (niftyindices.ts, 2026-09-15 fix — nse.ts alone has no matching index)", () => {
+    // High P/E ramping up -> near-top percentile -> inverted to near 0
+    // (expensive is not attractive), same convention as the other 7
+    // sector valuation cells.
+    const pe = Array.from({ length: 30 }, (_, i) => 30 + i);
+    seedMonthlySeries("sector_pe_capgoods", "NIFTYINDICES", pe);
+
+    const results = computeAutoScoreCells(db, DEFAULT_PARAMS, "2026-09-01");
+    const capgoods = results.find((r) => r.scoreId === "sector.capgoods::valuation")!;
+    expect(capgoods.status).toBe("ok");
+    expect(capgoods.value).toBeLessThan(10);
+  });
+
   it("l1.equity::flows: high relative inflow scores LOW (inverted — crowded is not attractive)", () => {
     // 30 months of flow/AUM ratio, ramping up; the latest is the highest
     // ever seen -> should score near 0 after inversion.
@@ -55,7 +139,10 @@ describe("computeAutoScoreCells — §7 cells computable from live-fetchable ser
     expect(result.value).toBeLessThan(10); // near the top of the raw range -> inverted to near 0
   });
 
-  it("metals.gold::ratio_position vs metals.silver::ratio_position: same input, opposite transform", () => {
+  it("metals.gold::ratio_position vs metals.silver::ratio_position: same input, opposite transform (IBJA fallback path)", () => {
+    // No gold_usd_futures/silver_usd_futures seeded -> must fall back to
+    // gold_inr/silver_inr (IBJA), proving the fallback path works when
+    // the futures pair has no history yet.
     const gold = Array.from({ length: 30 }, (_, i) => 5000 + i * 10);
     const silver = Array.from({ length: 30 }, () => 60); // flat, so ratio tracks gold's percentile directly
     seedMonthlySeries("gold_inr", "IBJA", gold);
@@ -67,8 +154,36 @@ describe("computeAutoScoreCells — §7 cells computable from live-fetchable ser
 
     expect(goldRatio.status).toBe("ok");
     expect(silverRatio.status).toBe("ok");
+    expect(goldRatio.derivedFrom).toEqual(["gold_inr", "silver_inr"]);
     // Same underlying ratio series, inverted vs as-is -> should sum close to 100.
     expect(goldRatio.value + silverRatio.value).toBeCloseTo(100, 0);
+  });
+
+  it("metals.gold::ratio_position prefers gold_usd_futures/silver_usd_futures over IBJA once the futures pair has enough history", () => {
+    // Seed BOTH pairs — futures pair meets the 24-observation floor,
+    // IBJA pair also has data (so this proves preference, not just
+    // fallback-when-empty). Distinguishable inputs let the assertion
+    // confirm which pair actually drove the result.
+    const goldFutures = Array.from({ length: 30 }, (_, i) => 2000 + i * 10);
+    const silverFutures = Array.from({ length: 30 }, () => 25); // flat
+    seedMonthlySeries("gold_usd_futures", "YAHOO_METALS", goldFutures);
+    seedMonthlySeries("silver_usd_futures", "YAHOO_METALS", silverFutures);
+
+    const goldIbja = Array.from({ length: 30 }, () => 5000); // flat -> would score very differently
+    const silverIbja = Array.from({ length: 30 }, () => 60);
+    seedMonthlySeries("gold_inr", "IBJA", goldIbja);
+    seedMonthlySeries("silver_inr", "IBJA", silverIbja);
+
+    const results = computeAutoScoreCells(db, DEFAULT_PARAMS, "2026-09-01");
+    const goldRatio = results.find((r) => r.scoreId === "metals.gold::ratio_position")!;
+
+    expect(goldRatio.status).toBe("ok");
+    expect(goldRatio.derivedFrom).toEqual(["gold_usd_futures", "silver_usd_futures"]);
+    // Futures gold ratio is ramping (rising -> near-top percentile ->
+    // inverted to near 0), whereas the flat IBJA pair would score ~50 —
+    // confirms the futures pair actually drove the value, not just
+    // derivedFrom's label.
+    expect(goldRatio.value).toBeLessThan(20);
   });
 
   it("real-rates rubric cells (§8.4) are included when us_real_10y has history", () => {

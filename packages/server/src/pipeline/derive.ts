@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { realRatesScore } from "@wayfinder/engine";
+import { realRatesScore, type EtfHoldings, type CbBuying } from "@wayfinder/engine";
 import { latestObservations } from "../store/observations.js";
 
 // §8.4 — us_real_10y_6m_change (bp) drives both l1.metals::macro (gold
@@ -25,6 +25,156 @@ export function usReal10y6mChangeBp(db: Database.Database, asOfDate: string): nu
 
   // Both values are yields in percent; bp = percentage-point change * 100.
   return (current.value - past.value) * 100;
+}
+
+// §8.5 (Calculation Guide row 23) — "Global gold ETF holdings rising 3M:
+// +10; falling: -10." A plain direction comparison, no percentile or
+// magnitude threshold specified in the source spec — current
+// gold_etf_shares_outstanding vs. the closest observation ~3 months prior.
+// Same "closest observation at or before the target date" pattern as
+// usReal10y6mChangeBp above, reused rather than reinvented.
+export function goldEtfHoldingsTrend(db: Database.Database, asOfDate: string): EtfHoldings | null {
+  const rows = latestObservations(db, "gold_etf_shares_outstanding");
+  if (rows.length === 0) return null;
+
+  const asOf = new Date(asOfDate);
+  const threeMonthsAgo = new Date(asOf);
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+
+  const current = [...rows].filter((r) => new Date(r.date) <= asOf).pop();
+  if (!current) return null;
+
+  const past = [...rows].filter((r) => new Date(r.date) <= threeMonthsAgo).pop();
+  if (!past) return null;
+
+  return current.value >= past.value ? "rising" : "falling";
+}
+
+// Nifty 50 TRI (Total Return Index) 12M-return approximation. No real TRI
+// source was found free (confirmed live 2026-09-15: NSE's Daily Snapshot
+// CSV only has a distinct "Nifty 50 Futures TR Index," a different
+// product; investing.com's NIFTRI ticker is Cloudflare/WAF-blocked). This
+// approximates it as price return over the trailing 12 months plus
+// today's trailing Div Yield — NOT a precise reconstruction: it applies
+// a single point-in-time yield figure across the whole 12-month window,
+// so it will diverge from the real TRI whenever yield itself moved
+// materially over that period (e.g. a dividend-heavy quarter, or a large
+// price move that mechanically shifts the yield%). Treat this as a
+// reasonable estimate, not an exact match to AMFI's published Nifty 50
+// TRI 1Y return.
+//
+// Same "closest observation at or before the target date" calendar
+// lookback as usReal10y6mChangeBp/goldEtfHoldingsTrend above — NOT a
+// fixed trading-day shift (e.g. 252 rows back), since this project's
+// stored history won't be a dense gap-free daily series from day one
+// (early backfill windows, holidays) and a row-count shift would
+// misalign against actual elapsed calendar time.
+//
+// Pure calculation, split out from the DB-querying wrapper below so the
+// per-date series generator (deriveNiftyMomentumSeries) can reuse the
+// exact same formula for every historical date, not just "today."
+function triApproxFromRows(
+  closeRows: { date: string; value: number }[],
+  divYieldRows: { date: string; value: number }[],
+  asOfDate: string
+): number | null {
+  const asOf = new Date(asOfDate);
+  const twelveMonthsAgo = new Date(asOf);
+  twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+
+  const currentClose = closeRows.filter((r) => new Date(r.date) <= asOf).pop();
+  if (!currentClose) return null;
+
+  const pastClose = closeRows.filter((r) => new Date(r.date) <= twelveMonthsAgo).pop();
+  if (!pastClose || pastClose.value === 0) return null;
+
+  const currentDivYield = divYieldRows.filter((r) => new Date(r.date) <= asOf).pop();
+  if (!currentDivYield) return null;
+
+  const priceReturn = currentClose.value / pastClose.value;
+  const divYieldDecimal = currentDivYield.value / 100; // stored as a raw percentage (e.g. 1.21), see adapters/niftyindices.ts
+  return priceReturn * (1 + divYieldDecimal) - 1;
+}
+
+export function niftyTriApprox12mReturn(db: Database.Database, asOfDate: string): number | null {
+  const closeRows = latestObservations(db, "nifty50_close");
+  const divYieldRows = latestObservations(db, "nifty50_div_yield");
+  if (closeRows.length === 0 || divYieldRows.length === 0) return null;
+  return triApproxFromRows(closeRows, divYieldRows, asOfDate);
+}
+
+// §8.1 (Calculation Guide row 11) — l1.equity::momentum: "Nifty 50
+// total-return 12M % minus 10Y G-sec yield (equity excess return).
+// Percentile vs history, AS-IS." The spec's own "universal recipe"
+// (Calculation Guide A3) requires a HISTORY of this excess-return value
+// to percentile against — not just today's single figure — so this
+// generates one excess-return observation for every date that has both
+// enough trailing nifty50_close history (12 months back) and a gsec_10y
+// reading for that month, reusing niftyTriApprox12mReturn's exact
+// formula per date rather than just for "today."
+//
+// gsec_10y is joined by YEAR-MONTH, not exact date — same reasoning as
+// derivedDifferenceSeries in scoreEngine.ts (FRED's gsec_10y publishes on
+// a different cadence/day than the daily nifty50_close series).
+export function deriveNiftyMomentumSeries(db: Database.Database): Array<{ date: string; value: number }> {
+  const closeRows = latestObservations(db, "nifty50_close");
+  const divYieldRows = latestObservations(db, "nifty50_div_yield");
+  const gsecRows = latestObservations(db, "gsec_10y");
+  if (closeRows.length === 0 || divYieldRows.length === 0 || gsecRows.length === 0) return [];
+
+  const gsecByMonth = new Map(gsecRows.map((r) => [r.date.slice(0, 7), r.value]));
+
+  const out: Array<{ date: string; value: number }> = [];
+  for (const closeRow of closeRows) {
+    const triReturn = triApproxFromRows(closeRows, divYieldRows, closeRow.date);
+    if (triReturn === null) continue; // not enough trailing history yet for this date
+
+    const gsecYield = gsecByMonth.get(closeRow.date.slice(0, 7));
+    if (gsecYield === undefined) continue;
+
+    // Both sides in percentage points: triReturn is a decimal (e.g.
+    // 0.15 for 15%), gsecYield is already a percent (e.g. 6.75).
+    out.push({ date: closeRow.date, value: triReturn * 100 - gsecYield });
+  }
+  return out;
+}
+
+// §8.5 (Calculation Guide row 23) — "central-bank buying running above 5Y
+// average: +15; below: -10." cb_gold_reserves_tonnes (DBnomics/IMF IFS,
+// adapters/dbnomics.ts) is a STOCK series (total reserves held each
+// month), so "buying" (a flow) is the month-over-month change — this
+// compares the trailing-12M average monthly net purchase against the
+// trailing-5Y (60-month) average monthly net purchase, both computed
+// from the same reserves series. "Above/below 5Y average" reads most
+// naturally as comparing a recent pace to a longer-run pace, not a
+// single month's change (too noisy) or reserve LEVEL vs its own 5Y
+// average (that's a valuation-style comparison, not a buying-pace one,
+// and doesn't match the spec's "net purchases" framing in row 23's own
+// worked example).
+export function centralBankGoldBuyingTrend(db: Database.Database, asOfDate: string): CbBuying | null {
+  const rows = latestObservations(db, "cb_gold_reserves_tonnes");
+  if (rows.length < 2) return null;
+
+  const asOf = new Date(asOfDate);
+  const upToAsOf = rows.filter((r) => new Date(r.date) <= asOf);
+  if (upToAsOf.length < 2) return null;
+
+  // Month-over-month net purchases (tonnes), consecutive observations.
+  const monthlyChanges: number[] = [];
+  for (let i = 1; i < upToAsOf.length; i++) {
+    monthlyChanges.push(upToAsOf[i]!.value - upToAsOf[i - 1]!.value);
+  }
+  if (monthlyChanges.length === 0) return null;
+
+  const recent12 = monthlyChanges.slice(-12);
+  const trailing60 = monthlyChanges.slice(-60);
+  if (recent12.length === 0 || trailing60.length === 0) return null;
+
+  const avg = (arr: number[]) => arr.reduce((s, v) => s + v, 0) / arr.length;
+  const recentAvg = avg(recent12);
+  const fiveYearAvg = avg(trailing60);
+
+  return recentAvg >= fiveYearAvg ? "above_average" : "below_average";
 }
 
 export function deriveRealRatesScores(

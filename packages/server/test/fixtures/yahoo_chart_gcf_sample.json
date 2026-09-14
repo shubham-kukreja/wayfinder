@@ -1,0 +1,23 @@
+{
+  "chart": {
+    "result": [
+      {
+        "meta": {
+          "currency": "USD",
+          "symbol": "GC=F",
+          "exchangeName": "CMX",
+          "instrumentType": "FUTURE"
+        },
+        "timestamp": [1788926400, 1789012800, 1789099200, 1789358400],
+        "indicators": {
+          "quote": [
+            {
+              "close": [4416.0, 4364.5, null, 4343.7998046875]
+            }
+          ]
+        }
+      }
+    ],
+    "error": null
+  }
+}

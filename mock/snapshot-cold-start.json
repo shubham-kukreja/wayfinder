@@ -1254,7 +1254,8 @@
     "sector": {
       "sleeveCap": 0.15,
       "maxSectors": 2,
-      "threshold": 70
+      "threshold": 70,
+      "maxConsecutiveQuarters": 4
     },
     "normalisation": "proportional",
     "percentileWindowYears": 10,
@@ -1426,7 +1427,9 @@
       "qualifying": [],
       "held": [],
       "sleeve": 0,
-      "perSector": 0
+      "perSector": 0,
+      "rotatedOut": [],
+      "sleeveHistory": {}
     },
     "rollup": [
       {

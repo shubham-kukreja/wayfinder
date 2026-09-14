@@ -15,7 +15,7 @@ export const DEFAULT_PARAMS: Params = {
     metals: { "metals.gold": 0.75, "metals.silver": 0.25 },
   },
   maxTilt: { l1: 0.2, equity: 0.3, debt: 0.3, metals: 0.25 },
-  sector: { sleeveCap: 0.15, maxSectors: 2, threshold: 70 },
+  sector: { sleeveCap: 0.15, maxSectors: 2, threshold: 70, maxConsecutiveQuarters: 4 },
   normalisation: "proportional",
   percentileWindowYears: 10,
   percentileMinObservations: 24,

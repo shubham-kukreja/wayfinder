@@ -4,7 +4,7 @@
   "series": {
     "earnings_yield_gap": {
       "id": "earnings_yield_gap",
-      "latest": 102.41677588427574,
+      "latest": 109.80836570199222,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -16,7 +16,7 @@
     },
     "nifty50_pe": {
       "id": "nifty50_pe",
-      "latest": 103.25339035125567,
+      "latest": 108.08584022482657,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -28,7 +28,7 @@
     },
     "nifty100_pe": {
       "id": "nifty100_pe",
-      "latest": 101.80075079462196,
+      "latest": 101.31141552914661,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -40,7 +40,7 @@
     },
     "midcap150_pe": {
       "id": "midcap150_pe",
-      "latest": 103.19970509375062,
+      "latest": 102.39077069959329,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -52,7 +52,7 @@
     },
     "smallcap250_pe": {
       "id": "smallcap250_pe",
-      "latest": 103.20102355448323,
+      "latest": 106.0864585985542,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -64,7 +64,7 @@
     },
     "real_gsec_10y": {
       "id": "real_gsec_10y",
-      "latest": 100.93978654631998,
+      "latest": 109.07339609524878,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -76,7 +76,7 @@
     },
     "gsec_10y": {
       "id": "gsec_10y",
-      "latest": 109.10754993957879,
+      "latest": 103.31162947842118,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -88,7 +88,7 @@
     },
     "tbill_1y": {
       "id": "tbill_1y",
-      "latest": 108.4081115112144,
+      "latest": 100.18516149483446,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -100,7 +100,7 @@
     },
     "aaa_3y": {
       "id": "aaa_3y",
-      "latest": 109.277175457221,
+      "latest": 109.42101434498498,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -112,7 +112,7 @@
     },
     "aaa_spread": {
       "id": "aaa_spread",
-      "latest": 102.1236038772053,
+      "latest": 103.85503600876874,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -124,7 +124,7 @@
     },
     "real_gold_price": {
       "id": "real_gold_price",
-      "latest": 101.52066706589038,
+      "latest": 101.00359504192416,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -136,7 +136,7 @@
     },
     "gold_inr": {
       "id": "gold_inr",
-      "latest": 103.91312176648337,
+      "latest": 100.50798471086476,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -148,7 +148,7 @@
     },
     "silver_inr": {
       "id": "silver_inr",
-      "latest": 107.61456310833093,
+      "latest": 103.43671114785758,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -160,7 +160,7 @@
     },
     "gold_silver_ratio": {
       "id": "gold_silver_ratio",
-      "latest": 101.88656161787233,
+      "latest": 109.74956350134364,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -172,7 +172,7 @@
     },
     "us_real_10y": {
       "id": "us_real_10y",
-      "latest": 101.01840366011434,
+      "latest": 106.57331946383854,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -184,7 +184,7 @@
     },
     "nifty50_tr": {
       "id": "nifty50_tr",
-      "latest": 107.75474658636796,
+      "latest": 102.55259521554405,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -196,7 +196,7 @@
     },
     "bond_index_tr": {
       "id": "bond_index_tr",
-      "latest": 109.90693465358704,
+      "latest": 102.67296633427819,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -208,7 +208,7 @@
     },
     "flow_equity_3m": {
       "id": "flow_equity_3m",
-      "latest": 104.57441962326588,
+      "latest": 100.24465443316117,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -220,7 +220,7 @@
     },
     "flow_duration_3m": {
       "id": "flow_duration_3m",
-      "latest": 100.09588783113611,
+      "latest": 108.29125116782005,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -232,7 +232,7 @@
     },
     "flow_goldetf_3m": {
       "id": "flow_goldetf_3m",
-      "latest": 106.78189021978054,
+      "latest": 109.06918671988808,
       "latestDate": "2026-09-01",
       "percentile": 55,
       "observations": 180,
@@ -1372,7 +1372,8 @@
     "sector": {
       "sleeveCap": 0.15,
       "maxSectors": 2,
-      "threshold": 70
+      "threshold": 70,
+      "maxConsecutiveQuarters": 4
     },
     "normalisation": "proportional",
     "percentileWindowYears": 10,
@@ -1548,7 +1549,11 @@
         "sector.capgoods"
       ],
       "sleeve": 0.075,
-      "perSector": 0.075
+      "perSector": 0.075,
+      "rotatedOut": [],
+      "sleeveHistory": {
+        "sector.capgoods": 1
+      }
     },
     "rollup": [
       {

@@ -11,7 +11,7 @@ const seriesStateSchema = z.object({
   percentile: z.number().min(0).max(100).nullable(),
   observations: z.number().int().nonnegative(),
   windowStart: z.string().nullable(),
-  source: z.enum(["FRED", "NSE", "AMFI", "RBI", "IBJA", "MANUAL"]),
+  source: z.enum(["FRED", "NSE", "NIFTYINDICES", "AMFI", "RBI", "CCIL", "IBJA", "YAHOO", "YAHOO_METALS", "TRADINGECONOMICS", "DBNOMICS", "MANUAL"]),
   status: z.enum(["ok", "stale", "failed", "insufficient_history", "manual"]),
   staleDays: z.number().nullable(),
   error: z.string().nullable(),
@@ -73,6 +73,8 @@ const allocationSchema = z.object({
     held: z.array(z.string()),
     sleeve: z.number(),
     perSector: z.number(),
+    rotatedOut: z.array(z.string()),
+    sleeveHistory: z.record(z.number()),
   }),
   rollup: z.array(
     z.object({
@@ -105,6 +107,7 @@ export const paramsSchema = z.object({
     sleeveCap: z.number(),
     maxSectors: z.number().int().positive(),
     threshold: z.number(),
+    maxConsecutiveQuarters: z.number().int().positive(),
   }),
   normalisation: z.enum(["proportional", "zero_sum"]),
   percentileWindowYears: z.number().positive(),

@@ -15,6 +15,7 @@ import type {
   SectorNodeId,
   SectorSignal,
   Scores,
+  SleeveHistory,
   TiltGroupId,
   TiltNodeResult,
   Vetoes,
@@ -116,7 +117,8 @@ function computeTiltGroup(
 function computeSector(
   scores: Scores,
   vetoes: Vetoes,
-  params: Params
+  params: Params,
+  sleeveHistory: SleeveHistory
 ): Allocation["sector"] {
   const weights = params.signalWeights.sector as Record<SectorSignal, number>;
   const composites: Record<string, number> = {};
@@ -129,33 +131,50 @@ function computeSector(
     composites[nodeId] = sum;
   }
 
+  // Governance rule: a sector that has already been held for
+  // maxConsecutiveQuarters must exit this quarter regardless of composite,
+  // freeing its slot for the next-highest qualifying sector.
+  const rotatedOut = SECTOR_NODES.filter(
+    (nodeId) => (sleeveHistory[nodeId as SectorNodeId] ?? 0) >= params.sector.maxConsecutiveQuarters
+  ) as SectorNodeId[];
+  const rotatedOutSet = new Set(rotatedOut);
+
   const qualifying = SECTOR_NODES.filter(
-    (nodeId) => composites[nodeId]! >= params.sector.threshold && !vetoes[nodeId]
+    (nodeId) =>
+      composites[nodeId]! >= params.sector.threshold && !vetoes[nodeId] && !rotatedOutSet.has(nodeId as SectorNodeId)
   ).sort((a, b) => composites[b]! - composites[a]!);
 
-  const held = qualifying.slice(0, params.sector.maxSectors);
+  const held = qualifying.slice(0, params.sector.maxSectors) as SectorNodeId[];
   const sleeve = params.sector.sleeveCap * (held.length / params.sector.maxSectors);
   const perSector = held.length > 0 ? sleeve / held.length : 0;
+
+  const nextSleeveHistory: SleeveHistory = {};
+  for (const nodeId of held) {
+    nextSleeveHistory[nodeId] = (sleeveHistory[nodeId] ?? 0) + 1;
+  }
 
   return {
     composites: composites as Record<SectorNodeId, number>,
     qualifying: qualifying as SectorNodeId[],
-    held: held as SectorNodeId[],
+    held,
     sleeve,
     perSector,
+    rotatedOut,
+    sleeveHistory: nextSleeveHistory,
   };
 }
 
 export function computeAllocation(
   scores: Scores,
   vetoes: Vetoes,
-  params: Params = DEFAULT_PARAMS
+  params: Params = DEFAULT_PARAMS,
+  sleeveHistory: SleeveHistory = {}
 ): Allocation {
   const l1 = computeTiltGroup("l1", scores, vetoes, params);
   const equity = computeTiltGroup("equity", scores, vetoes, params);
   const debt = computeTiltGroup("debt", scores, vetoes, params);
   const metals = computeTiltGroup("metals", scores, vetoes, params);
-  const sector = computeSector(scores, vetoes, params);
+  const sector = computeSector(scores, vetoes, params, sleeveHistory);
 
   const finalEquity = l1.nodes["l1.equity"]!.final;
   const finalDebt = l1.nodes["l1.debt"]!.final;
