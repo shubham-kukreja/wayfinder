@@ -1,13 +1,16 @@
 import { useState, type FormEvent } from "react";
 import { login } from "../lib/auth.js";
 
-// Split sign-in: guilloche artwork on the left, the form on the right.
+// Sign-in laid out after Altruist's own auth screen: an inset artwork card on
+// the left with the statement overlaid at its foot, and a narrow form column on
+// the right carrying the wordmark, fields, and legal copy.
 //
-// Below lg the panel is dropped entirely rather than stacked: on a phone it
-// would push the form below the fold for purely decorative content.
+// Below lg the artwork card is dropped rather than stacked — on a phone it
+// would push the form under the fold for purely decorative content.
 export function LoginView({ onSuccess }: { onSuccess: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -27,85 +30,56 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
     }
   }
 
+  // Filled grey field with no border — the input reads as a recess rather than
+  // an outlined box, which is what keeps the column quiet.
   const field =
-    "w-full rounded-md border border-line bg-paper px-3.5 py-2.5 text-sm text-ink placeholder:text-muted " +
-    "transition duration-100 ease-in focus:border-ink focus:outline-none focus:ring-2 focus:ring-brand-500/20 " +
-    "disabled:opacity-50";
+    "w-full rounded-sm border border-transparent bg-paper-2 px-3.5 py-3 text-sm text-ink " +
+    "placeholder:text-muted transition duration-100 ease-in focus:border-ink focus:bg-paper " +
+    "focus:outline-none disabled:opacity-50";
 
   return (
-    <div className="flex min-h-screen bg-paper">
-      {/* ---------- left: artwork ---------- */}
-      {/* Guilloche rosette on a deep green ground — the engraved line-work of a
-          share certificate, which is Arvia's own visual language. Generated as
-          vector rather than cropped from the site's banknote photograph: that
-          image is landscape, and squeezing it into a tall panel stretched the
-          engraving badly. This stays sharp at any panel size and costs 20KB
-          instead of 7.7MB. */}
-      <div className="relative hidden w-1/2 shrink-0 overflow-hidden bg-[#0B1A10] lg:block">
-        {/* Centre of the rosette pinned to the panel's top-left corner, so the
-            arcs sweep across the upper-left area rather than radiating out of
-            the corner itself. Oversized so the visible portion still fills it. */}
-        <img
-          src="/guilloche.svg"
-          alt=""
-          aria-hidden="true"
-          className="pointer-events-none absolute left-0 top-0 h-[150%] w-[150%] max-w-none -translate-x-1/2 -translate-y-1/2 select-none"
-        />
-        {/* Fades the pattern out toward the bottom-right so it never competes
-            with the headline sitting there. */}
-        <div
-          className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,transparent_20%,rgba(11,26,16,0.85)_70%)]"
-          aria-hidden="true"
-        />
-
-        <div className="relative flex h-full flex-col justify-between pt-12 pr-12 pb-24 pl-16">
+    <div className="min-h-screen bg-paper">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col gap-8 px-5 py-5 lg:flex-row lg:gap-12 lg:px-8">
+        {/* ---------- left: artwork card ---------- */}
+        {/* Inset with its own radius rather than bleeding to the viewport edge,
+            so it reads as a plate on the page. */}
+        <div className="relative hidden flex-1 overflow-hidden rounded-lg bg-[#0B1A10] lg:block">
           <img
-            src="/logo-arvia-dark.svg"
-            alt="Arvia Wealth"
-            className="h-[50px] w-auto self-start brightness-0 invert"
+            src="/guilloche.svg"
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none absolute left-0 top-0 h-[150%] w-[150%] max-w-none -translate-x-1/2 -translate-y-1/2 select-none"
+          />
+          {/* Darkens the foot of the card so the statement stays legible over
+              whatever part of the pattern sits behind it. */}
+          <div
+            className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent"
+            aria-hidden="true"
           />
 
-          <div>
-            <p className="font-display text-[52px] font-bold leading-[1.08] tracking-display text-white">
+          <div className="relative flex h-full flex-col justify-end p-12">
+            <p className="font-display text-[54px] font-extrabold leading-[0.98] tracking-display text-white">
               Make wealth work
               <br />
               alongside you.
             </p>
-            <p className="mt-6 max-w-xl text-[19px] leading-relaxed text-white/75">
-              CORE is Arvia Wealth&rsquo;s internal research system for capital allocation: signals,
-              scoring and model versions in one place.
-            </p>
           </div>
         </div>
-      </div>
 
-      {/* ---------- right: form ---------- */}
-      <div className="flex w-full flex-col lg:w-1/2">
-        {/* On small screens the artwork is gone, so the logo moves here to keep
-            the brand present. */}
-        <header className="px-8 pt-8 lg:hidden">
-          <img src="/logo-arvia.svg" alt="Arvia Wealth" className="h-8 w-auto" />
-        </header>
+        {/* ---------- right: form column ---------- */}
+        <div className="flex w-full flex-col lg:w-[420px] lg:shrink-0">
+          <div className="flex justify-end pt-3 text-[13px] text-ink-2">
+            Need access?{" "}
+            <span className="ml-1.5 font-semibold text-ink underline underline-offset-2">Contact your admin</span>
+          </div>
 
-        <main className="flex flex-1 items-center justify-center px-8 py-12 lg:px-16">
-          <div className="w-full max-w-[360px]">
-            <div className="mb-8">
-              <div className="flex items-baseline gap-2">
-                <h1 className="font-display text-[40px] font-extrabold leading-display tracking-display text-ink">
-                  CORE
-                </h1>
-                <span
-                  className="h-1.5 w-1.5 shrink-0 translate-y-[-5px] rounded-full bg-brand-500"
-                  aria-hidden="true"
-                />
-              </div>
-              <p className="mt-2 text-sm text-muted">Sign in to continue.</p>
-            </div>
+          <main className="flex flex-1 flex-col justify-center py-10">
+            <img src="/logo-arvia.svg" alt="Arvia Wealth" className="mx-auto mb-12 h-9 w-auto" />
 
             <form onSubmit={handleSubmit}>
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div>
-                  <label htmlFor="email" className="mb-1.5 block text-xs font-semibold text-ink-2">
+                  <label htmlFor="email" className="mb-1.5 block text-sm text-ink">
                     Email
                   </label>
                   <input
@@ -117,32 +91,43 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
                     disabled={busy}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@arviawealth.com"
                     className={field}
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="password" className="mb-1.5 block text-xs font-semibold text-ink-2">
+                  <label htmlFor="password" className="mb-1.5 block text-sm text-ink">
                     Password
                   </label>
-                  <input
-                    id="password"
-                    type="password"
-                    autoComplete="current-password"
-                    required
-                    disabled={busy}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••••••"
-                    className={field}
-                  />
+                  {/* Show/hide toggle sits inside the field. It is a real button
+                      so it is reachable by keyboard, and aria-pressed reports
+                      the current state. */}
+                  <div className="relative">
+                    <input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      required
+                      disabled={busy}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className={`${field} pr-16`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-pressed={showPassword}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-sm text-ink-2 transition-colors duration-100 ease-in hover:text-ink"
+                    >
+                      {showPassword ? "Hide" : "Show"}
+                    </button>
+                  </div>
                 </div>
               </div>
 
               {/* role=alert so a failure is announced, not merely displayed. */}
               {error && (
-                <p role="alert" className="mt-4 rounded-md bg-danger-50 px-3 py-2 text-[13px] text-danger-500">
+                <p role="alert" className="mt-4 rounded-sm bg-danger-50 px-3 py-2 text-[13px] text-danger-500">
                   {error}
                 </p>
               )}
@@ -150,21 +135,19 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
               <button
                 type="submit"
                 disabled={busy || !email || !password}
-                className="mt-6 w-full rounded-md bg-ink px-[22px] py-[11px] text-sm font-semibold text-paper transition duration-100 ease-in hover:brightness-[1.15] active:brightness-[0.95] disabled:pointer-events-none disabled:opacity-40"
+                className="mt-8 w-full rounded-sm bg-ink py-3.5 text-sm font-semibold text-paper transition duration-100 ease-in hover:brightness-[1.15] active:brightness-[0.95] disabled:pointer-events-none disabled:opacity-40"
               >
-                {busy ? "Signing in…" : "Sign in"}
+                {busy ? "Signing in…" : "Login"}
               </button>
             </form>
+          </main>
 
-            <p className="mt-8 text-[12px] leading-relaxed text-muted">
-              Access is limited to authorised Arvia Wealth personnel.
-            </p>
-          </div>
-        </main>
-
-        <footer className="px-8 pb-8 text-[11px] text-muted lg:text-right">
-          © {new Date().getFullYear()} Arvia Wealth. All rights reserved.
-        </footer>
+          <footer className="pb-6 text-[12px] leading-[1.6] text-muted">
+            CORE is an internal research system of Arvia Wealth. Access is limited to authorised personnel and all
+            activity is logged. Model outputs are for internal research purposes and are not investment advice.
+            <span className="mt-2 block">© {new Date().getFullYear()} Arvia Wealth. All rights reserved.</span>
+          </footer>
+        </div>
       </div>
     </div>
   );
