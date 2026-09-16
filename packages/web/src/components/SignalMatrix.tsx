@@ -1,29 +1,12 @@
 import { NODE_LABELS } from "@wayfinder/engine";
 import { formatScore } from "../lib/format.js";
+import { SIGNAL_LABELS } from "../lib/signalLabels.js";
 
 // §14 of the UX spec ("Signal Matrix") - replaces spreadsheet-style input
 // blocks with a compact, interactive matrix: rows are signals, columns are the
 // nodes in that group. Each cell is a small inline bar (not a giant colored
 // heatmap tile, per the spec's explicit preference), clickable to open
 // CalculationInspector with that exact node::signal selected.
-const SIGNAL_LABELS: Record<string, string> = {
-  valuation: "Valuation",
-  macro: "Macro",
-  fundamentals: "Fundamentals",
-  flows: "Flows",
-  momentum: "Momentum",
-  relvalue: "Relative value",
-  revisions: "Revisions",
-  growth_diff: "Growth differential",
-  margin_cycle: "Margin / cycle",
-  carry: "Carry",
-  rate_cycle: "Rate cycle",
-  spread_cushion: "Spread cushion",
-  liquidity: "Liquidity",
-  ratio_position: "Ratio positioning",
-  real_rates: "Real rates",
-  industrial: "Industrial demand",
-};
 
 function nodeLabel(nodeId: string): string {
   return (NODE_LABELS as Record<string, string>)[nodeId] ?? nodeId;

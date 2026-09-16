@@ -85,28 +85,35 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
           <button
             onClick={() => setParams(lastSavedParams)}
             disabled={!isDirty}
-            className="rounded-md border-[1.5px] border-ink px-3 py-1.5 text-xs font-medium text-ink disabled:opacity-40"
+            className="border border-ink px-3 py-1.5 text-xs font-semibold text-ink transition duration-100 ease-in hover:bg-paper-2 disabled:pointer-events-none disabled:opacity-40"
           >
             Reset
           </button>
           <button
             onClick={handleSave}
             disabled={!isDirty || saving}
-            className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white transition duration-100 ease-in hover:brightness-105 hover:-translate-y-px disabled:opacity-40"
+            className="bg-ink px-4 py-1.5 text-xs font-semibold text-paper transition duration-100 ease-in hover:brightness-[1.15] disabled:pointer-events-none disabled:opacity-40"
           >
             {saving ? "Saving…" : "Save"}
           </button>
         </div>
       </div>
 
-      <section className="mb-8 rounded-lg border border-line bg-paper p-5">
-        <h2 className="mb-2 text-sm font-semibold text-ink-2">Live allocation</h2>
-        <p className="mb-3 text-xs text-muted">Recomputed live from the weights and caps below, using the same allocation bar as Overview.</p>
-        <AllocationBar allocation={allocation} depth="detail" />
+      <section className="mb-10 border border-line bg-paper">
+        <div className="border-b border-line bg-paper-2 px-5 py-3">
+          <h2 className="text-[13px] font-semibold text-ink">Live allocation</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            Recomputed live from the weights and caps below, using the same allocation bar as Overview.
+          </p>
+        </div>
+        <div className="p-5">
+          <AllocationBar allocation={allocation} depth="detail" />
+        </div>
       </section>
 
-      <section className="mb-8">
-        <h2 className="mb-3 text-sm font-semibold text-ink-2">Signal weights</h2>
+      <section className="mb-10">
+        <h2 className="mb-1 font-display text-base font-bold tracking-display text-ink">Signal weights</h2>
+        <p className="mb-4 text-xs text-muted">How much each signal contributes to a node&rsquo;s composite score.</p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {TILT_GROUPS.map((group) => (
             <WeightEditor
@@ -120,18 +127,23 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
         </div>
       </section>
 
-      <section className="mb-8">
-        <div className="mb-3 flex items-center gap-3">
-          <h2 className="text-sm font-semibold text-ink-2">Neutral weights (policy)</h2>
+      <section className="mb-10">
+        <div className="mb-4 flex items-center gap-3">
+          <div>
+            <h2 className="mb-1 font-display text-base font-bold tracking-display text-ink">Neutral weights (policy)</h2>
+            <p className="text-xs text-muted">The baseline each node tilts away from. Reviewed annually, not automated.</p>
+          </div>
           {!neutralEditUnlocked ? (
             <button
               onClick={() => setNeutralEditUnlocked(true)}
-              className="rounded-md border border-line px-2 py-0.5 text-xs text-ink-2 hover:bg-paper-2"
+              className="border border-ink px-2.5 py-1 text-[11px] font-semibold text-ink transition duration-100 ease-in hover:bg-paper-2"
             >
               Unlock to edit
             </button>
           ) : (
-            <span className="text-xs font-medium text-warn-600">Editing policy weights — reviewed annually, not automated</span>
+            <span className="border border-warn-200 bg-warn-50 px-2.5 py-1 text-[11px] font-medium text-warn-600">
+              Editing policy weights
+            </span>
           )}
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -149,22 +161,29 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
         </div>
       </section>
 
-      <section className="mb-8">
-        <h2 className="mb-3 text-sm font-semibold text-ink-2">Tilt caps</h2>
-        <p className="mb-3 text-xs text-muted">The maximum a node can move away from its neutral weight in a single review cycle. See Methodology for the reasoning behind each cap.</p>
+      <section className="mb-10">
+        <h2 className="mb-1 font-display text-base font-bold tracking-display text-ink">Tilt caps</h2>
+        <p className="mb-4 text-xs text-muted">
+          The maximum a node can move away from its neutral weight in a single review cycle. See Methodology for the
+          reasoning behind each cap.
+        </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <div className="rounded-lg border border-line bg-paper p-5">
-            <h3 className="mb-3 text-sm font-semibold text-ink-2">Max tilt</h3>
-            <div className="space-y-2">
+          <div className="border border-line bg-paper">
+            <div className="border-b border-line bg-paper-2 px-4 py-2.5">
+              <h3 className="text-[13px] font-semibold text-ink">Max tilt</h3>
+            </div>
+            <div className="divide-y divide-line">
               <CapEditor label="L1 asset classes" value={params.maxTilt.l1} onChange={(v) => updateMaxTilt("l1", v)} />
               <CapEditor label="Equity segments" value={params.maxTilt.equity} onChange={(v) => updateMaxTilt("equity", v)} />
               <CapEditor label="Debt buckets" value={params.maxTilt.debt} onChange={(v) => updateMaxTilt("debt", v)} />
               <CapEditor label="Gold/Silver split" value={params.maxTilt.metals} onChange={(v) => updateMaxTilt("metals", v)} />
             </div>
           </div>
-          <div className="rounded-lg border border-line bg-paper p-5">
-            <h3 className="mb-3 text-sm font-semibold text-ink-2">Sector satellite</h3>
-            <div className="space-y-2">
+          <div className="border border-line bg-paper">
+            <div className="border-b border-line bg-paper-2 px-4 py-2.5">
+              <h3 className="text-[13px] font-semibold text-ink">Sector satellite</h3>
+            </div>
+            <div className="divide-y divide-line">
               <CapEditor label="Sleeve cap (% of Equity)" value={params.sector.sleeveCap} onChange={(v) => updateSectorCap("sleeveCap", v)} />
               <CapEditor label="Max sectors held" value={params.sector.maxSectors} onChange={(v) => updateSectorCap("maxSectors", v)} isPercent={false} min={1} max={8} step={1} />
               <CapEditor label="Qualification threshold" value={params.sector.threshold} onChange={(v) => updateSectorCap("threshold", v)} isPercent={false} min={0} max={100} step={1} />
@@ -174,15 +193,21 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
         </div>
       </section>
 
-      <section className="mb-8 rounded-lg border border-line bg-paper p-5">
-        <h2 className="mb-2 text-sm font-semibold text-ink-2">Normalisation</h2>
-        <div className="flex gap-2">
-          {(["proportional", "zero_sum"] as const).map((mode) => (
+      <section className="mb-10 border border-line bg-paper">
+        <div className="border-b border-line bg-paper-2 px-5 py-3">
+          <h2 className="text-[13px] font-semibold text-ink">Normalisation</h2>
+        </div>
+        <div className="flex gap-0 p-5">
+          {/* Segmented control: buttons share a border rather than sitting as
+              separate pills, matching the tab rows elsewhere in the app. */}
+          {(["proportional", "zero_sum"] as const).map((mode, i) => (
             <button
               key={mode}
               onClick={() => setParams((p) => ({ ...p, normalisation: mode }))}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium ${
-                params.normalisation === mode ? "bg-brand-500 text-white" : "border border-line text-ink-2"
+              className={`border px-4 py-2 text-xs font-semibold transition duration-100 ease-in ${i > 0 ? "-ml-px" : ""} ${
+                params.normalisation === mode
+                  ? "relative border-ink bg-ink text-paper"
+                  : "border-line bg-paper text-ink-2 hover:bg-paper-2"
               }`}
             >
               {mode === "proportional" ? "Proportional (default)" : "Zero-sum"}
@@ -191,23 +216,29 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
         </div>
       </section>
 
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-ink-2">Fragility test</h2>
+      <section className="border border-line bg-paper">
+        <div className="flex items-center justify-between border-b border-line bg-paper-2 px-5 py-3">
+          <div>
+            <h2 className="text-[13px] font-semibold text-ink">Fragility test</h2>
+            <p className="mt-0.5 text-xs text-muted">How far each rollup moves when every weight is perturbed ±10%.</p>
+          </div>
           <button
             onClick={() => setShowFragility((v) => !v)}
-            className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink-2 hover:bg-paper-2"
+            className="shrink-0 border border-ink px-3 py-1.5 text-xs font-semibold text-ink transition duration-100 ease-in hover:bg-paper"
           >
-            {showFragility ? "Hide" : "Run: perturb every weight ±10%"}
+            {showFragility ? "Hide" : "Run test"}
           </button>
         </div>
         {fragility && (
-          <ul className="space-y-1.5 text-sm">
+          <ul className="divide-y divide-line">
             {fragility.map((f) => (
-              <li key={f.rollupId} className="flex items-center justify-between gap-4">
-                <span className="text-ink-2">{f.label}</span>
-                <span className={`tabular-nums ${f.stable ? "text-muted" : "text-warn-600 font-medium"}`}>
-                  {formatPct(f.minObserved)} – {formatPct(f.maxObserved)} {!f.stable && "· unstable"}
+              <li key={f.rollupId} className="flex items-center justify-between gap-4 px-5 py-2.5">
+                <span className="text-[13px] text-ink-2">{f.label}</span>
+                <span
+                  className={`font-mono text-[13px] tabular-nums ${f.stable ? "text-muted" : "font-medium text-warn-600"}`}
+                >
+                  {formatPct(f.minObserved)} – {formatPct(f.maxObserved)}
+                  {!f.stable && " · unstable"}
                 </span>
               </li>
             ))}
