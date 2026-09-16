@@ -18,15 +18,21 @@ FROM mcr.microsoft.com/playwright:v1.62.1-noble
 # Downgrading to Node 22 (ABI v127) gets a prebuilt binary and skips the
 # source build entirely — faster than installing build-essential, and it
 # keeps a C++ toolchain out of the runtime image.
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
-    && mkdir -p /etc/apt/keyrings \
-    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
-       | gpg --dearmor -o /etc/apt/keyrings/nodesource-22.gpg \
-    && echo "deb [signed-by=/etc/apt/keyrings/nodesource-22.gpg] https://deb.nodesource.com/node_22.x nodistro main" \
-       > /etc/apt/sources.list.d/nodesource-22.list \
-    && apt-get update && apt-get install -y --no-install-recommends nodejs \
+#
+# The base image leaves its own /etc/apt/sources.list.d/nodesource.list
+# pointing at node_24.x. Merely ADDING a node_22.x repo does nothing —
+# apt sees both and installs the higher version. So overwrite that file
+# (not add a second one) and pin the package, or this silently no-ops.
+RUN rm -f /etc/apt/sources.list.d/nodesource.list \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" \
+       > /etc/apt/sources.list.d/nodesource.list \
+    && printf 'Package: nodejs\nPin: origin deb.nodesource.com\nPin-Priority: 1001\n' \
+       > /etc/apt/preferences.d/nodesource \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends --allow-downgrades nodejs \
     && rm -rf /var/lib/apt/lists/* \
-    && node -v
+    && node -v \
+    && node -e "const m=process.versions.modules; if (m!=='127') { throw new Error('Expected Node 22 (ABI 127), got '+process.version+' (ABI '+m+')'); }"
 
 ENV PNPM_HOME=/pnpm
 ENV PATH="$PNPM_HOME:$PATH"
