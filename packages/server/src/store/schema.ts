@@ -64,6 +64,15 @@ export function migrate(db: Database.Database): void {
       created_at TEXT NOT NULL
     );
 
+    -- Login credentials. Only ever stores an argon2id hash; the plaintext
+    -- password is never written anywhere, including logs.
+    CREATE TABLE IF NOT EXISTS users (
+      email         TEXT PRIMARY KEY,
+      password_hash TEXT NOT NULL,
+      created_at    TEXT NOT NULL,
+      last_login_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS fetch_log (
       id           INTEGER PRIMARY KEY AUTOINCREMENT,
       source       TEXT NOT NULL,

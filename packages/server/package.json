@@ -7,7 +7,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "dev": "tsx src/index.ts",
-    "backfill": "tsx scripts/backfill.ts"
+    "backfill": "tsx scripts/backfill.ts",
+    "create-user": "tsx scripts/create-user.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

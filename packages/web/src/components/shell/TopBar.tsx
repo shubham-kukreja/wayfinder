@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { clearSession, getEmail } from "../../lib/auth.js";
 
 // Global utility bar: a single search field, sticky so it stays reachable
 // while a long view scrolls.
@@ -49,6 +50,23 @@ export function TopBar() {
         </kbd>
       </label>
 
+      {/* Signed-in identity and the way out. Quiet by design — the account is
+          not something the user needs to think about while working. */}
+      <div className="ml-auto flex shrink-0 items-center gap-3">
+        <span className="hidden text-[13px] text-muted lg:inline" title={getEmail() ?? undefined}>
+          {getEmail()}
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            clearSession();
+            window.location.reload();
+          }}
+          className="rounded-md px-3 py-1.5 text-[13px] font-semibold text-ink-2 transition duration-100 ease-in hover:bg-paper-2 hover:text-ink"
+        >
+          Sign out
+        </button>
+      </div>
     </header>
   );
 }

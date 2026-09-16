@@ -8,7 +8,9 @@ import { registerScoresRoute } from "./routes/scores.js";
 import { registerVetoesRoute } from "./routes/vetoes.js";
 import { registerParamsRoute } from "./routes/params.js";
 import { registerDatapointsRoute } from "./routes/datapoints.js";
+import { registerLoginRoute } from "./routes/login.js";
 import { loadConfig } from "./config.js";
+import { verifyToken } from "./auth.js";
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -32,23 +34,38 @@ async function main() {
   });
 
   // Every mutating route (refresh, params, scores, vetoes, snapshot
-  // create/publish/delete) is otherwise unauthenticated. With API_SECRET
-  // set, they require a matching x-api-secret header; reads stay public.
-  if (config.apiSecret) {
-    const expected = config.apiSecret;
+  // create/publish/delete) is otherwise unauthenticated. Two credentials are
+  // accepted, either of which is sufficient:
+  //
+  //   Authorization: Bearer <token>  — a session from POST /api/login. This is
+  //     what the web app uses, so no long-lived secret ships in the bundle.
+  //   x-api-secret: <API_SECRET>     — a static header, kept for curl and any
+  //     scheduled job that has no session.
+  //
+  // Reads stay public either way.
+  if (config.apiSecret || config.authTokenSecret) {
     app.addHook("onRequest", async (req, reply) => {
       if (!MUTATING_METHODS.has(req.method)) return;
-      const provided = req.headers["x-api-secret"];
-      if (provided !== expected) {
-        await reply.code(401).send({ error: "unauthorized" });
+      // Logging in is itself a POST and obviously cannot require a session.
+      if (req.url.startsWith("/api/login")) return;
+
+      if (config.apiSecret && req.headers["x-api-secret"] === config.apiSecret) return;
+
+      if (config.authTokenSecret) {
+        const header = req.headers.authorization;
+        const token = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
+        if (token && verifyToken(token, config.authTokenSecret)) return;
       }
+
+      await reply.code(401).send({ error: "unauthorized" });
     });
   } else {
     app.log.warn(
-      "API_SECRET is unset — all mutating routes are open to anyone who can reach this server.",
+      "Neither API_SECRET nor AUTH_TOKEN_SECRET is set — all mutating routes are open to anyone who can reach this server.",
     );
   }
 
+  registerLoginRoute(app);
   registerSnapshotRoute(app);
   registerHealthRoute(app);
   registerRefreshRoute(app);

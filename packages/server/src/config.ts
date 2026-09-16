@@ -17,6 +17,10 @@ export interface AppConfig {
   // Comma-separated exact origins allowed to call the API from a browser.
   // Unset means "reflect any origin", which is only safe locally.
   allowedOrigins: string[] | undefined;
+  // HMAC key for signing session tokens. Unset disables login entirely
+  // (/api/login returns 503), so the API_SECRET header stays the only way in.
+  // Rotating this invalidates every issued token.
+  authTokenSecret: string | undefined;
 }
 
 export function loadConfig(): AppConfig {
@@ -32,5 +36,6 @@ export function loadConfig(): AppConfig {
     chromiumExecutablePath: process.env.CHROMIUM_EXECUTABLE_PATH || undefined,
     apiSecret: process.env.API_SECRET || undefined,
     allowedOrigins: origins.length > 0 ? origins : undefined,
+    authTokenSecret: process.env.AUTH_TOKEN_SECRET || undefined,
   };
 }
