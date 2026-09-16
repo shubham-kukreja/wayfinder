@@ -42,17 +42,15 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
           engraving badly. This stays sharp at any panel size and costs 20KB
           instead of 7.7MB. */}
       <div className="relative hidden w-1/2 shrink-0 overflow-hidden bg-[#0B1A10] lg:block">
-        {/* The source viewBox is "-140 -580 2184 2114", so the rosette is not
-            centred in its own canvas — positioning by percentage put it in the
-            middle of the panel. A wrapper scaled from its top-left corner is
-            predictable regardless of where the art sits inside the file: the
-            quadrant nearest the origin lands in the panel's top-left corner. */}
-        <div
-          className="pointer-events-none absolute left-0 top-0 h-[190%] w-[190%] origin-top-left -translate-x-[22%] -translate-y-[26%] select-none"
+        {/* Centre of the rosette pinned to the panel's top-left corner, so the
+            arcs sweep across the upper-left area rather than radiating out of
+            the corner itself. Oversized so the visible portion still fills it. */}
+        <img
+          src="/guilloche.svg"
+          alt=""
           aria-hidden="true"
-        >
-          <img src="/guilloche.svg" alt="" className="h-full w-full max-w-none object-cover" />
-        </div>
+          className="pointer-events-none absolute left-0 top-0 h-[150%] w-[150%] max-w-none -translate-x-1/2 -translate-y-1/2 select-none"
+        />
         {/* Fades the pattern out toward the bottom-right so it never competes
             with the headline sitting there. */}
         <div
