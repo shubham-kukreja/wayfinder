@@ -1,5 +1,6 @@
 import type { Snapshot } from "@wayfinder/engine";
 import { API_BASE_URL } from "./constants.js";
+import { apiFetch, apiFetchJson } from "./apiFetch.js";
 
 export interface ReviewListItem {
   id: string;
@@ -18,11 +19,7 @@ export async function listReviews(): Promise<ReviewListItem[]> {
 }
 
 export async function saveReview(label: string | null): Promise<{ id: string; label: string | null; createdAt: string }> {
-  const res = await fetch(`${API_BASE_URL}/api/snapshots`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ label: label ?? undefined }),
-  });
+  const res = await apiFetchJson("/api/snapshots", "POST", { label: label ?? undefined });
   if (!res.ok) throw new Error(`Failed to save review: ${res.status}`);
   return res.json();
 }
@@ -36,11 +33,7 @@ export async function publishReview(label: string | null, reason?: string): Prom
   reason: string | null;
   diff: { totalChanges: number; changedScores: unknown[]; changedVetoes: unknown[]; paramsChanged: boolean };
 }> {
-  const res = await fetch(`${API_BASE_URL}/api/snapshots/publish`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ label: label ?? undefined, reason }),
-  });
+  const res = await apiFetchJson("/api/snapshots/publish", "POST", { label: label ?? undefined, reason });
   if (!res.ok) throw new Error(`Failed to publish review: ${res.status}`);
   return res.json();
 }
@@ -69,6 +62,6 @@ export async function getReview(id: string): Promise<Snapshot> {
 // Any saved entry (review or published version) can be deleted, per
 // this project's own decision — no special-casing published rows.
 export async function deleteReview(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/api/snapshots/${id}`, { method: "DELETE" });
+  const res = await apiFetch(`/api/snapshots/${id}`, { method: "DELETE" });
   if (!res.ok && res.status !== 404) throw new Error(`Failed to delete review: ${res.status}`);
 }

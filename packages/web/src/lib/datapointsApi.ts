@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "./constants.js";
+import { apiFetch } from "./apiFetch.js";
 
 export type DataPointFreshness = "current" | "due" | "stale" | "failed" | "missing" | "overridden";
 export type DataPointUpdateType = "automatic" | "opt_in" | "manual" | "derived" | "governance" | "veto";
@@ -41,6 +42,6 @@ export async function listDataPoints(): Promise<DataPointsResponse> {
 
 export async function refreshDataPoints(source: string): Promise<void> {
   const query = source === "all" ? "" : `?sources=${encodeURIComponent(source)}`;
-  const res = await fetch(`${API_BASE_URL}/api/refresh${query}`, { method: "POST" });
+  const res = await apiFetch(`/api/refresh${query}`, { method: "POST" });
   if (!res.ok) throw new Error(`Refresh failed: ${res.status}`);
 }
