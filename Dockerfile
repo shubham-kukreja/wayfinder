@@ -54,6 +54,12 @@ RUN pnpm install --frozen-lockfile --filter @wayfinder/server...
 COPY packages/engine ./packages/engine
 COPY packages/server ./packages/server
 
+# Runtime dependency, not a test fixture: pipeline/currentSnapshot.ts
+# resolves ../../../../mock/snapshot.json from the repo root as the
+# baseline every snapshot is built on. Without it /api/snapshot,
+# /api/datapoints and /api/snapshots/draft-status all 500 with ENOENT.
+COPY mock ./mock
+
 # CHROMIUM_EXECUTABLE_PATH is deliberately left UNSET. The base image
 # installs browsers under /ms-playwright and sets PLAYWRIGHT_BROWSERS_PATH
 # to match, so playwright-core's default resolution finds Chromium on its

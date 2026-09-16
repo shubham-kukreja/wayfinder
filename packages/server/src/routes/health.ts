@@ -1,3 +1,5 @@
+import * as fs from "node:fs";
+import * as nodePath from "node:path";
 import type { FastifyInstance } from "fastify";
 import { createFredAdapter, FRED_SERIES } from "../adapters/fred.js";
 import { createBullionAdapter, BULLION_SERIES } from "../adapters/bullion.js";
@@ -16,6 +18,36 @@ export function registerHealthRoute(app: FastifyInstance): void {
   // flaky upstream (/api/health below calls five external APIs and is far
   // too slow and failure-prone for that job).
   app.get("/api/live", async () => ({ status: "ok" }));
+
+  // Deploy diagnostic: what does the container actually see at DB_PATH?
+  // A volume that is misconfigured (wrong mount path, not attached, not
+  // writable) surfaces here as a concrete errno instead of a generic
+  // SQLITE_CANTOPEN on every data route.
+  app.get("/api/debug/storage", async () => {
+    const { dbPath } = loadConfig();
+    const dir = nodePath.dirname(dbPath);
+    const probe = nodePath.join(dir, ".write-probe");
+    const out: Record<string, unknown> = { dbPath, dir, uid: process.getuid?.() };
+
+    try {
+      out.dirExists = fs.existsSync(dir);
+      out.dirEntries = out.dirExists ? fs.readdirSync(dir).slice(0, 20) : null;
+      out.dbFileExists = fs.existsSync(dbPath);
+    } catch (err) {
+      out.statError = String(err);
+    }
+
+    try {
+      fs.writeFileSync(probe, "ok");
+      fs.unlinkSync(probe);
+      out.writable = true;
+    } catch (err) {
+      out.writable = false;
+      out.writeError = String(err);
+    }
+
+    return out;
+  });
 
   app.get("/api/health", async () => {
     const config = loadConfig();
