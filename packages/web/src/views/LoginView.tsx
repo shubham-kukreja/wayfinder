@@ -48,7 +48,7 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
             src="/guilloche.svg"
             alt=""
             aria-hidden="true"
-            className="pointer-events-none absolute left-0 top-0 h-[150%] w-[150%] max-w-none -translate-x-1/2 -translate-y-1/2 select-none"
+            className="pointer-events-none absolute left-0 top-0 h-[165%] w-[165%] max-w-none -translate-x-[46%] -translate-y-[56%] select-none"
           />
           {/* Darkens the foot of the card so the statement stays legible over
               whatever part of the pattern sits behind it. */}
@@ -90,7 +90,9 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
                 </span>
                 <span aria-hidden="true">RE</span>
               </h1>
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" aria-hidden="true" />
+              <span aria-hidden="true" className="font-display text-[38px] font-extrabold leading-none tracking-display text-ink">
+                .
+              </span>
             </div>
 
             <form onSubmit={handleSubmit}>
