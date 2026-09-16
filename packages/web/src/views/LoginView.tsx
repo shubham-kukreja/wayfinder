@@ -1,12 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { login } from "../lib/auth.js";
 
-// Split sign-in: engraved banknote artwork on the left, the form on the right.
+// Split sign-in: guilloche artwork on the left, the form on the right.
 //
-// The artwork is Arvia's own — a lighthouse in heavy seas, in the guilloche
-// line-work of a share certificate — so it carries the brand without needing a
-// second logo over it. Below lg the panel is dropped entirely rather than
-// stacked: on a phone it would push the form below the fold for pure decoration.
+// Below lg the panel is dropped entirely rather than stacked: on a phone it
+// would push the form below the fold for purely decorative content.
 export function LoginView({ onSuccess }: { onSuccess: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -37,37 +35,45 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
   return (
     <div className="flex min-h-screen bg-paper">
       {/* ---------- left: artwork ---------- */}
+      {/* Guilloche rosette on a deep green ground — the engraved line-work of a
+          share certificate, which is Arvia's own visual language. Generated as
+          vector rather than cropped from the site's banknote photograph: that
+          image is landscape, and squeezing it into a tall panel stretched the
+          engraving badly. This stays sharp at any panel size and costs 20KB
+          instead of 7.7MB. */}
       <div className="relative hidden w-1/2 shrink-0 overflow-hidden bg-[#0B1A10] lg:block">
+        {/* Anchored so its centre sits on the panel's top-left corner: only the
+            lower-right quadrant of the rosette is on screen, reading as a
+            detail the frame happens to crop rather than a motif centred in the
+            panel. Oversized so that quarter still fills the corner. */}
         <img
-          src="/login-panel.webp"
+          src="/guilloche.svg"
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover"
+          className="pointer-events-none absolute left-0 top-0 h-[150%] w-[150%] -translate-x-1/2 -translate-y-1/2 select-none"
         />
-        {/* Scrim: the artwork runs pale at the top, so the wordmark needs a
-            darker ground under it to stay legible at any panel height. */}
+        {/* Fades the pattern out toward the bottom-right so it never competes
+            with the headline sitting there. */}
         <div
-          className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/10 to-black/85"
+          className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,transparent_20%,rgba(11,26,16,0.85)_70%)]"
           aria-hidden="true"
         />
 
         <div className="relative flex h-full flex-col justify-between p-12">
-          {/* Left-aligned so the mark shares an edge with the copy below it —
-              centred, it floated free of everything else on the panel. */}
           <img
             src="/logo-arvia-dark.svg"
             alt="Arvia Wealth"
-            className="h-7 w-auto self-start brightness-0 invert"
+            className="h-10 w-auto self-start brightness-0 invert"
           />
 
           <div>
-            <p className="font-display text-[32px] font-bold leading-[1.15] tracking-display text-white">
+            <p className="font-display text-[40px] font-bold leading-[1.12] tracking-display text-white">
               Make wealth work
               <br />
               alongside you.
             </p>
-            <p className="mt-4 max-w-sm text-[13px] leading-relaxed text-white/70">
-              CORE is Arvia Wealth&rsquo;s internal research system for capital allocation — signals,
+            <p className="mt-5 max-w-md text-[15px] leading-relaxed text-white/60">
+              CORE is Arvia Wealth&rsquo;s internal research system for capital allocation: signals,
               scoring and model versions in one place.
             </p>
           </div>
@@ -79,7 +85,7 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
         {/* On small screens the artwork is gone, so the logo moves here to keep
             the brand present. */}
         <header className="px-8 pt-8 lg:hidden">
-          <img src="/logo-arvia.svg" alt="Arvia Wealth" className="h-6 w-auto" />
+          <img src="/logo-arvia.svg" alt="Arvia Wealth" className="h-8 w-auto" />
         </header>
 
         <main className="flex flex-1 items-center justify-center px-8 py-12 lg:px-16">
