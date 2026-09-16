@@ -123,7 +123,7 @@
   margin-top: -1px;
   border: 1px solid #ffffff;
   border-radius: 0;
-  background: #0a0a0a;
+  background: #2f3d2c;
   cursor: ew-resize;
 }
 .wf-slider::-moz-range-thumb {
@@ -131,14 +131,14 @@
   height: 28px;
   border: 1px solid #ffffff;
   border-radius: 0;
-  background: #0a0a0a;
+  background: #2f3d2c;
   cursor: ew-resize;
 }
 .wf-slider:hover::-webkit-slider-thumb {
-  background: #3a3a3a;
+  background: #536e51;
 }
 .wf-slider:hover::-moz-range-thumb {
-  background: #3a3a3a;
+  background: #536e51;
 }
 
 .wf-slider:focus-visible {
