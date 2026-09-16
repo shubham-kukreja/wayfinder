@@ -39,11 +39,11 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <div className="min-h-screen bg-paper">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col gap-8 px-5 py-5 lg:flex-row lg:gap-12 lg:px-8">
+      <div className="mx-auto flex min-h-screen w-full flex-col gap-8 p-5 lg:flex-row lg:items-center lg:gap-[14%] lg:p-8">
         {/* ---------- left: artwork card ---------- */}
         {/* Inset with its own radius rather than bleeding to the viewport edge,
             so it reads as a plate on the page. */}
-        <div className="relative hidden flex-1 overflow-hidden rounded-lg bg-[#0B1A10] lg:block">
+        <div className="relative hidden w-[48%] shrink-0 overflow-hidden rounded-lg bg-[#0B1A10] lg:block lg:aspect-[9/10]">
           <img
             src="/guilloche.svg"
             alt=""
@@ -57,8 +57,8 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
             aria-hidden="true"
           />
 
-          <div className="relative flex h-full flex-col justify-end p-12">
-            <p className="font-display text-[54px] font-extrabold leading-[0.98] tracking-display text-white">
+          <div className="relative flex h-full flex-col justify-end p-10">
+            <p className="font-display text-[46px] font-extrabold leading-[0.98] tracking-display text-white">
               Make wealth work
               <br />
               alongside you.
@@ -67,7 +67,7 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
         </div>
 
         {/* ---------- right: form column ---------- */}
-        <div className="flex w-full flex-col lg:w-[420px] lg:shrink-0">
+        <div className="flex w-full flex-col self-stretch lg:w-[360px] lg:shrink-0">
           <div className="flex justify-end pt-3 text-[13px] text-ink-2">
             Need access?{" "}
             <span className="ml-1.5 font-semibold text-ink underline underline-offset-2">Contact your admin</span>
