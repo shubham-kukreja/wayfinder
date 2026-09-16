@@ -1,0 +1,30 @@
+# Netlify config for the Vite SPA in packages/web.
+#
+# Committed at the REPO ROOT, not in packages/web — @wayfinder/web depends
+# on @wayfinder/engine via `workspace:*`, so pnpm has to install from the
+# workspace root for the build to resolve it.
+
+[build]
+  # Run from the repo root so the pnpm workspace resolves.
+  command = "pnpm install --frozen-lockfile --filter @wayfinder/web... && pnpm --filter @wayfinder/web build"
+  # Publish the BUILD OUTPUT. Pointing this at packages/web would deploy the
+  # source tree, whose index.html still references /src/main.tsx — raw
+  # TypeScript the browser cannot execute, so the page renders blank.
+  publish = "packages/web/dist"
+
+[build.environment]
+  # Vite inlines import.meta.env at BUILD time, so the API base must be set
+  # here; a runtime variable would do nothing. constants.ts reads
+  # VITE_API_BASE_URL and falls back to localhost, which would break in prod.
+  VITE_API_BASE_URL = "https://wayfinder-production-62da.up.railway.app"
+  NODE_VERSION = "22"
+  # Netlify defaults to an older pnpm; match the repo's packageManager field.
+  PNPM_VERSION = "9.15.4"
+
+# SPA fallback. react-router owns /overview, /model/*, /reviews — without
+# this, a hard refresh or a shared link to any of them 404s, because no such
+# file exists on disk.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
