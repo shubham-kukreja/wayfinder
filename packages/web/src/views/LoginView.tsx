@@ -59,11 +59,11 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
           aria-hidden="true"
         />
 
-        <div className="relative flex h-full flex-col justify-between p-12">
+        <div className="relative flex h-full flex-col justify-between pt-12 pr-12 pb-24 pl-16">
           <img
             src="/logo-arvia-dark.svg"
             alt="Arvia Wealth"
-            className="h-10 w-auto self-start brightness-0 invert"
+            className="h-[60px] w-auto self-start brightness-0 invert"
           />
 
           <div>
