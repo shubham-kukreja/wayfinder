@@ -15,6 +15,14 @@ const GROUP_MODE_OPTIONS: Array<{ id: GroupMode; label: string }> = [
   { id: "attention", label: "By attention" },
 ];
 
+const REFRESH_SOURCE_LABELS: Record<string, string> = {
+  fred: "FRED",
+  bullion: "Bullion",
+  amfi: "AMFI",
+  rbi_homepage: "RBI homepage",
+  all: "All sources",
+};
+
 const FRESHNESS_CLASS: Record<DataPointFreshness, string> = {
   current: "bg-paper-2 text-muted border-line",
   due: "bg-warn-50 text-warn-600 border-warn-200",
@@ -144,89 +152,137 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <select
-            value={refreshSource}
-            onChange={(event) => setRefreshSource(event.target.value)}
-            className="h-9 border border-line bg-paper px-2.5 text-[13px] text-ink-2 focus:border-ink focus:outline-none"
-            aria-label="Refresh source"
-          >
-            <option value="fred">FRED</option>
-            <option value="bullion">Bullion</option>
-            <option value="amfi">AMFI</option>
-            <option value="rbi_homepage">RBI homepage</option>
-            <option value="all">All sources</option>
-          </select>
+          <div className="relative h-8">
+            <div className="pointer-events-none flex h-8 items-center gap-2 rounded-sm border border-ink px-3">
+              <svg viewBox="0 0 16 16" aria-hidden="true" className="h-4 w-4 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 8a6 6 0 1 1-1.8-4.3M14 2v3.5h-3.5" />
+              </svg>
+              <span className="whitespace-nowrap text-[13px] font-bold text-ink">{REFRESH_SOURCE_LABELS[refreshSource] ?? refreshSource}</span>
+              <svg viewBox="0 0 16 16" aria-hidden="true" className="ml-1 h-4 w-4 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 6l4 4 4-4" />
+              </svg>
+            </div>
+            <select
+              value={refreshSource}
+              onChange={(event) => setRefreshSource(event.target.value)}
+              className="absolute inset-0 h-8 w-full cursor-pointer opacity-0"
+              aria-label="Refresh source"
+            >
+              <option value="fred">FRED</option>
+              <option value="bullion">Bullion</option>
+              <option value="amfi">AMFI</option>
+              <option value="rbi_homepage">RBI homepage</option>
+              <option value="all">All sources</option>
+            </select>
+          </div>
           <button
             type="button"
             onClick={() => void handleRefresh()}
             disabled={refreshing}
-            className="h-9 bg-ink px-4 text-[13px] font-semibold text-paper transition duration-100 ease-in hover:brightness-[1.15] disabled:pointer-events-none disabled:opacity-40"
+            className="inline-flex h-8 shrink-0 items-center gap-2 rounded-sm border border-line px-3 text-[13px] font-semibold text-ink transition-colors duration-100 ease-in hover:bg-paper-2 disabled:pointer-events-none disabled:opacity-40"
           >
             {refreshing ? "Refreshing…" : "Refresh source"}
+            <span aria-hidden="true">›</span>
           </button>
         </div>
       </div>
 
       {refreshMessage && <p className="mb-6 border border-line bg-paper-2 px-3 py-2 text-[13px] text-ink-2">{refreshMessage}</p>}
 
-      <section className="mb-8 grid grid-cols-2 divide-line border border-line bg-paper md:grid-cols-6 md:divide-x">
-        {(["total", "current", "due", "stale", "failed", "overridden"] as const).map((key) => {
-          // "Total" always clears the filter rather than filtering to a
-          // freshness value called "total" (no such row state exists) -
-          // every other card toggles that exact freshness on/off.
-          const isActive = key === "total" ? !freshnessFilter : freshnessFilter === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setParam("freshness", key === "total" ? null : freshnessFilter === key ? null : key)}
-              className={`px-4 py-3.5 text-left transition-colors duration-100 ease-in ${
-                isActive ? "bg-ink text-paper" : "hover:bg-paper-2"
-              }`}
-            >
-              <p className={`text-[11px] font-bold uppercase tracking-eyebrow ${isActive ? "text-paper/70" : "text-muted"}`}>{key}</p>
-              <p className={`mt-1 font-mono text-[26px] font-medium leading-none tabular-nums ${isActive ? "text-paper" : "text-ink"}`}>{summary[key] ?? 0}</p>
-            </button>
-          );
-        })}
-      </section>
+      {/* Total is the anchor — a display-weight figure on its own card — with
+          the five freshness states as a subordinate row of filter chips beside
+          it. Six equal cells gave a count of 110 the same visual weight as a
+          count of 0, and nothing indicated the cells were clickable. */}
+      <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[220px_1fr]">
+        <button
+          type="button"
+          onClick={() => setParam("freshness", null)}
+          className={`rounded-sm border px-5 py-4 text-left transition-colors duration-100 ease-in ${
+            freshnessFilter ? "border-line bg-paper hover:bg-paper-2" : "border-ink bg-paper"
+          }`}
+        >
+          <p className="text-xs text-muted">Total data points</p>
+          <p className="mt-1 font-display text-[34px] font-bold leading-none tabular-nums text-ink">
+            {summary.total ?? 0}
+          </p>
+          <p className="mt-1.5 text-xs font-semibold text-brand-800">
+            {freshnessFilter ? "Show all" : "All rows shown"}
+          </p>
+        </button>
 
-      <section className="grid grid-cols-1 gap-5 lg:grid-cols-[240px_1fr_360px]">
-        <aside className="border border-line bg-paper">
-          <div className="border-b border-line bg-paper-2 px-4 py-2.5">
-            <h2 className="text-[13px] font-semibold text-ink">Filters</h2>
-          </div>
-          <div className="p-4">
-          <label className="block text-xs font-medium text-muted">
-            Search
-            <input
-              value={query}
-              onChange={(e) => setParam("q", e.target.value || null)}
-              className="mt-1.5 h-9 w-full border border-line bg-paper px-2.5 text-[13px] text-ink-2 placeholder:text-muted focus:border-ink focus:outline-none"
-              placeholder="Name, source, key"
-            />
-          </label>
-          <div className="mt-5">
-            <p className="mb-2 text-xs font-medium text-muted">Grouping</p>
-            <div className="space-y-1">
-              {GROUP_MODE_OPTIONS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => setParam("group", option.id === "model" ? null : option.id)}
-                  className={`w-full border px-2.5 py-1.5 text-left text-[13px] transition-colors duration-100 ease-in ${
-                    groupMode === option.id ? "border-ink bg-ink font-medium text-paper" : "border-transparent text-ink-2 hover:border-line hover:bg-paper-2"
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+          {(["current", "due", "stale", "failed", "overridden"] as const).map((key) => {
+            const isActive = freshnessFilter === key;
+            const count = summary[key] ?? 0;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setParam("freshness", isActive ? null : key)}
+                // Zero-count states stay visible but recede: they are not
+                // worth attention until something lands in them.
+                className={`rounded-sm border px-3.5 py-3 text-left transition-colors duration-100 ease-in ${
+                  isActive ? "border-ink bg-ink" : "border-line bg-paper hover:bg-paper-2"
+                }`}
+              >
+                <p
+                  className={`text-[11px] font-bold uppercase tracking-eyebrow ${
+                    isActive ? "text-paper/70" : "text-muted"
                   }`}
                 >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          </div>
-        </aside>
+                  {key}
+                </p>
+                <p
+                  className={`mt-1 font-display text-[22px] font-bold leading-none tabular-nums ${
+                    isActive
+                      ? "text-paper"
+                      : count === 0
+                        ? "text-muted"
+                        : key === "current"
+                          ? "text-brand-800"
+                          : "text-ink"
+                  }`}
+                >
+                  {count}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
-        <div className="min-w-0 border border-line bg-paper">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <label className="relative flex w-full items-center sm:max-w-xs">
+          <span className="sr-only">Search the registry</span>
+          <input
+            value={query}
+            onChange={(e) => setParam("q", e.target.value || null)}
+            className="h-8 w-full rounded-sm border border-line bg-paper px-3 text-[13px] text-ink-2 placeholder:text-muted focus:border-ink focus:outline-none"
+            placeholder="Search name, source or key"
+          />
+        </label>
+        {/* Segmented control, sharing borders — same pattern as Normalisation
+            on Parameters. */}
+        <div className="flex">
+          {GROUP_MODE_OPTIONS.map((option, i) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setParam("group", option.id === "model" ? null : option.id)}
+              className={`border px-3 py-1.5 text-[13px] transition-colors duration-100 ease-in ${i === 0 ? "rounded-l-sm" : "-ml-px"} ${i === GROUP_MODE_OPTIONS.length - 1 ? "rounded-r-sm" : ""} ${
+                groupMode === option.id
+                  ? "relative border-ink bg-ink font-medium text-paper"
+                  : "border-line bg-paper text-ink-2 hover:bg-paper-2"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_380px]">
+        <div className="min-w-0 rounded-sm border border-line border-t-2 border-t-brand-500 bg-paper">
           <div className="flex items-baseline justify-between border-b border-line bg-paper-2 px-4 py-2.5">
             <h2 className="text-[13px] font-semibold text-ink">Registry</h2>
             <p className="font-mono text-[11px] tabular-nums text-muted">{filteredRows.length} rows</p>
@@ -237,7 +293,7 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
             <div className="max-h-[720px] overflow-y-auto">
               {groupedRows.map(([key, items]) => (
                 <section key={key}>
-                  <div className="sticky top-0 z-10 border-y border-paper-2 bg-paper-2 px-4 py-2 text-xs font-bold uppercase tracking-eyebrow text-muted">
+                  <div className="sticky top-0 z-10 border-y border-line border-l-2 border-l-brand-500 bg-paper-2 px-4 py-2 text-xs font-bold uppercase tracking-eyebrow text-muted">
                     {groupLabel(key)} <span className="ml-1 font-mono text-[11px] font-normal normal-case tracking-normal">{items.length}</span>
                   </div>
                   <div className="divide-y divide-paper-2">
@@ -248,7 +304,7 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                         onClick={() => setParam("point", row.id)}
                         className={`grid w-full grid-cols-[1fr_auto] gap-4 border-l-2 px-4 py-2.5 text-left transition-colors duration-100 ease-in ${
                           selectedRow?.id === row.id
-                            ? "border-l-ink bg-paper-2"
+                            ? "border-l-brand-500 bg-brand-50/40"
                             : "border-l-transparent hover:bg-paper-2"
                         }`}
                       >
@@ -273,7 +329,7 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
           )}
         </div>
 
-        <aside className="border border-line bg-paper">
+        <aside className="rounded-sm border border-line border-t-2 border-t-brand-500 bg-paper">
           <div className="border-b border-line bg-paper-2 px-4 py-2.5">
             <h2 className="text-[13px] font-semibold text-ink">Live impact</h2>
           </div>
@@ -292,7 +348,7 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                 </div>
                 <div className="px-3 py-2.5">
                   <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Score</p>
-                  <p className="mt-1 font-mono text-lg font-medium leading-none tabular-nums text-ink">{selectedRow.score !== null ? formatScore(selectedRow.score) : "-"}</p>
+                  <p className="mt-1 font-mono text-lg font-medium leading-none tabular-nums text-brand-700">{selectedRow.score !== null ? formatScore(selectedRow.score) : "-"}</p>
                 </div>
               </div>
               <dl className="divide-y divide-line border-y border-line text-[13px]">
