@@ -157,6 +157,16 @@ function segmentsForDepth(allocation: Allocation, depth: AllocationDepth): Alloc
   });
 }
 
+// The condensed sticky bar draws the same segments and the same parent rails
+// as the full band, so it can't drift from the bar it stands in for.
+export function stickySegments(allocation: Allocation): Array<{ id: string; label: string; weight: number; color: string }> {
+  return segmentsForDepth(allocation, "detail").map(({ id, label, weight, color }) => ({ id, label, weight, color }));
+}
+
+export function stickyClassTotals(allocation: Allocation): Array<{ id: TiltGroupId; label: string; weight: number; color: string }> {
+  return parentRails(allocation);
+}
+
 function parentRails(allocation: Allocation): Array<{ id: TiltGroupId; label: string; weight: number; color: string }> {
   return [
     { id: "equity", label: GROUP_LABELS.equity ?? "Equity", weight: allocation.groups.l1.nodes["l1.equity"]!.final, color: SEGMENT_COLORS["l1.equity"] ?? "#7B86F4" },

@@ -9,7 +9,7 @@ import { formatScore } from "../lib/format.js";
 
 type GroupMode = "model" | "operation" | "attention";
 
-const GROUP_MODE_OPTIONS: Array<{ id: GroupMode; label: string }> = [
+const GROUP_MODE_OPTIONS: ReadonlyArray<{ id: GroupMode; label: string }> = [
   { id: "model", label: "By model" },
   { id: "operation", label: "By operation" },
   { id: "attention", label: "By attention" },
@@ -23,13 +23,50 @@ const REFRESH_SOURCE_LABELS: Record<string, string> = {
   all: "All sources",
 };
 
-const FRESHNESS_CLASS: Record<DataPointFreshness, string> = {
-  current: "bg-paper-2 text-muted border-line",
-  due: "bg-warn-50 text-warn-600 border-warn-200",
-  stale: "bg-warn-50 text-warn-600 border-warn-200",
-  failed: "bg-danger-50 text-danger-500 border-danger-500/30",
-  missing: "bg-paper-2 text-ink-2 border-line",
-  overridden: "bg-paper-2 text-ink-2 border-line",
+// Freshness is the page's one colour axis, so each state gets a fixed hue
+// from the system palette and keeps it everywhere it appears — the tab dot,
+// the row chip and the detail panel all read as the same state at a glance.
+// `dot`/`text`/`chip` are the same hue at three intensities.
+const FRESHNESS_STYLE: Record<
+  DataPointFreshness,
+  { dot: string; text: string; chip: string; blurb: string }
+> = {
+  current: {
+    dot: "bg-brand-500",
+    text: "text-brand-800",
+    chip: "bg-brand-50 text-brand-800",
+    blurb: "Refreshed within its expected cadence.",
+  },
+  due: {
+    dot: "bg-warn-200",
+    text: "text-warn-600",
+    chip: "bg-warn-50 text-warn-800",
+    blurb: "Past its refresh window — a new observation is expected.",
+  },
+  stale: {
+    dot: "bg-warn",
+    text: "text-warn-600",
+    chip: "bg-warn-50 text-warn-800",
+    blurb: "Well past its refresh window; the stored value may no longer hold.",
+  },
+  failed: {
+    dot: "bg-danger-500",
+    text: "text-danger-500",
+    chip: "bg-danger-50 text-danger-500",
+    blurb: "The last refresh attempt errored; the value shown is the prior one.",
+  },
+  missing: {
+    dot: "bg-line",
+    text: "text-muted",
+    chip: "bg-paper-2 text-muted",
+    blurb: "No observation has ever been stored for this point.",
+  },
+  overridden: {
+    dot: "bg-periwinkle",
+    text: "text-indigo",
+    chip: "bg-lilac text-indigo",
+    blurb: "A manual value is in force, taking precedence over the feed.",
+  },
 };
 
 function formatValue(row: DataPointRow): string {
@@ -63,9 +100,17 @@ function isScoreCellId(id: string): boolean {
   return id.includes("::") && !id.startsWith("governance.") && !id.startsWith("veto.");
 }
 
+const FRESHNESS_ORDER = ["current", "due", "stale", "failed", "overridden"] as const;
+
+type FreshnessTab = "all" | (typeof FRESHNESS_ORDER)[number];
+
+function groupModeFromSearch(value: string | null): GroupMode {
+  return value === "operation" || value === "attention" ? value : "model";
+}
+
 export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const groupMode = (searchParams.get("group") as GroupMode | null) ?? "model";
+  const groupMode = groupModeFromSearch(searchParams.get("group"));
   const query = searchParams.get("q") ?? "";
   const selectedId = searchParams.get("point");
   const inspectingId = searchParams.get("inspect");
@@ -78,7 +123,7 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
   const [summary, setSummary] = useState<Record<string, number>>({ total: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [refreshSource, setRefreshSource] = useState("fred");
+  const [refreshSource, setRefreshSource] = useState("all");
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
 
@@ -134,6 +179,8 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
 
   const selectedRow = rows.find((row) => row.id === selectedId) ?? filteredRows[0] ?? null;
 
+  const total = summary.total ?? 0;
+
   function setParam(key: string, value: string | null) {
     const next = new URLSearchParams(searchParams);
     if (value) next.set(key, value);
@@ -143,215 +190,252 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
 
   return (
     <main className="mx-auto w-full max-w-[1600px] px-6 py-8">
-      <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-eyebrow text-muted">Model Explorer</p>
-          <h1 className="mt-1 font-display text-2xl text-ink">Data Point Control Center</h1>
-          <p className="mt-1 max-w-3xl text-sm text-muted">
-            Registry of model inputs, derived scores, manual controls, governance parameters and veto gates. Freshness reflects time since the last stored refresh; no scheduler is running yet.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative h-8">
-            <div className="pointer-events-none flex h-8 items-center gap-2 rounded-sm border border-ink px-3">
-              <svg viewBox="0 0 16 16" aria-hidden="true" className="h-4 w-4 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 8a6 6 0 1 1-1.8-4.3M14 2v3.5h-3.5" />
-              </svg>
-              <span className="whitespace-nowrap text-[13px] font-bold text-ink">{REFRESH_SOURCE_LABELS[refreshSource] ?? refreshSource}</span>
-              <svg viewBox="0 0 16 16" aria-hidden="true" className="ml-1 h-4 w-4 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 6l4 4 4-4" />
-              </svg>
-            </div>
-            <select
-              value={refreshSource}
-              onChange={(event) => setRefreshSource(event.target.value)}
-              className="absolute inset-0 h-8 w-full cursor-pointer opacity-0"
-              aria-label="Refresh source"
-            >
-              <option value="fred">FRED</option>
-              <option value="bullion">Bullion</option>
-              <option value="amfi">AMFI</option>
-              <option value="rbi_homepage">RBI homepage</option>
-              <option value="all">All sources</option>
-            </select>
+      <section>
+        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-eyebrow text-muted">Model Explorer</p>
+            <h1 className="mt-1 font-display text-2xl text-ink">Data Point Control Center</h1>
+            <p className="mt-2 max-w-3xl text-[13px] text-muted">
+              Registry of model inputs, derived scores, manual controls, governance parameters and veto gates. Freshness reflects time
+              since the last stored refresh; no scheduler is running yet.
+            </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void handleRefresh()}
-            disabled={refreshing}
-            className="inline-flex h-8 shrink-0 items-center gap-2 rounded-sm border border-line px-3 text-[13px] font-semibold text-ink transition-colors duration-100 ease-in hover:bg-paper-2 disabled:pointer-events-none disabled:opacity-40"
-          >
-            {refreshing ? "Refreshing…" : "Refresh source"}
-            <span aria-hidden="true">›</span>
-          </button>
+          {/* Captions align on one baseline and each sits over a 32px control
+              row; the Tracking subtext hangs below without dragging the
+              controls down, so alignment is from the top, not the bottom. */}
+          {/* Both blocks are caption-over-content and end on one bottom
+              edge: the figure and the control row share a baseline, so the
+              group reads as a single band rather than two floating pieces. */}
+          <div className="flex shrink-0 items-end gap-10">
+            <div>
+              <div className="text-[11px] font-bold uppercase leading-4 tracking-eyebrow text-muted">Tracking</div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="font-display text-[44px] font-extrabold leading-none tracking-[-0.04em] tabular-nums text-ink">{total}</span>
+                <span className="text-[13px] text-muted">data points</span>
+              </div>
+            </div>
+
+            {/* A hairline divides the readout from the controls that change
+                it — the same rule weight the cards below use. */}
+            <div className="self-stretch border-l border-line" aria-hidden="true" />
+
+            <div>
+              <label htmlFor="refresh-source" className="block text-[11px] font-bold uppercase leading-4 tracking-eyebrow text-muted">
+                Source
+              </label>
+              <div className="mt-2 flex items-center gap-2">
+                <div className="relative h-9">
+                  {/* No leading glyph here: the refresh mark belongs on the
+                      button that performs the action, not on the picker. */}
+                  <div className="pointer-events-none flex h-9 items-center justify-between gap-3 rounded-sm border border-line px-3">
+                    <span className="whitespace-nowrap text-[13px] font-semibold text-ink">{REFRESH_SOURCE_LABELS[refreshSource] ?? refreshSource}</span>
+                    <svg viewBox="0 0 16 16" aria-hidden="true" className="h-4 w-4 shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 6l4 4 4-4" />
+                    </svg>
+                  </div>
+                  <select
+                    id="refresh-source"
+                    value={refreshSource}
+                    onChange={(event) => setRefreshSource(event.target.value)}
+                    className="absolute inset-0 h-9 w-full cursor-pointer opacity-0"
+                  >
+                    <option value="fred">FRED</option>
+                    <option value="bullion">Bullion</option>
+                    <option value="amfi">AMFI</option>
+                    <option value="rbi_homepage">RBI homepage</option>
+                    <option value="all">All sources</option>
+                  </select>
+                </div>
+                {/* The one filled control on the page — this is the only
+                    thing here that changes state. */}
+                <button
+                  type="button"
+                  onClick={() => void handleRefresh()}
+                  disabled={refreshing}
+                  className="inline-flex h-9 shrink-0 items-center gap-2 rounded-sm bg-ink px-3.5 text-[13px] font-semibold text-paper transition duration-100 ease-in hover:brightness-[1.15] disabled:pointer-events-none disabled:opacity-40"
+                >
+                  <svg viewBox="0 0 16 16" aria-hidden="true" className={`h-4 w-4 shrink-0 ${refreshing ? "animate-spin" : ""}`} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 8a6 6 0 1 1-1.8-4.3M14 2v3.5h-3.5" />
+                  </svg>
+                  {refreshing ? "Refreshing…" : "Refresh"}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
 
-      {refreshMessage && <p className="mb-6 border border-line bg-paper-2 px-3 py-2 text-[13px] text-ink-2">{refreshMessage}</p>}
-
-      {/* Total is the anchor — a display-weight figure on its own card — with
-          the five freshness states as a subordinate row of filter chips beside
-          it. Six equal cells gave a count of 110 the same visual weight as a
-          count of 0, and nothing indicated the cells were clickable. */}
-      <section className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[220px_1fr]">
-        <button
-          type="button"
-          onClick={() => setParam("freshness", null)}
-          className={`rounded-sm border px-5 py-4 text-left transition-colors duration-100 ease-in ${
-            freshnessFilter ? "border-line bg-paper hover:bg-paper-2" : "border-ink bg-paper"
-          }`}
-        >
-          <p className="text-xs text-muted">Total data points</p>
-          <p className="mt-1 font-display text-[34px] font-bold leading-none tabular-nums text-ink">
-            {summary.total ?? 0}
-          </p>
-          <p className="mt-1.5 text-xs font-semibold text-brand-800">
-            {freshnessFilter ? "Show all" : "All rows shown"}
-          </p>
-        </button>
-
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
-          {(["current", "due", "stale", "failed", "overridden"] as const).map((key) => {
-            const isActive = freshnessFilter === key;
-            const count = summary[key] ?? 0;
+        {/* Freshness tabs double as the page's legend: each carries its state
+            colour as a dot, so the same hue in a registry chip needs no
+            second explanation. */}
+        <div className="flex gap-[22px] border-b border-line text-[13px] font-semibold">
+          {(["all", ...FRESHNESS_ORDER] as FreshnessTab[]).map((id) => {
+            const active = (freshnessFilter ?? "all") === id;
+            const count = id === "all" ? total : summary[id] ?? 0;
+            const style = id === "all" ? null : FRESHNESS_STYLE[id];
             return (
               <button
-                key={key}
+                key={id}
                 type="button"
-                onClick={() => setParam("freshness", isActive ? null : key)}
-                // Zero-count states stay visible but recede: they are not
-                // worth attention until something lands in them.
-                className={`rounded-sm border px-3.5 py-3 text-left transition-colors duration-100 ease-in ${
-                  isActive ? "border-ink bg-ink" : "border-line bg-paper hover:bg-paper-2"
+                onClick={() => setParam("freshness", id === "all" ? null : id)}
+                aria-current={active ? "page" : undefined}
+                className={`-mb-px flex items-center gap-1.5 border-b-2 pb-2.5 transition-colors duration-100 ease-in ${
+                  active ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"
                 }`}
               >
-                <p
-                  className={`text-[11px] font-bold uppercase tracking-eyebrow ${
-                    isActive ? "text-paper/70" : "text-muted"
-                  }`}
-                >
-                  {key}
-                </p>
-                <p
-                  className={`mt-1 font-display text-[22px] font-bold leading-none tabular-nums ${
-                    isActive
-                      ? "text-paper"
-                      : count === 0
-                        ? "text-muted"
-                        : key === "current"
-                          ? "text-brand-800"
-                          : "text-ink"
-                  }`}
-                >
-                  {count}
-                </p>
+                {style && <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 ${style.dot}`} />}
+                <span>{id === "all" ? "All" : groupLabel(id)}</span>
+                <span className={`tabular-nums ${active ? "text-ink" : style && count > 0 ? style.text : "text-muted"}`}>{count}</span>
               </button>
             );
           })}
         </div>
+
+        {refreshMessage && (
+          <p className="mt-4 flex items-start gap-2 text-[13px] text-muted">
+            <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 bg-brand-500" />
+            {refreshMessage}
+          </p>
+        )}
       </section>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <label className="relative flex w-full items-center sm:max-w-xs">
-          <span className="sr-only">Search the registry</span>
-          <input
-            value={query}
-            onChange={(e) => setParam("q", e.target.value || null)}
-            className="h-8 w-full rounded-sm border border-line bg-paper px-3 text-[13px] text-ink-2 placeholder:text-muted focus:border-ink focus:outline-none"
-            placeholder="Search name, source or key"
-          />
-        </label>
-        {/* Segmented control, sharing borders — same pattern as Normalisation
-            on Parameters. */}
-        <div className="flex">
-          {GROUP_MODE_OPTIONS.map((option, i) => (
-            <button
-              key={option.id}
-              type="button"
-              onClick={() => setParam("group", option.id === "model" ? null : option.id)}
-              className={`border px-3 py-1.5 text-[13px] transition-colors duration-100 ease-in ${i === 0 ? "rounded-l-sm" : "-ml-px"} ${i === GROUP_MODE_OPTIONS.length - 1 ? "rounded-r-sm" : ""} ${
-                groupMode === option.id
-                  ? "relative border-ink bg-ink font-medium text-paper"
-                  : "border-line bg-paper text-ink-2 hover:bg-paper-2"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_380px]">
-        <div className="min-w-0 rounded-sm border border-line border-t-2 border-t-brand-500 bg-paper">
-          <div className="flex items-baseline justify-between border-b border-line bg-paper-2 px-4 py-2.5">
-            <h2 className="text-[13px] font-semibold text-ink">Registry</h2>
-            <p className="font-mono text-[11px] tabular-nums text-muted">{filteredRows.length} rows</p>
+      <section className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px]">
+        {/* Registry: grouping tabs over a search field and one row per data
+            point — name and key on the left, value and freshness on the right. */}
+        <div className="min-w-0 rounded-lg border border-line bg-paper p-5">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-ink">Registry</h2>
+              <p className="mt-0.5 text-[13px] text-muted">
+                {filteredRows.length} row{filteredRows.length === 1 ? "" : "s"}
+                {freshnessFilter ? ` · ${groupLabel(freshnessFilter)}` : ""}
+              </p>
+            </div>
+            {/* Search and grouping sit on one control line, both 28px and both
+                in the header's bordered-pill language — the grouping select
+                replaces the tab row that used to span the card. */}
+            <div className="flex items-center gap-2">
+              <label className="relative flex w-full items-center sm:w-56">
+                <span className="sr-only">Search the registry</span>
+                <svg viewBox="0 0 16 16" aria-hidden="true" className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                  <circle cx="7" cy="7" r="4.5" />
+                  <path d="M10.5 10.5 14 14" />
+                </svg>
+                <input
+                  value={query}
+                  onChange={(e) => setParam("q", e.target.value || null)}
+                  className="h-7 w-full rounded-sm border border-line bg-paper pl-7 pr-2 text-[12px] text-ink placeholder:text-muted focus:border-ink focus:outline-none"
+                  placeholder="Search name, source or key"
+                />
+              </label>
+              <div className="relative h-7 shrink-0">
+                <div className="pointer-events-none flex h-7 items-center gap-1.5 rounded-sm border border-line px-2.5">
+                  <span className="whitespace-nowrap text-[12px] font-bold text-ink">
+                    {GROUP_MODE_OPTIONS.find((option) => option.id === groupMode)!.label}
+                  </span>
+                  <svg viewBox="0 0 16 16" aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 6l4 4 4-4" />
+                  </svg>
+                </div>
+                <select
+                  value={groupMode}
+                  onChange={(e) => setParam("group", e.target.value === "model" ? null : e.target.value)}
+                  className="absolute inset-0 h-7 w-full cursor-pointer opacity-0"
+                  aria-label="Group registry by"
+                >
+                  {GROUP_MODE_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
-          {loading && <p className="p-4 text-sm text-muted">Loading data registry...</p>}
-          {error && <p className="p-4 text-sm text-danger-500">{error}</p>}
+
+          {loading && <p className="py-4 text-sm text-muted">Loading data registry...</p>}
+          {error && <p className="py-4 text-sm text-danger-500">{error}</p>}
           {!loading && !error && (
             <div className="max-h-[720px] overflow-y-auto">
               {groupedRows.map(([key, items]) => (
                 <section key={key}>
-                  <div className="sticky top-0 z-10 border-y border-line border-l-2 border-l-brand-500 bg-paper-2 px-4 py-2 text-xs font-bold uppercase tracking-eyebrow text-muted">
-                    {groupLabel(key)} <span className="ml-1 font-mono text-[11px] font-normal normal-case tracking-normal">{items.length}</span>
+                  <div className="sticky top-0 z-10 border-b border-line bg-paper py-2 text-xs font-bold uppercase tracking-eyebrow text-muted">
+                    {groupLabel(key)} <span className="ml-1 font-normal normal-case tracking-normal tabular-nums">{items.length}</span>
                   </div>
-                  <div className="divide-y divide-paper-2">
-                    {items.map((row) => (
-                      <button
-                        key={row.id}
-                        type="button"
-                        onClick={() => setParam("point", row.id)}
-                        className={`grid w-full grid-cols-[1fr_auto] gap-4 border-l-2 px-4 py-2.5 text-left transition-colors duration-100 ease-in ${
-                          selectedRow?.id === row.id
-                            ? "border-l-brand-500 bg-brand-50/40"
-                            : "border-l-transparent hover:bg-paper-2"
-                        }`}
-                      >
+                  {items.map((row) => (
+                    <button
+                      key={row.id}
+                      type="button"
+                      onClick={() => setParam("point", row.id)}
+                      className={`grid w-full grid-cols-[1fr_auto] gap-4 border-b border-line py-3 text-left last:border-0 transition-colors duration-100 ease-in ${
+                        selectedRow?.id === row.id ? "bg-paper-2" : "hover:bg-paper-2"
+                      }`}
+                    >
+                      <span className="flex min-w-0 gap-2.5">
+                        {/* State dot on every row, not just the unhealthy
+                            ones — a column of colour scans far faster than
+                            chips that appear and disappear. */}
+                        <span
+                          aria-hidden="true"
+                          className={`mt-1 h-3.5 w-3.5 shrink-0 ${FRESHNESS_STYLE[row.freshness].dot}`}
+                        />
                         <span className="min-w-0">
-                          <span className="block truncate text-[13px] font-medium text-ink">{row.label}</span>
-                          <span className="mt-0.5 block truncate font-mono text-[11px] text-muted">{row.technicalKey}</span>
+                          <span className="block truncate text-[15px] text-ink">{row.label}</span>
+                          <span className="mt-1 block truncate text-[13px] text-muted">
+                            {row.technicalKey} · {row.source}
+                          </span>
                         </span>
-                        <span className="flex flex-col items-end gap-1">
-                          <span className="font-mono text-[13px] font-medium tabular-nums text-ink">{formatValue(row)}</span>
+                      </span>
+                      <span className="flex flex-col items-end gap-1">
+                        <span className="text-[15px] font-semibold tabular-nums text-ink">{formatValue(row)}</span>
+                        <span className="flex items-center gap-1.5">
+                          {row.score !== null && (
+                            <span className="text-[12px] tabular-nums text-muted">score {formatScore(row.score)}</span>
+                          )}
                           {row.freshness !== "current" && (
-                            <span className={`border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-eyebrow ${FRESHNESS_CLASS[row.freshness]}`}>
+                            <span className={`rounded-sm px-2 py-0.5 text-[11px] font-bold ${FRESHNESS_STYLE[row.freshness].chip}`}>
                               {groupLabel(row.freshness)}
                             </span>
                           )}
                         </span>
-                      </button>
-                    ))}
-                  </div>
+                      </span>
+                    </button>
+                  ))}
                 </section>
               ))}
             </div>
           )}
         </div>
 
-        <aside className="rounded-sm border border-line border-t-2 border-t-brand-500 bg-paper">
-          <div className="border-b border-line bg-paper-2 px-4 py-2.5">
-            <h2 className="text-[13px] font-semibold text-ink">Live impact</h2>
+        <aside className="rounded-lg border border-line bg-paper p-5">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-ink">Live impact</h2>
+            <p className="mt-0.5 text-[13px] text-muted">Freshness and dependencies for the selected row</p>
           </div>
-          <div className="p-4">
           {selectedRow ? (
             <div className="space-y-4">
               <div>
-                <p className="text-xs text-muted">Selected</p>
-                <p className="mt-1 text-sm font-medium text-ink">{selectedRow.label}</p>
-                <p className="mt-0.5 break-all text-xs text-muted">{selectedRow.technicalKey}</p>
+                <p className="text-[15px] text-ink">{selectedRow.label}</p>
+                <p className="mt-0.5 break-all text-[13px] text-muted">{selectedRow.technicalKey}</p>
               </div>
-              <div className="grid grid-cols-2 divide-x divide-line border border-line">
-                <div className="px-3 py-2.5">
+              {/* The state, named and explained — the row chip says what it
+                  is, this says what it means for the number above. */}
+              <div className={`rounded-sm px-3 py-2 ${FRESHNESS_STYLE[selectedRow.freshness].chip}`}>
+                <p className="text-[11px] font-bold uppercase tracking-eyebrow">{groupLabel(selectedRow.freshness)}</p>
+                <p className="mt-1 text-[12px] leading-5 opacity-90">{FRESHNESS_STYLE[selectedRow.freshness].blurb}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4 border-y border-line py-3">
+                <div>
                   <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Value</p>
-                  <p className="mt-1 font-mono text-lg font-medium leading-none tabular-nums text-ink">{formatValue(selectedRow)}</p>
+                  <p className="mt-1 text-lg font-semibold leading-none tabular-nums text-ink">{formatValue(selectedRow)}</p>
                 </div>
-                <div className="px-3 py-2.5">
+                <div>
                   <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Score</p>
-                  <p className="mt-1 font-mono text-lg font-medium leading-none tabular-nums text-brand-700">{selectedRow.score !== null ? formatScore(selectedRow.score) : "-"}</p>
+                  <p className="mt-1 text-lg font-semibold leading-none tabular-nums text-brand-800">
+                    {selectedRow.score !== null ? formatScore(selectedRow.score) : "-"}
+                  </p>
                 </div>
               </div>
-              <dl className="divide-y divide-line border-y border-line text-[13px]">
+              <dl className="divide-y divide-line text-[13px]">
                 <div className="flex justify-between gap-4 py-1.5"><dt className="text-muted">Update type</dt><dd className="text-ink">{groupLabel(selectedRow.updateType)}</dd></div>
                 <div className="flex justify-between gap-4 py-1.5"><dt className="text-muted">Source</dt><dd className="text-right text-ink">{selectedRow.source}</dd></div>
                 <div className="flex justify-between gap-4 py-1.5"><dt className="text-muted">Owner</dt><dd className="text-ink">{groupLabel(selectedRow.owner)}</dd></div>
@@ -360,38 +444,38 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                 <div className="flex justify-between gap-4 py-1.5"><dt className="text-muted">Observed at</dt><dd className="text-ink">{formatDate(selectedRow.observedAt)}</dd></div>
               </dl>
               <div>
-                <p className="text-xs font-medium text-muted">Upstream series</p>
+                <p className="text-[13px] text-muted">Upstream series</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {selectedRow.upstreamSeries.length > 0 ? selectedRow.upstreamSeries.map((id) => (
-                    <span key={id} className="border border-line bg-paper-2 px-2 py-0.5 font-mono text-[11px] text-ink-2">{id}</span>
-                  )) : <span className="text-xs text-muted">No upstream series</span>}
+                    <span key={id} className="rounded-sm border border-line px-2 py-0.5 text-[11px] text-ink-2">{id}</span>
+                  )) : <span className="text-[13px] text-muted">No upstream series</span>}
                 </div>
               </div>
               {isScoreCellId(selectedRow.id) ? (
                 <button
                   type="button"
                   onClick={() => setParam("inspect", selectedRow.id)}
-                  className="h-9 w-full bg-ink px-3 text-[13px] font-semibold text-paper transition duration-100 ease-in hover:brightness-[1.15]"
+                  className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-sm border border-line px-3 text-[13px] font-semibold text-ink transition-colors duration-100 ease-in hover:bg-paper-2"
                 >
-                  View exact formula & contribution
+                  View exact formula &amp; contribution
+                  <span aria-hidden="true">›</span>
                 </button>
               ) : (
-                <p className="border border-line bg-paper-2 px-3 py-2 text-xs leading-5 text-muted">
+                <p className="text-[13px] leading-5 text-muted">
                   {selectedRow.modelGroup === "governance"
-                    ? "Governance parameters configure the engine directly — see Methodology for what each one means."
+                    ? "Governance parameters configure the engine directly - see Methodology for what each one means."
                     : selectedRow.modelGroup === "vetoes"
-                      ? "Veto gates are risk-gate rules, not a weighted calculation — see Methodology's veto gates section for the exact trigger."
+                      ? "Veto gates are risk-gate rules, not a weighted calculation - see Methodology's veto gates section for the exact trigger."
                       : "This data point has no formula breakdown."}
                 </p>
               )}
-              <p className="border border-line bg-paper-2 px-3 py-2 text-xs leading-5 text-muted">
+              <p className="border-t border-line pt-3 text-[12px] leading-5 text-muted">
                 Draft preview, edit reason, expiry and publish impact land in Slice 4. This panel is read-only for the current MVP slice.
               </p>
             </div>
           ) : (
             <p className="text-[13px] text-muted">Select a registry row to inspect freshness and dependencies.</p>
           )}
-          </div>
         </aside>
       </section>
 

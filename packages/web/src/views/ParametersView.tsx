@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { Snapshot, Params } from "@wayfinder/engine";
 import { GROUP_LABELS, NODE_LABELS } from "@wayfinder/engine";
 import { scoresFromSnapshot, vetoesFromSnapshot, useLocalAllocation } from "../hooks/useLocalAllocation.js";
 import { AllocationBar } from "../components/AllocationBar.js";
+import { StickyAllocationBar } from "../components/StickyAllocationBar.js";
 import { WeightEditor } from "../components/WeightEditor.js";
 import { CapEditor } from "../components/CapEditor.js";
 import { runFragilityTest } from "../lib/fragility.js";
@@ -23,6 +24,9 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
   const [showFragility, setShowFragility] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // The full bar is what the sticky strip watches: once this scrolls out of
+  // view, the condensed version takes over.
+  const liveBarRef = useRef<HTMLElement>(null);
 
   const scores = scoresFromSnapshot(snapshot.scores);
   const vetoes = vetoesFromSnapshot(snapshot.vetoes);
@@ -99,7 +103,9 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
         </div>
       </div>
 
-      <section className="mb-10 border border-line bg-paper">
+      <StickyAllocationBar allocation={allocation} watch={liveBarRef} />
+
+      <section ref={liveBarRef} className="mb-10 border border-line bg-paper">
         <div className="border-b border-line bg-paper-2 px-5 py-3">
           <h2 className="text-[13px] font-semibold text-ink">Live allocation</h2>
           <p className="mt-0.5 text-xs text-muted">
