@@ -42,20 +42,20 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
           engraving badly. This stays sharp at any panel size and costs 20KB
           instead of 7.7MB. */}
       <div className="relative hidden w-1/2 shrink-0 overflow-hidden bg-[#0B1A10] lg:block">
-        {/* Arvia's own engraved banknote artwork. Kept at its native 16:9 and
-            cropped by object-cover at render time — the earlier version was
-            pre-cropped to portrait, which stretched the engraving. object-right
-            keeps the lighthouse in frame as the panel narrows. */}
+        {/* Anchored so its centre sits on the panel's top-left corner: only the
+            lower-right quadrant of the rosette is on screen, reading as a
+            detail the frame happens to crop rather than a motif centred in the
+            panel. Oversized so that quarter still fills the corner. */}
         <img
-          src="/lighthouse.webp"
+          src="/guilloche.svg"
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 h-full w-full select-none object-cover object-right"
+          className="pointer-events-none absolute left-0 top-0 h-[150%] w-[150%] -translate-x-1/2 -translate-y-1/2 select-none"
         />
-        {/* Scrim: the artwork runs pale, so the wordmark and copy need a darker
-            ground at the top and bottom to stay legible. */}
+        {/* Fades the pattern out toward the bottom-right so it never competes
+            with the headline sitting there. */}
         <div
-          className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/25 to-black/80"
+          className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,transparent_20%,rgba(11,26,16,0.85)_70%)]"
           aria-hidden="true"
         />
 
