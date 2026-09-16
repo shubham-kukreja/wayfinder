@@ -101,14 +101,14 @@
   border: 1px solid #e3e3e3;
   border-radius: 0;
   background:
-    linear-gradient(to right, #8bd4a0 0 var(--wf-fill, 0%), #f7f7f7 var(--wf-fill, 0%) 100%);
+    linear-gradient(to right, #a8e6b4 0 var(--wf-fill, 0%), #f7f7f7 var(--wf-fill, 0%) 100%);
 }
 .wf-slider::-moz-range-track {
   height: 28px;
   border: 1px solid #e3e3e3;
   border-radius: 0;
   background:
-    linear-gradient(to right, #8bd4a0 0 var(--wf-fill, 0%), #f7f7f7 var(--wf-fill, 0%) 100%);
+    linear-gradient(to right, #a8e6b4 0 var(--wf-fill, 0%), #f7f7f7 var(--wf-fill, 0%) 100%);
 }
 
 /* Square ink handle, deliberately wider than a hairline: a 3px bar sat exactly
@@ -123,7 +123,7 @@
   margin-top: -1px;
   border: 1px solid #ffffff;
   border-radius: 0;
-  background: #2f3d2c;
+  background: #3b9a52;
   cursor: ew-resize;
 }
 .wf-slider::-moz-range-thumb {
@@ -131,18 +131,18 @@
   height: 28px;
   border: 1px solid #ffffff;
   border-radius: 0;
-  background: #2f3d2c;
+  background: #3b9a52;
   cursor: ew-resize;
 }
 .wf-slider:hover::-webkit-slider-thumb {
-  background: #536e51;
+  background: #4caf63;
 }
 .wf-slider:hover::-moz-range-thumb {
-  background: #536e51;
+  background: #4caf63;
 }
 
 .wf-slider:focus-visible {
-  outline: 2px solid rgba(62, 207, 95, 0.35);
+  outline: 2px solid rgba(59, 154, 82, 0.35);
   outline-offset: 1px;
 }
 .wf-slider:disabled {
