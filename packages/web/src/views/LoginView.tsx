@@ -42,16 +42,17 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
           engraving badly. This stays sharp at any panel size and costs 20KB
           instead of 7.7MB. */}
       <div className="relative hidden w-1/2 shrink-0 overflow-hidden bg-[#0B1A10] lg:block">
-        {/* Anchored so its centre sits on the panel's top-left corner: only the
-            lower-right quadrant of the rosette is on screen, reading as a
-            detail the frame happens to crop rather than a motif centred in the
-            panel. Oversized so that quarter still fills the corner. */}
-        <img
-          src="/guilloche.svg"
-          alt=""
+        {/* The source viewBox is "-140 -580 2184 2114", so the rosette is not
+            centred in its own canvas — positioning by percentage put it in the
+            middle of the panel. A wrapper scaled from its top-left corner is
+            predictable regardless of where the art sits inside the file: the
+            quadrant nearest the origin lands in the panel's top-left corner. */}
+        <div
+          className="pointer-events-none absolute left-0 top-0 h-[190%] w-[190%] origin-top-left -translate-x-[22%] -translate-y-[26%] select-none"
           aria-hidden="true"
-          className="pointer-events-none absolute left-0 top-0 h-[150%] w-[150%] -translate-x-1/2 -translate-y-1/2 select-none"
-        />
+        >
+          <img src="/guilloche.svg" alt="" className="h-full w-full max-w-none object-cover" />
+        </div>
         {/* Fades the pattern out toward the bottom-right so it never competes
             with the headline sitting there. */}
         <div
@@ -67,12 +68,12 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
           />
 
           <div>
-            <p className="font-display text-[40px] font-bold leading-[1.12] tracking-display text-white">
+            <p className="font-display text-[52px] font-bold leading-[1.08] tracking-display text-white">
               Make wealth work
               <br />
               alongside you.
             </p>
-            <p className="mt-5 max-w-md text-[17px] leading-relaxed text-white/75">
+            <p className="mt-6 max-w-xl text-[19px] leading-relaxed text-white/75">
               CORE is Arvia Wealth&rsquo;s internal research system for capital allocation: signals,
               scoring and model versions in one place.
             </p>
