@@ -1,0 +1,18 @@
+node_modules
+**/node_modules
+**/dist
+**/*.log
+.git
+.claude
+docs
+packages/web
+
+# Never bake a local database into the image — the deployed DB lives on
+# the Railway volume at DB_PATH. Copying this in would both bloat the
+# image and shadow the volume if DB_PATH were ever misconfigured.
+packages/server/data
+packages/server/.env
+
+# Tests and fixtures aren't needed at runtime (fixtures include PDFs).
+packages/server/test
+packages/engine/test

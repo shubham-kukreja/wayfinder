@@ -11,6 +11,12 @@ import { loadConfig } from "../config.js";
 // it's excluded from this always-fast health check; it's exercised
 // directly by its own live test instead.
 export function registerHealthRoute(app: FastifyInstance): void {
+  // Liveness only: is the process up and serving? Deliberately touches no
+  // adapter and no database, so a deploy healthcheck can't be failed by a
+  // flaky upstream (/api/health below calls five external APIs and is far
+  // too slow and failure-prone for that job).
+  app.get("/api/live", async () => ({ status: "ok" }));
+
   app.get("/api/health", async () => {
     const config = loadConfig();
     const fred = createFredAdapter({ apiKey: config.fredApiKey, series: FRED_SERIES });
