@@ -57,7 +57,7 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
             aria-hidden="true"
           />
 
-          <div className="relative flex h-full flex-col justify-end p-10">
+          <div className="relative flex h-full flex-col justify-end px-10 pt-10 pb-16">
             <p className="max-w-[13ch] font-display text-[clamp(40px,4.6vw,76px)] font-extrabold leading-[0.92] tracking-[-0.035em] text-white">
               Make wealth work
               <br />
@@ -68,31 +68,22 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
 
         {/* ---------- right: form column ---------- */}
         <div className="flex w-full flex-col self-stretch lg:w-[360px] lg:shrink-0">
-          <p className="absolute right-8 top-8 text-right text-[13px] text-ink-2">
+          <p className="absolute right-16 top-8 text-right text-[13px] text-ink-2">
             Need access?{" "}
-            <span className="font-semibold text-ink underline underline-offset-2">Contact your admin</span>
+            <a
+              href="mailto:shubham@arviawealth.com?subject=CORE%20access%20request"
+              className="font-semibold text-ink underline underline-offset-2 transition-opacity duration-100 ease-in hover:opacity-70"
+            >
+              Contact your admin
+            </a>
           </p>
 
           <main className="flex flex-1 flex-col justify-center py-10">
-            {/* The O carries a slash, as in the empty-set mark. Drawn as a span
-                over the letter rather than using the ∅ glyph: that character
-                comes from a fallback face and would not match the display
-                cut's weight or width. aria-label keeps it readable as "CORE". */}
             <div className="mb-12 flex items-baseline justify-center gap-2">
-              <h1
-                aria-label="CORE"
-                className="font-display text-[38px] font-extrabold leading-none tracking-display text-ink"
-              >
-                <span aria-hidden="true">C</span>
-                <span aria-hidden="true" className="relative inline-block">
-                  O
-                  <span className="absolute left-1/2 top-1/2 h-[2.5px] w-[1.15em] -translate-x-1/2 -translate-y-1/2 -rotate-45 bg-ink" />
-                </span>
-                <span aria-hidden="true">RE</span>
+              <h1 className="font-display text-[38px] font-extrabold leading-none tracking-display text-ink">
+                CORE
+                <span aria-hidden="true">.</span>
               </h1>
-              <span aria-hidden="true" className="font-display text-[38px] font-extrabold leading-none tracking-display text-ink">
-                .
-              </span>
             </div>
 
             <form onSubmit={handleSubmit}>
