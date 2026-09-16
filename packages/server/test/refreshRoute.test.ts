@@ -61,14 +61,18 @@ describe("parseRequestedSources — POST /api/refresh?sources=... (§13.1, §11.
   it("every available source name is buildable", () => {
     const config = loadConfig();
     const adapters = buildAdapters([...AVAILABLE_SOURCES], config);
-    // 12 source names -> 12 adapter instances, though "rbi" and
+    // 13 source names -> 13 adapter instances, though "rbi" and
     // "rbi_homepage" both report id "RBI" (two different mechanisms
     // fetching different RBI-sourced series — the dbie.rbihub.in mirror
-    // vs. rbi.org.in's own homepage), so the id list has only 11 unique
+    // vs. rbi.org.in's own homepage), so the id list has only 12 unique
     // values. "ccil" reports id "CCIL" — a distinct source writing to
     // the same tbill_1y series "rbi" (dbie.rbihub.in) already populates.
-    expect(adapters).toHaveLength(12);
+    // "aaa3y" reports id "AAA3Y_MOCK" — an intentional always-fails
+    // adapter (see adapters/aaa3y.ts) so aaa_3y surfaces honestly as
+    // missing/failed rather than being silently absent.
+    expect(adapters).toHaveLength(13);
     expect(adapters.map((a) => a.id).sort()).toEqual([
+      "AAA3Y_MOCK",
       "AMFI",
       "CCIL",
       "DBNOMICS",

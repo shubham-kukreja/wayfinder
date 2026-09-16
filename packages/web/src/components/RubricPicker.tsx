@@ -75,14 +75,14 @@ export function RubricPicker({
           <button
             onClick={handleSave}
             disabled={!isComplete || saving}
-            className="rounded-md bg-neutral-900 px-2 py-1 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-40"
+            className="rounded-md bg-brand-500 px-2 py-1 text-xs font-medium text-black transition duration-100 ease-in hover:brightness-105 hover:-translate-y-px disabled:opacity-40"
           >
             {saving ? "Saving…" : "Save"}
           </button>
         </div>
       </div>
-      {saveError && <p className="text-xs text-rose-600">Save failed: {saveError}</p>}
-      {saved && !saveError && <p className="text-xs text-emerald-600">Saved to server.</p>}
+      {saveError && <p className="text-xs text-danger-500">Save failed: {saveError}</p>}
+      {saved && !saveError && <p className="text-xs text-brand-800">Saved to server.</p>}
     </div>
   );
 }

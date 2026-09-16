@@ -21,7 +21,7 @@ function staleBadge(staleDays: number | null): { label: string; className: strin
   if (staleDays === null) return null;
   if (staleDays <= 7) return { label: `${staleDays}d`, className: "text-neutral-400" };
   if (staleDays <= 45) return { label: `${staleDays}d stale`, className: "text-amber-600" };
-  return { label: `${staleDays}d stale`, className: "text-rose-600" };
+  return { label: `${staleDays}d stale`, className: "text-danger-500" };
 }
 
 export function InputsView({ snapshot }: { snapshot: Snapshot }) {
@@ -64,7 +64,7 @@ export function InputsView({ snapshot }: { snapshot: Snapshot }) {
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
-      <h1 className="mb-1 text-xl font-semibold text-neutral-900">Inputs</h1>
+      <h1 className="mb-1 font-display text-xl font-extrabold tracking-tight text-neutral-900">Inputs</h1>
       <p className="mb-8 text-sm text-neutral-500">
         All 85 scores, split by provenance and sorted by how much they can move the allocation — not sheet order.
       </p>
@@ -118,10 +118,10 @@ export function InputsView({ snapshot }: { snapshot: Snapshot }) {
                         <div className="flex shrink-0 items-center gap-3">
                           {stale && <span className={`text-xs ${stale.className}`}>{stale.label}</span>}
                           {state.confidence && <span className="text-xs text-neutral-400">{state.confidence}</span>}
-                          <span className="w-10 text-right tabular-nums text-neutral-500" title="Impact if this score moved ±10 points">
+                          <span className="w-10 text-right font-mono tabular-nums text-neutral-500" title="Impact if this score moved ±10 points">
                             {impact > 0.0005 ? `${(impact * 100).toFixed(1)}pp` : "—"}
                           </span>
-                          <span className="w-10 text-right tabular-nums font-medium text-neutral-900">{formatScore(displayValue)}</span>
+                          <span className="w-10 text-right font-mono tabular-nums font-medium text-neutral-900">{formatScore(displayValue)}</span>
                         </div>
                       </div>
                       {rubricSpec && isRubricExpanded && (

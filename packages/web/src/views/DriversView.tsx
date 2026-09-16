@@ -1,9 +1,12 @@
 import { useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { Snapshot } from "@wayfinder/engine";
-import { NODE_LABELS, TILT_GROUP_NODES, GROUP_LABELS, computeAllocation } from "@wayfinder/engine";
+import { NODE_LABELS, TILT_GROUP_NODES, GROUP_LABELS, L1_SIGNALS, EQUITY_SIGNALS, DEBT_SIGNALS, METALS_SIGNALS, computeAllocation } from "@wayfinder/engine";
 import { scoresFromSnapshot, vetoesFromSnapshot } from "../hooks/useLocalAllocation.js";
 import { useLatestReview } from "../hooks/useLatestReview.js";
 import { DivergingBar } from "../components/DivergingBar.js";
+import { SignalMatrix } from "../components/SignalMatrix.js";
+import { CalculationInspector } from "../components/CalculationInspector.js";
 import { computeSensitivity } from "../lib/sensitivity.js";
 import { attributeChanges } from "../lib/attribution.js";
 import { formatPct, formatScore } from "../lib/format.js";
@@ -11,11 +14,30 @@ import { formatPct, formatScore } from "../lib/format.js";
 const TILT_GROUPS = ["l1", "equity", "debt", "metals"] as const;
 
 export function DriversView({ snapshot }: { snapshot: Snapshot }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedNode = searchParams.get("node");
   const scores = scoresFromSnapshot(snapshot.scores);
   const vetoes = vetoesFromSnapshot(snapshot.vetoes);
   const { review, loading: reviewLoading } = useLatestReview();
 
   const allocation = useMemo(() => computeAllocation(scores, vetoes, snapshot.params), [scores, vetoes, snapshot.params]);
+
+  function selectNode(id: string) {
+    const next = new URLSearchParams(searchParams);
+    next.set("node", id);
+    setSearchParams(next);
+  }
+
+  function closeInspector() {
+    const next = new URLSearchParams(searchParams);
+    next.delete("node");
+    setSearchParams(next);
+  }
+
+  const l1Composites = Object.fromEntries(TILT_GROUP_NODES.l1.map((id) => [id, allocation.groups.l1.nodes[id]!.composite]));
+  const equityComposites = Object.fromEntries(TILT_GROUP_NODES.equity.map((id) => [id, allocation.groups.equity.nodes[id]!.composite]));
+  const debtComposites = Object.fromEntries(TILT_GROUP_NODES.debt.map((id) => [id, allocation.groups.debt.nodes[id]!.composite]));
+  const metalsComposites = Object.fromEntries(TILT_GROUP_NODES.metals.map((id) => [id, allocation.groups.metals.nodes[id]!.composite]));
 
   const sensitivity = useMemo(() => computeSensitivity(scores, vetoes, snapshot.params).slice(0, 10), [scores, vetoes, snapshot.params]);
 
@@ -38,8 +60,35 @@ export function DriversView({ snapshot }: { snapshot: Snapshot }) {
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
-      <h1 className="mb-1 text-xl font-semibold text-neutral-900">Drivers</h1>
+      <CalculationInspector snapshot={snapshot} allocation={allocation} selectedId={selectedNode} onClose={closeInspector} />
+
+      <h1 className="mb-1 font-display text-xl font-extrabold tracking-tight text-neutral-900">Drivers</h1>
       <p className="mb-8 text-sm text-neutral-500">Composite decomposition, change attribution, and sensitivity — the "why" behind the allocation.</p>
+
+      {/* §14 of the UX spec ("Signal Matrix") - the actual per-signal
+          breakdown behind each composite, replacing spreadsheet-style
+          input blocks. Small inline bars per cell (not giant colored
+          heatmap tiles, per the spec), click-through to
+          CalculationInspector for raw input / percentile / weight /
+          contribution detail on that exact node::signal. */}
+      <section className="mb-10 space-y-8">
+        <div>
+          <h2 className="mb-3 text-sm font-semibold text-neutral-700">L1 signal matrix</h2>
+          <SignalMatrix title="L1 asset-class signals" signals={L1_SIGNALS} nodes={TILT_GROUP_NODES.l1} scores={scores} composites={l1Composites} onSelect={selectNode} />
+        </div>
+        <div>
+          <h2 className="mb-3 text-sm font-semibold text-neutral-700">Equity segment signals</h2>
+          <SignalMatrix title="Equity segment signals" signals={EQUITY_SIGNALS} nodes={TILT_GROUP_NODES.equity} scores={scores} composites={equityComposites} onSelect={selectNode} />
+        </div>
+        <div>
+          <h2 className="mb-3 text-sm font-semibold text-neutral-700">Debt bucket signals</h2>
+          <SignalMatrix title="Debt bucket signals" signals={DEBT_SIGNALS} nodes={TILT_GROUP_NODES.debt} scores={scores} composites={debtComposites} onSelect={selectNode} />
+        </div>
+        <div>
+          <h2 className="mb-3 text-sm font-semibold text-neutral-700">Precious metals signals</h2>
+          <SignalMatrix title="Precious metals signals" signals={METALS_SIGNALS} nodes={TILT_GROUP_NODES.metals} scores={scores} composites={metalsComposites} onSelect={selectNode} />
+        </div>
+      </section>
 
       <section className="mb-10">
         <h2 className="mb-3 text-sm font-semibold text-neutral-700">Composites</h2>
@@ -88,7 +137,7 @@ export function DriversView({ snapshot }: { snapshot: Snapshot }) {
                   {row.label} {formatPct(row.before)} → {formatPct(row.after)}
                   {row.explanation && <span className="text-neutral-400"> — because {row.explanation}</span>}
                 </span>
-                <span className={`shrink-0 tabular-nums ${row.delta >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                <span className={`shrink-0 font-mono tabular-nums ${row.delta >= 0 ? "text-brand-800" : "text-danger-500"}`}>
                   {row.delta >= 0 ? "+" : ""}
                   {formatPct(row.delta)}
                 </span>

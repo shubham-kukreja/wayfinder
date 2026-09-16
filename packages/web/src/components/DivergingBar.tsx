@@ -13,7 +13,7 @@ export function DivergingBar({ value, max = 50 }: { value: number; max?: number 
         <div className="flex w-1/2 justify-end">
           {!isPositive && (
             <div
-              className="h-full rounded-l-sm bg-rose-400"
+              className="h-full rounded-l-sm bg-danger-500"
               style={{ width: `${pct}%` }}
               title={`${value.toFixed(1)}`}
             />
@@ -22,7 +22,7 @@ export function DivergingBar({ value, max = 50 }: { value: number; max?: number 
         <div className="flex w-1/2 justify-start">
           {isPositive && (
             <div
-              className="h-full rounded-r-sm bg-emerald-500"
+              className="h-full rounded-r-sm bg-brand-500"
               style={{ width: `${pct}%` }}
               title={`${value.toFixed(1)}`}
             />

@@ -67,6 +67,12 @@ export interface Params {
 
 export interface TiltNodeResult {
   composite: number;
+  contributions: Array<{
+    signalId: string;
+    score: number;
+    weight: number;
+    contribution: number;
+  }>;
   rawTilt: number;
   tilt: number;
   prelim: number;

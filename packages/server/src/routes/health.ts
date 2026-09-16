@@ -3,6 +3,7 @@ import { createFredAdapter, FRED_SERIES } from "../adapters/fred.js";
 import { createBullionAdapter, BULLION_SERIES } from "../adapters/bullion.js";
 import { createAmfiAdapter } from "../adapters/amfi.js";
 import { createNseAdapter } from "../adapters/nse.js";
+import { createAaa3yAdapter } from "../adapters/aaa3y.js";
 import { loadConfig } from "../config.js";
 
 // §13.1 GET /api/health — per-source status, last success, staleness.
@@ -16,16 +17,18 @@ export function registerHealthRoute(app: FastifyInstance): void {
     const bullion = createBullionAdapter({ apiKey: config.metalsDevApiKey, series: BULLION_SERIES });
     const amfi = createAmfiAdapter();
     const nse = createNseAdapter();
+    const aaa3y = createAaa3yAdapter();
 
-    const [fredHealth, bullionHealth, amfiHealth, nseHealth] = await Promise.all([
+    const [fredHealth, bullionHealth, amfiHealth, nseHealth, aaa3yHealth] = await Promise.all([
       fred.health(),
       bullion.health(),
       amfi.health(),
       nse.health(),
+      aaa3y.health(),
     ]);
 
     return {
-      sources: [fredHealth, bullionHealth, amfiHealth, nseHealth],
+      sources: [fredHealth, bullionHealth, amfiHealth, nseHealth, aaa3yHealth],
       checkedAt: new Date().toISOString(),
     };
   });

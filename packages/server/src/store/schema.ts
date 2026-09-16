@@ -1,5 +1,12 @@
 import type Database from "better-sqlite3";
 
+function ensureColumn(db: Database.Database, table: string, column: string, definition: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (!columns.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
 // §11.2 — append-only store. Revisions insert a new row with a later
 // fetched_at; latest wins on read. This preserves the audit trail needed
 // when a source revises a published figure (RBI/MOSPI do this) and a
@@ -24,6 +31,8 @@ export function migrate(db: Database.Database): void {
       value      REAL NOT NULL,
       note       TEXT,
       confidence TEXT,
+      reason     TEXT,
+      actor      TEXT,
       entered_at TEXT NOT NULL
     );
 
@@ -31,6 +40,9 @@ export function migrate(db: Database.Database): void {
       node_id    TEXT PRIMARY KEY,
       active     INTEGER NOT NULL,
       detail     TEXT,
+      reason     TEXT,
+      expiry     TEXT,
+      actor      TEXT,
       entered_at TEXT NOT NULL
     );
 
@@ -46,6 +58,9 @@ export function migrate(db: Database.Database): void {
       label      TEXT,
       json       TEXT NOT NULL,
       is_review  INTEGER NOT NULL,
+      parent_id  TEXT,
+      published  INTEGER NOT NULL DEFAULT 0,
+      actor      TEXT,
       created_at TEXT NOT NULL
     );
 
@@ -59,4 +74,13 @@ export function migrate(db: Database.Database): void {
       rows_written INTEGER NOT NULL DEFAULT 0
     );
   `);
+
+  ensureColumn(db, "manual_scores", "reason", "TEXT");
+  ensureColumn(db, "manual_scores", "actor", "TEXT");
+  ensureColumn(db, "manual_vetoes", "reason", "TEXT");
+  ensureColumn(db, "manual_vetoes", "expiry", "TEXT");
+  ensureColumn(db, "manual_vetoes", "actor", "TEXT");
+  ensureColumn(db, "snapshots", "parent_id", "TEXT");
+  ensureColumn(db, "snapshots", "published", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "snapshots", "actor", "TEXT");
 }

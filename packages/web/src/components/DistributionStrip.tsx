@@ -6,9 +6,9 @@ export function DistributionStrip({ percentile }: { percentile: number | null })
     return <div className="h-2 w-full rounded-full bg-neutral-100" title="Insufficient history" />;
   }
   return (
-    <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-blue-200 via-neutral-200 to-rose-200">
+    <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-neutral-200 via-neutral-200 to-danger-50">
       <div
-        className="absolute top-1/2 h-3 w-1 -translate-y-1/2 rounded-full bg-neutral-900"
+        className="absolute top-1/2 h-3 w-1 -translate-y-1/2 rounded-full bg-brand-500"
         style={{ left: `calc(${percentile}% - 2px)` }}
         title={`${percentile.toFixed(0)}th percentile`}
       />

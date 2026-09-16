@@ -12,6 +12,17 @@ export interface AutoScoreResult {
   value: number;
   status: "ok" | "insufficient_history";
   observations: number;
+  // The date of the observation the score's CURRENT value was actually
+  // computed from — not asOfDate. A derived series can join two sources
+  // with different publication lags (e.g. deriveNiftyMomentumSeries
+  // month-joins FRED's gsec_10y, which as of 2026-09-15 trails
+  // nifty50_close by 3+ months), so the score's real freshness can be
+  // materially older than "today." null when there's no observation at
+  // all (insufficient_history with zero rows). Used by
+  // currentSnapshot.ts to set an honest staleDays instead of always 0 —
+  // §1 invariant 5: provenance (including freshness) must stay visible,
+  // never silently overstated.
+  latestDate: string | null;
 }
 
 export function autoScore(
@@ -22,20 +33,21 @@ export function autoScore(
 ): AutoScoreResult {
   const rows = latestObservations(db, seriesId);
   if (rows.length === 0) {
-    return { value: 50, status: "insufficient_history", observations: 0 };
+    return { value: 50, status: "insufficient_history", observations: 0, latestDate: null };
   }
 
   const current = rows[rows.length - 1]!.value;
+  const latestDate = rows[rows.length - 1]!.date;
   const history = rows.map((r) => r.value);
 
   const result = computePercentile(history, current, params.percentileMinObservations);
   if (result.status === "insufficient_history" || result.percentile === null) {
     // §1 invariant 4: a missing/unusable signal scores 50, never a guess.
-    return { value: 50, status: "insufficient_history", observations: result.observations };
+    return { value: 50, status: "insufficient_history", observations: result.observations, latestDate };
   }
 
   const value = transform === "inverted" ? 100 - result.percentile : result.percentile;
-  return { value, status: "ok", observations: result.observations };
+  return { value, status: "ok", observations: result.observations, latestDate };
 }
 
 // A ratio/derived series computed from two stored series (e.g.
@@ -90,14 +102,15 @@ export function autoScoreFromSeries(
   transform: "percentile" | "inverted"
 ): AutoScoreResult {
   if (observations.length === 0) {
-    return { value: 50, status: "insufficient_history", observations: 0 };
+    return { value: 50, status: "insufficient_history", observations: 0, latestDate: null };
   }
   const current = observations[observations.length - 1]!.value;
+  const latestDate = observations[observations.length - 1]!.date;
   const history = observations.map((o) => o.value);
   const result = computePercentile(history, current, params.percentileMinObservations);
   if (result.status === "insufficient_history" || result.percentile === null) {
-    return { value: 50, status: "insufficient_history", observations: result.observations };
+    return { value: 50, status: "insufficient_history", observations: result.observations, latestDate };
   }
   const value = transform === "inverted" ? 100 - result.percentile : result.percentile;
-  return { value, status: "ok", observations: result.observations };
+  return { value, status: "ok", observations: result.observations, latestDate };
 }

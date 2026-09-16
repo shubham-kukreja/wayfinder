@@ -55,6 +55,16 @@ const fetchLogEntrySchema = z.object({
 
 const tiltNodeResultSchema = z.object({
   composite: z.number(),
+  contributions: z
+    .array(
+      z.object({
+        signalId: z.string(),
+        score: z.number(),
+        weight: z.number(),
+        contribution: z.number(),
+      })
+    )
+    .default([]),
   rawTilt: z.number(),
   tilt: z.number(),
   prelim: z.number(),

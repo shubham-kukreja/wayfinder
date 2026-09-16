@@ -337,4 +337,37 @@ describe("deriveSectorRelMomentumSeries — §7.5 sector relative momentum histo
     const expected = (sector6m - nifty6m + (sector12m - nifty12m)) / 2;
     expect(last.value).toBeCloseTo(expected, 10);
   });
+
+  // Regression test for a real perf bug: the original implementation
+  // called a per-date O(n) filter/pop lookup once per row in the FULL
+  // history, making the whole derivation O(n^2). With niftyindices' real
+  // backfill producing 500+ daily rows per sector, that measured multiple
+  // SECONDS per sector and made every /api/snapshot request (which
+  // recomputes all 8 sectors via computeAutoScoreCells) take ~3s —
+  // discovered via a browser smoke test where the app never left its
+  // "Loading…" state. Fixed with a binary-search lookup
+  // (lastRowAtOrBefore); this test fails on a slow re-regression before
+  // it fails on a hang.
+  it("stays fast (well under 1s) with 2 years of dense daily history, not O(n^2) on row count", () => {
+    const start = new Date("2024-01-01T00:00:00Z");
+    const sectorRows = Array.from({ length: 730 }, (_, i) => {
+      const d = new Date(start);
+      d.setDate(d.getDate() + i);
+      return { seriesId: "sector_close_banking", date: d.toISOString().slice(0, 10), value: 100 * Math.pow(1.0005, i), basis: null, source: "NIFTYINDICES", fetchedAt: "2026-09-15T00:00:00Z" };
+    });
+    const niftyRows = Array.from({ length: 730 }, (_, i) => {
+      const d = new Date(start);
+      d.setDate(d.getDate() + i);
+      return { seriesId: "nifty50_close", date: d.toISOString().slice(0, 10), value: 100 * Math.pow(1.0003, i), basis: null, source: "NIFTYINDICES", fetchedAt: "2026-09-15T00:00:00Z" };
+    });
+    insertObservations(db, sectorRows);
+    insertObservations(db, niftyRows);
+
+    const t0 = Date.now();
+    const result = deriveSectorRelMomentumSeries(db, "sector_close_banking");
+    const elapsedMs = Date.now() - t0;
+
+    expect(result.length).toBeGreaterThan(0);
+    expect(elapsedMs).toBeLessThan(1000);
+  });
 });

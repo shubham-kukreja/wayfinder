@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 import type { Snapshot, Params } from "@wayfinder/engine";
 import { GROUP_LABELS, NODE_LABELS } from "@wayfinder/engine";
 import { scoresFromSnapshot, vetoesFromSnapshot, useLocalAllocation } from "../hooks/useLocalAllocation.js";
+import { AllocationBar } from "../components/AllocationBar.js";
 import { WeightEditor } from "../components/WeightEditor.js";
+import { CapEditor } from "../components/CapEditor.js";
 import { runFragilityTest } from "../lib/fragility.js";
 import { formatPct } from "../lib/format.js";
 import { saveParams } from "../lib/paramsApi.js";
@@ -39,6 +41,14 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
     setParams((p) => ({ ...p, neutralWeights: { ...p.neutralWeights, [group]: next } as Params["neutralWeights"] }));
   }
 
+  function updateMaxTilt(group: (typeof TILT_GROUPS)[number], value: number) {
+    setParams((p) => ({ ...p, maxTilt: { ...p.maxTilt, [group]: value } }));
+  }
+
+  function updateSectorCap<K extends keyof Params["sector"]>(key: K, value: Params["sector"][K]) {
+    setParams((p) => ({ ...p, sector: { ...p.sector, [key]: value } }));
+  }
+
   const isDirty = JSON.stringify(params) !== JSON.stringify(lastSavedParams);
 
   async function handleSave() {
@@ -58,27 +68,31 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
     <div className="mx-auto max-w-5xl px-6 py-10">
       <div className="mb-8 flex items-start justify-between">
         <div>
-          <h1 className="mb-1 text-xl font-semibold text-neutral-900">Parameters</h1>
+          <h1 className="mb-1 font-display text-xl font-extrabold tracking-tight text-neutral-900">Parameters</h1>
           <p className="text-sm text-neutral-500">
             Every weight, cap and threshold is editable. Recomputes locally, no network call — saving writes it to the
-            server so it applies everywhere and survives a reload.
+            server so it applies everywhere and survives a reload. See{" "}
+            <a href="/model/methodology" className="font-medium text-neutral-700 underline">
+              Methodology
+            </a>{" "}
+            for what each one means and why.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {saveError && <span className="text-xs text-rose-600">Save failed: {saveError}</span>}
-          {!saveError && !isDirty && <span className="text-xs text-emerald-600">Saved</span>}
+          {saveError && <span className="text-xs text-danger-500">Save failed: {saveError}</span>}
+          {!saveError && !isDirty && <span className="text-xs text-brand-800">Saved</span>}
           {isDirty && <span className="text-xs text-amber-600">Unsaved changes</span>}
           <button
             onClick={() => setParams(lastSavedParams)}
             disabled={!isDirty}
-            className="rounded-md border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 disabled:opacity-40"
+            className="rounded-md border-[1.5px] border-ink px-3 py-1.5 text-xs font-medium text-ink disabled:opacity-40"
           >
             Reset
           </button>
           <button
             onClick={handleSave}
             disabled={!isDirty || saving}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-40"
+            className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-black transition duration-100 ease-in hover:brightness-105 hover:-translate-y-px disabled:opacity-40"
           >
             {saving ? "Saving…" : "Save"}
           </button>
@@ -87,13 +101,8 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
 
       <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-4">
         <h2 className="mb-2 text-sm font-semibold text-neutral-800">Live allocation</h2>
-        <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-          {allocation.rollup.map((r) => (
-            <span key={r.id} className="tabular-nums text-neutral-700">
-              {r.label}: <span className="font-medium">{formatPct(r.portfolioWeight)}</span>
-            </span>
-          ))}
-        </div>
+        <p className="mb-3 text-xs text-neutral-400">Recomputed live from the weights and caps below, using the same allocation bar as Overview.</p>
+        <AllocationBar allocation={allocation} depth="detail" />
       </section>
 
       <section className="mb-8">
@@ -140,6 +149,31 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
         </div>
       </section>
 
+      <section className="mb-8">
+        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Tilt caps</h2>
+        <p className="mb-3 text-xs text-neutral-400">The maximum a node can move away from its neutral weight in a single review cycle. See Methodology for the reasoning behind each cap.</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="border border-neutral-200 bg-white p-4">
+            <h3 className="mb-3 text-sm font-semibold text-neutral-800">Max tilt</h3>
+            <div className="space-y-2">
+              <CapEditor label="L1 asset classes" value={params.maxTilt.l1} onChange={(v) => updateMaxTilt("l1", v)} />
+              <CapEditor label="Equity segments" value={params.maxTilt.equity} onChange={(v) => updateMaxTilt("equity", v)} />
+              <CapEditor label="Debt buckets" value={params.maxTilt.debt} onChange={(v) => updateMaxTilt("debt", v)} />
+              <CapEditor label="Gold/Silver split" value={params.maxTilt.metals} onChange={(v) => updateMaxTilt("metals", v)} />
+            </div>
+          </div>
+          <div className="border border-neutral-200 bg-white p-4">
+            <h3 className="mb-3 text-sm font-semibold text-neutral-800">Sector satellite</h3>
+            <div className="space-y-2">
+              <CapEditor label="Sleeve cap (% of Equity)" value={params.sector.sleeveCap} onChange={(v) => updateSectorCap("sleeveCap", v)} />
+              <CapEditor label="Max sectors held" value={params.sector.maxSectors} onChange={(v) => updateSectorCap("maxSectors", v)} isPercent={false} min={1} max={8} step={1} />
+              <CapEditor label="Qualification threshold" value={params.sector.threshold} onChange={(v) => updateSectorCap("threshold", v)} isPercent={false} min={0} max={100} step={1} />
+              <CapEditor label="Max consecutive quarters" value={params.sector.maxConsecutiveQuarters} onChange={(v) => updateSectorCap("maxConsecutiveQuarters", v)} isPercent={false} min={1} max={12} step={1} />
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-4">
         <h2 className="mb-2 text-sm font-semibold text-neutral-800">Normalisation</h2>
         <div className="flex gap-2">
@@ -148,7 +182,7 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
               key={mode}
               onClick={() => setParams((p) => ({ ...p, normalisation: mode }))}
               className={`rounded-md px-3 py-1.5 text-xs font-medium ${
-                params.normalisation === mode ? "bg-neutral-900 text-white" : "border border-neutral-200 text-neutral-600"
+                params.normalisation === mode ? "bg-brand-500 text-black" : "border border-neutral-200 text-neutral-600"
               }`}
             >
               {mode === "proportional" ? "Proportional (default)" : "Zero-sum"}

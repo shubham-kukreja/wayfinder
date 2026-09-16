@@ -11,9 +11,25 @@ describe("§5.2 verification vectors", () => {
   it("l1.equity", () => {
     const n = allocation.groups.l1.nodes["l1.equity"]!;
     expect(n.composite).toBeCloseTo(50.5, 2);
+    expect(n.contributions).toEqual([
+      { signalId: "valuation", score: 45, weight: 0.3, contribution: 13.5 },
+      { signalId: "macro", score: 55, weight: 0.2, contribution: 11 },
+      { signalId: "fundamentals", score: 55, weight: 0.2, contribution: 11 },
+      { signalId: "flows", score: 40, weight: 0.15, contribution: 6 },
+      { signalId: "momentum", score: 60, weight: 0.15, contribution: 9 },
+    ]);
     expect(n.tilt).toBeCloseTo(0.002, 3);
     expect(n.prelim).toBeCloseTo(0.5511, 3);
     expect(n.final).toBeCloseTo(0.5445, 3);
+  });
+
+  it("tilt-node contribution rows reconcile to composites", () => {
+    for (const group of Object.values(allocation.groups)) {
+      for (const node of Object.values(group.nodes)) {
+        const total = node.contributions.reduce((sum, row) => sum + row.contribution, 0);
+        expect(total).toBeCloseTo(node.composite, 10);
+      }
+    }
   });
 
   it("l1.debt", () => {

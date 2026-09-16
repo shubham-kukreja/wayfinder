@@ -21,6 +21,11 @@ export interface ScoreCellResult {
   status: "ok" | "insufficient_history";
   derivedFrom: string[];
   transform: "percentile" | "inverted" | "rubric" | "average";
+  // The date of the observation the CURRENT value was actually computed
+  // from, not asOfDate — see scoreEngine.ts's AutoScoreResult.latestDate
+  // doc comment. null only for the rare cell that isn't derived from a
+  // dated observation at all.
+  latestDate: string | null;
 }
 
 // §7 — every score cell computable end-to-end from the series this
@@ -48,21 +53,21 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
   {
     const series = derivedRatioSeries(db, "flow_equity_3m", "aum_equity");
     const result = autoScoreFromSeries(series, params, "inverted");
-    out.push({ scoreId: "l1.equity::flows", value: result.value, status: result.status, derivedFrom: ["flow_equity_3m", "aum_equity"], transform: "inverted" });
+    out.push({ scoreId: "l1.equity::flows", value: result.value, status: result.status, derivedFrom: ["flow_equity_3m", "aum_equity"], transform: "inverted", latestDate: result.latestDate });
   }
 
   // §7.1 l1.debt::flows — flow_duration_3m / aum_duration, inverted.
   {
     const series = derivedRatioSeries(db, "flow_duration_3m", "aum_duration");
     const result = autoScoreFromSeries(series, params, "inverted");
-    out.push({ scoreId: "l1.debt::flows", value: result.value, status: result.status, derivedFrom: ["flow_duration_3m", "aum_duration"], transform: "inverted" });
+    out.push({ scoreId: "l1.debt::flows", value: result.value, status: result.status, derivedFrom: ["flow_duration_3m", "aum_duration"], transform: "inverted", latestDate: result.latestDate });
   }
 
   // §7.1 l1.metals::flows — flow_goldetf_3m, inverted, as-is (no AUM
   // denominator specified for this cell in §7.1's table).
   {
     const result = autoScore(db, "flow_goldetf", params, "inverted");
-    out.push({ scoreId: "l1.metals::flows", value: result.value, status: result.status, derivedFrom: ["flow_goldetf"], transform: "inverted" });
+    out.push({ scoreId: "l1.metals::flows", value: result.value, status: result.status, derivedFrom: ["flow_goldetf"], transform: "inverted", latestDate: result.latestDate });
   }
 
   // §8.1 (Calculation Guide row 7) l1.equity::valuation — earnings-yield
@@ -71,7 +76,7 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
   {
     const series = deriveEarningsYieldGapSeries(db);
     const result = autoScoreFromSeries(series, params, "percentile");
-    out.push({ scoreId: "l1.equity::valuation", value: result.value, status: result.status, derivedFrom: ["nifty50_pe", "gsec_10y"], transform: "percentile" });
+    out.push({ scoreId: "l1.equity::valuation", value: result.value, status: result.status, derivedFrom: ["nifty50_pe", "gsec_10y"], transform: "percentile", latestDate: result.latestDate });
   }
 
   // §8.4 (Calculation Guide row 21) l1.metals::valuation — real INR gold
@@ -80,7 +85,7 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
   {
     const series = deriveRealGoldPriceSeries(db);
     const result = autoScoreFromSeries(series, params, "inverted");
-    out.push({ scoreId: "l1.metals::valuation", value: result.value, status: result.status, derivedFrom: ["gold_inr", "cpi_index"], transform: "inverted" });
+    out.push({ scoreId: "l1.metals::valuation", value: result.value, status: result.status, derivedFrom: ["gold_inr", "cpi_index"], transform: "inverted", latestDate: result.latestDate });
   }
 
   // §7.2 equity.{large,mid,small}::valuation — inverted index P/E, from
@@ -91,15 +96,15 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
   // equity.intl::valuation stays manual — no source for that segment.
   {
     const result = autoScore(db, "nifty100_pe", params, "inverted");
-    out.push({ scoreId: "equity.large::valuation", value: result.value, status: result.status, derivedFrom: ["nifty100_pe"], transform: "inverted" });
+    out.push({ scoreId: "equity.large::valuation", value: result.value, status: result.status, derivedFrom: ["nifty100_pe"], transform: "inverted", latestDate: result.latestDate });
   }
   {
     const result = autoScore(db, "midcap150_pe", params, "inverted");
-    out.push({ scoreId: "equity.mid::valuation", value: result.value, status: result.status, derivedFrom: ["midcap150_pe"], transform: "inverted" });
+    out.push({ scoreId: "equity.mid::valuation", value: result.value, status: result.status, derivedFrom: ["midcap150_pe"], transform: "inverted", latestDate: result.latestDate });
   }
   {
     const result = autoScore(db, "smallcap250_pe", params, "inverted");
-    out.push({ scoreId: "equity.small::valuation", value: result.value, status: result.status, derivedFrom: ["smallcap250_pe"], transform: "inverted" });
+    out.push({ scoreId: "equity.small::valuation", value: result.value, status: result.status, derivedFrom: ["smallcap250_pe"], transform: "inverted", latestDate: result.latestDate });
   }
 
   // Calculation Guide row 29 / Data Trackers rows 5-8 —
@@ -114,16 +119,20 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
     const smallSpread = deriveSmallLargeSpreadSeries(db);
     const midResult = autoScoreFromSeries(midSpread, params, "inverted");
     const smallResult = autoScoreFromSeries(smallSpread, params, "inverted");
-    out.push({ scoreId: "equity.mid::relvalue", value: midResult.value, status: midResult.status, derivedFrom: ["midcap150_pe", "nifty100_pe"], transform: "inverted" });
-    out.push({ scoreId: "equity.small::relvalue", value: smallResult.value, status: smallResult.status, derivedFrom: ["smallcap250_pe", "nifty100_pe"], transform: "inverted" });
+    out.push({ scoreId: "equity.mid::relvalue", value: midResult.value, status: midResult.status, derivedFrom: ["midcap150_pe", "nifty100_pe"], transform: "inverted", latestDate: midResult.latestDate });
+    out.push({ scoreId: "equity.small::relvalue", value: smallResult.value, status: smallResult.status, derivedFrom: ["smallcap250_pe", "nifty100_pe"], transform: "inverted", latestDate: smallResult.latestDate });
 
     if (midResult.status === "ok" && smallResult.status === "ok") {
       const midRawPercentile = 100 - midResult.value;
       const smallRawPercentile = 100 - smallResult.value;
       const largeValue = (midRawPercentile + smallRawPercentile) / 2;
-      out.push({ scoreId: "equity.large::relvalue", value: largeValue, status: "ok", derivedFrom: ["midcap150_pe", "smallcap250_pe", "nifty100_pe"], transform: "average" });
+      // Large's freshness is bounded by whichever of the two inputs is
+      // staler, same "the whole is only as fresh as its stalest part"
+      // reasoning as elsewhere in this function.
+      const largeLatestDate = [midResult.latestDate, smallResult.latestDate].sort()[0] ?? null;
+      out.push({ scoreId: "equity.large::relvalue", value: largeValue, status: "ok", derivedFrom: ["midcap150_pe", "smallcap250_pe", "nifty100_pe"], transform: "average", latestDate: largeLatestDate });
     } else {
-      out.push({ scoreId: "equity.large::relvalue", value: 50, status: "insufficient_history", derivedFrom: ["midcap150_pe", "smallcap250_pe", "nifty100_pe"], transform: "average" });
+      out.push({ scoreId: "equity.large::relvalue", value: 50, status: "insufficient_history", derivedFrom: ["midcap150_pe", "smallcap250_pe", "nifty100_pe"], transform: "average", latestDate: null });
     }
   }
 
@@ -152,7 +161,7 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
     ["capgoods", "sector_pe_capgoods"],
   ] as const) {
     const result = autoScore(db, seriesId, params, "inverted");
-    out.push({ scoreId: `sector.${sector}::valuation`, value: result.value, status: result.status, derivedFrom: [seriesId], transform: "inverted" });
+    out.push({ scoreId: `sector.${sector}::valuation`, value: result.value, status: result.status, derivedFrom: [seriesId], transform: "inverted", latestDate: result.latestDate });
   }
 
   // Calculation Guide row 48 — sector.*::rel_momentum: average of the
@@ -174,7 +183,7 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
   ] as const) {
     const series = deriveSectorRelMomentumSeries(db, closeSeriesId);
     const result = autoScoreFromSeries(series, params, "percentile");
-    out.push({ scoreId: `sector.${sector}::rel_momentum`, value: result.value, status: result.status, derivedFrom: [closeSeriesId, "nifty50_close"], transform: "percentile" });
+    out.push({ scoreId: `sector.${sector}::rel_momentum`, value: result.value, status: result.status, derivedFrom: [closeSeriesId, "nifty50_close"], transform: "percentile", latestDate: result.latestDate });
   }
 
   // §7.4 metals.gold::ratio_position / metals.silver::ratio_position —
@@ -203,9 +212,9 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
     const derivedFrom = useFutures ? ["gold_usd_futures", "silver_usd_futures"] : ["gold_inr", "silver_inr"];
 
     const goldResult = autoScoreFromSeries(ratioSeries, params, "inverted");
-    out.push({ scoreId: "metals.gold::ratio_position", value: goldResult.value, status: goldResult.status, derivedFrom, transform: "inverted" });
+    out.push({ scoreId: "metals.gold::ratio_position", value: goldResult.value, status: goldResult.status, derivedFrom, transform: "inverted", latestDate: goldResult.latestDate });
     const silverResult = autoScoreFromSeries(ratioSeries, params, "percentile");
-    out.push({ scoreId: "metals.silver::ratio_position", value: silverResult.value, status: silverResult.status, derivedFrom, transform: "percentile" });
+    out.push({ scoreId: "metals.silver::ratio_position", value: silverResult.value, status: silverResult.status, derivedFrom, transform: "percentile", latestDate: silverResult.latestDate });
   }
 
   // §8.5 (Calculation Guide row 23) l1.metals::fundamentals —
@@ -226,12 +235,17 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
     const etfHoldings = goldEtfHoldingsTrend(db, asOfDate);
     if (cbBuying !== null && etfHoldings !== null) {
       const value = metalsFundamentalsScore({ cbBuying, etfHoldings });
+      const cbRows = latestObservations(db, "cb_gold_reserves_tonnes");
+      const etfRows = latestObservations(db, "gold_etf_shares_outstanding");
+      // Same "stalest input wins" reasoning as equity.large::relvalue above.
+      const latestDate = [cbRows[cbRows.length - 1]?.date, etfRows[etfRows.length - 1]?.date].filter((d): d is string => d !== undefined).sort()[0] ?? null;
       out.push({
         scoreId: "l1.metals::fundamentals",
         value,
         status: "ok",
         derivedFrom: ["cb_gold_reserves_tonnes", "gold_etf_shares_outstanding"],
         transform: "rubric",
+        latestDate,
       });
     }
   }
@@ -242,7 +256,7 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
   // yet — flagged as an approximation, not silently treated as exact).
   {
     const result = autoScore(db, "gold_inr", params, "percentile");
-    out.push({ scoreId: "l1.metals::momentum", value: result.value, status: result.status, derivedFrom: ["gold_inr"], transform: "percentile" });
+    out.push({ scoreId: "l1.metals::momentum", value: result.value, status: result.status, derivedFrom: ["gold_inr"], transform: "percentile", latestDate: result.latestDate });
   }
 
   // §8.4 — real rates rubric, already wired end-to-end (Phase 2's gating
@@ -250,8 +264,10 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
   // l1.metals::macro.
   const realRates = deriveRealRatesScores(db, asOfDate);
   if (realRates) {
+    const usReal10yRows = latestObservations(db, "us_real_10y");
+    const usReal10yLatestDate = usReal10yRows[usReal10yRows.length - 1]?.date ?? null;
     for (const [scoreId, value] of Object.entries(realRates)) {
-      out.push({ scoreId, value, status: "ok", derivedFrom: ["us_real_10y"], transform: "rubric" });
+      out.push({ scoreId, value, status: "ok", derivedFrom: ["us_real_10y"], transform: "rubric", latestDate: usReal10yLatestDate });
     }
   }
 
@@ -270,6 +286,7 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
       status: result.status,
       derivedFrom: ["nifty50_close", "nifty50_div_yield", "gsec_10y"],
       transform: "percentile",
+      latestDate: result.latestDate,
     });
   }
 
@@ -282,14 +299,14 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
   {
     const realGsec = derivedDifferenceSeries(db, "gsec_10y", "cpi_yoy");
     const result = autoScoreFromSeries(realGsec, params, "percentile");
-    out.push({ scoreId: "l1.debt::valuation", value: result.value, status: result.status, derivedFrom: ["gsec_10y", "cpi_yoy"], transform: "percentile" });
+    out.push({ scoreId: "l1.debt::valuation", value: result.value, status: result.status, derivedFrom: ["gsec_10y", "cpi_yoy"], transform: "percentile", latestDate: result.latestDate });
   }
 
   // §7.3 debt.gilt::carry — gsec_10y percentile, NOT inverted (high
   // yield = attractive carry).
   {
     const result = autoScore(db, "gsec_10y", params, "percentile");
-    out.push({ scoreId: "debt.gilt::carry", value: result.value, status: result.status, derivedFrom: ["gsec_10y"], transform: "percentile" });
+    out.push({ scoreId: "debt.gilt::carry", value: result.value, status: result.status, derivedFrom: ["gsec_10y"], transform: "percentile", latestDate: result.latestDate });
   }
 
   // §7.3 debt.liquid::carry — tbill_1y percentile, NOT inverted. Uses the
@@ -297,7 +314,7 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
   // 1y liquid-fund carry proxy — see adapters/rbi.ts).
   {
     const result = autoScore(db, "tbill_1y", params, "percentile");
-    out.push({ scoreId: "debt.liquid::carry", value: result.value, status: result.status, derivedFrom: ["tbill_1y"], transform: "percentile" });
+    out.push({ scoreId: "debt.liquid::carry", value: result.value, status: result.status, derivedFrom: ["tbill_1y"], transform: "percentile", latestDate: result.latestDate });
   }
 
   // §7.3 debt.corporate::carry (aaa_3y) is NOT computable — no adapter

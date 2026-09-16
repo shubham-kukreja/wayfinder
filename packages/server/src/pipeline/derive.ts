@@ -73,6 +73,28 @@ export function goldEtfHoldingsTrend(db: Database.Database, asOfDate: string): E
 // Pure calculation, split out from the DB-querying wrapper below so the
 // per-date series generator (deriveNiftyMomentumSeries) can reuse the
 // exact same formula for every historical date, not just "today."
+// Binary search rather than a per-date filter/pop — see the identical
+// note on lastRowAtOrBefore's other definition further down this file
+// (deriveNiftyMomentumSeries below calls this once per row in the FULL
+// nifty50_close history, so an O(n) scan per lookup makes the whole
+// derivation O(n^2); with niftyindices' real backfill now producing
+// 500+ rows, that was the dominant cost in computeAutoScoreCells).
+function lastRowAtOrBeforeDate(rows: { date: string; value: number }[], targetIso: string): { date: string; value: number } | undefined {
+  let lo = 0;
+  let hi = rows.length - 1;
+  let result: { date: string; value: number } | undefined;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (rows[mid]!.date <= targetIso) {
+      result = rows[mid];
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return result;
+}
+
 function triApproxFromRows(
   closeRows: { date: string; value: number }[],
   divYieldRows: { date: string; value: number }[],
@@ -81,14 +103,15 @@ function triApproxFromRows(
   const asOf = new Date(asOfDate);
   const twelveMonthsAgo = new Date(asOf);
   twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+  const twelveMonthsAgoIso = twelveMonthsAgo.toISOString().slice(0, 10);
 
-  const currentClose = closeRows.filter((r) => new Date(r.date) <= asOf).pop();
+  const currentClose = lastRowAtOrBeforeDate(closeRows, asOfDate);
   if (!currentClose) return null;
 
-  const pastClose = closeRows.filter((r) => new Date(r.date) <= twelveMonthsAgo).pop();
+  const pastClose = lastRowAtOrBeforeDate(closeRows, twelveMonthsAgoIso);
   if (!pastClose || pastClose.value === 0) return null;
 
-  const currentDivYield = divYieldRows.filter((r) => new Date(r.date) <= asOf).pop();
+  const currentDivYield = lastRowAtOrBeforeDate(divYieldRows, asOfDate);
   if (!currentDivYield) return null;
 
   const priceReturn = currentClose.value / pastClose.value;
@@ -275,14 +298,40 @@ export function deriveSmallLargeSpreadSeries(db: Database.Database): Array<{ dat
 // sector close and nifty50_close — same "closest observation at or
 // before" calendar lookback as the TRI approximation above (niftyindices'
 // backfill window won't be a dense gap-free daily series from day one).
+//
+// Binary search rather than a per-date filter/pop: this runs once per
+// row in the FULL history (deriveSectorRelMomentumSeries below), so a
+// naive O(n) scan per lookup makes the whole derivation O(n^2) — with
+// niftyindices' real backfill now producing 500+ daily rows per sector,
+// that measured multiple seconds PER SECTOR and made every /api/snapshot
+// request (which recomputes all 8 sectors) take ~3s. `rows` is assumed
+// date-sorted ascending, same invariant latestObservations already
+// provides.
+function lastRowAtOrBefore(rows: { date: string; value: number }[], targetIso: string): { date: string; value: number } | undefined {
+  let lo = 0;
+  let hi = rows.length - 1;
+  let result: { date: string; value: number } | undefined;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (rows[mid]!.date <= targetIso) {
+      result = rows[mid];
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return result;
+}
+
 function trailingReturn(rows: { date: string; value: number }[], asOfDate: string, monthsBack: number): number | null {
   const asOf = new Date(asOfDate);
   const past = new Date(asOf);
   past.setMonth(past.getMonth() - monthsBack);
+  const pastIso = past.toISOString().slice(0, 10);
 
-  const currentRow = rows.filter((r) => new Date(r.date) <= asOf).pop();
+  const currentRow = lastRowAtOrBefore(rows, asOfDate);
   if (!currentRow) return null;
-  const pastRow = rows.filter((r) => new Date(r.date) <= past).pop();
+  const pastRow = lastRowAtOrBefore(rows, pastIso);
   if (!pastRow || pastRow.value === 0) return null;
 
   return currentRow.value / pastRow.value - 1;

@@ -41,12 +41,17 @@ function composite(
   nodeId: string,
   group: TiltGroupId,
   weights: Record<string, number>
-): number {
+): { value: number; contributions: TiltNodeResult["contributions"] } {
   let sum = 0;
+  const contributions: TiltNodeResult["contributions"] = [];
   for (const signal of GROUP_SIGNALS[group]) {
-    sum += getScore(scores, nodeId, signal) * (weights[signal] ?? 0);
+    const score = getScore(scores, nodeId, signal);
+    const weight = weights[signal] ?? 0;
+    const contribution = score * weight;
+    sum += contribution;
+    contributions.push({ signalId: signal, score, weight, contribution });
   }
-  return sum;
+  return { value: sum, contributions };
 }
 
 function computeTiltGroup(
@@ -61,13 +66,15 @@ function computeTiltGroup(
   const maxTilt = params.maxTilt[group];
 
   const composites: Record<string, number> = {};
+  const contributions: Record<string, TiltNodeResult["contributions"]> = {};
   const rawTilts: Record<string, number> = {};
   const tilts: Record<string, number> = {};
 
   for (const nodeId of nodeIds) {
     const c = composite(scores, nodeId, group, signalWeights);
-    composites[nodeId] = c;
-    rawTilts[nodeId] = ((c - 50) / 50) * maxTilt;
+    composites[nodeId] = c.value;
+    contributions[nodeId] = c.contributions;
+    rawTilts[nodeId] = ((c.value - 50) / 50) * maxTilt;
   }
 
   if (params.normalisation === "zero_sum") {
@@ -100,6 +107,7 @@ function computeTiltGroup(
     const vetoActive = !!vetoes[nodeId];
     nodes[nodeId] = {
       composite: composites[nodeId]!,
+      contributions: contributions[nodeId]!,
       rawTilt: rawTilts[nodeId]!,
       tilt: tilts[nodeId]!,
       prelim: prelim[nodeId]!,

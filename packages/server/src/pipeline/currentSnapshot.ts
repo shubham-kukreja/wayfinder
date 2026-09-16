@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { computeAllocation, snapshotSchema, type Snapshot } from "@wayfinder/engine";
 import { computeAutoScoreCells } from "./scoreCells.js";
+import { buildSeriesState } from "./buildSeriesState.js";
 import { allManualScores, allManualVetoes } from "../store/manual.js";
 import { loadCurrentParams } from "../store/params.js";
 
@@ -49,6 +50,13 @@ export function buildCurrentSnapshot(db: Database.Database, asOf: string = new D
   const recomputedIds: string[] = [];
   for (const cell of recomputed) {
     if (cell.status !== "ok") continue; // insufficient history: leave the baseline's value, don't overwrite with a fresh 50
+    // staleDays reflects the age of the observation the value was ACTUALLY
+    // computed from, not always 0 — a derived series can join sources with
+    // different publication lags (e.g. l1.equity::momentum month-joins
+    // FRED's gsec_10y, which can trail nifty50_close by months), so
+    // hardcoding 0 here would silently overstate freshness. §1 invariant 5:
+    // provenance must stay visible, freshness included.
+    const staleDays = cell.latestDate ? Math.max(0, Math.round((new Date(asOfDate).getTime() - new Date(cell.latestDate).getTime()) / 86_400_000)) : 0;
     raw.scores[cell.scoreId] = {
       ...raw.scores[cell.scoreId],
       value: cell.value,
@@ -56,9 +64,22 @@ export function buildCurrentSnapshot(db: Database.Database, asOf: string = new D
       transform: cell.transform,
       derivedFrom: cell.derivedFrom,
       computedAt: asOf,
-      staleDays: 0,
+      staleDays,
     };
     recomputedIds.push(cell.scoreId);
+
+    // Backfill snapshot.series for any raw series this cell reads that
+    // the static mock baseline predates (e.g. nifty50_close,
+    // nifty50_div_yield — added by niftyindices.ts after the baseline
+    // was authored). Without this, a cell's derivedFrom can point at a
+    // series with literally no snapshot.series entry at all, so the UI
+    // has no raw value to show even though the DB has real observations
+    // for it (see CalculationInspector's derivation trace).
+    for (const seriesId of cell.derivedFrom) {
+      if (raw.series[seriesId]) continue; // mock baseline already covers this one
+      const state = buildSeriesState(db, seriesId, asOfDate, raw.params.percentileMinObservations);
+      if (state) raw.series[seriesId] = state;
+    }
   }
 
   const manualScores = allManualScores(db);
