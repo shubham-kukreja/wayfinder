@@ -1,0 +1,55 @@
+Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date
+ 
+Open Ended Schemes(Children’s Fund - Childrens' Fund)
+ 
+Axis Mutual Fund
+ 
+135762;INF846K01WO1;-;Axis Children's Fund;Direct Plan;Growth Option;29.5645;15-Sep-2026
+135765;INF846K01WP8;-;Axis Children's Fund;Direct Plan;IDCW Option;27.2342;15-Sep-2026
+135759;INF846K01WJ1;-;Axis Children's Fund;Regular Plan;Growth Option;25.7466;15-Sep-2026
+135760;INF846K01WK9;-;Axis Children's Fund;Regular Plan;IDCW Option;23.7533;15-Sep-2026
+135764;INF846K01WR4;-;Axis Children's Fund;Direct Plan;Growth Option;30.1299;15-Sep-2026
+135763;INF846K01WS2;INF846K01WQ6;Axis Children's Fund;Direct Plan;IDCW Option;27.2857;15-Sep-2026
+135766;INF846K01WM5;-;Axis Children's Fund;Regular Plan;Growth Option;25.7434;15-Sep-2026
+135761;INF846K01WN3;INF846K01WL7;Axis Children's Fund;Regular Plan;IDCW Option;23.7318;15-Sep-2026
+ 
+Open Ended Schemes(Debt Scheme - Banking and PSU Fund)
+ 
+Aditya Birla Sun Life Mutual Fund
+ 
+119551;INF209KA12Z1;INF209KA13Z9;Aditya Birla Sun Life Banking & PSU Debt Fund;Direct Plan;IDCW-Re-investment;106.9321;15-Sep-2026
+119552;INF209K01YM2;-;Aditya Birla Sun Life Banking & PSU Debt Fund;Direct Plan;MONTHLY DCW Payout;116.8085;15-Sep-2026
+119553;INF209K01YO8;-;Aditya Birla Sun Life Banking & PSU Debt Fund;Direct Plan;QUARTERLY IDCW Payout;104.9635;15-Sep-2026
+108272;INF209K01LX6;INF209KA11Z3;Aditya Birla Sun Life Banking & PSU Debt Fund;Regular Plan;IDCW-Re-investment;149.5888;15-Sep-2026
+110282;INF209K01LU2;-;Aditya Birla Sun Life Banking & PSU Debt Fund;Regular Plan;MONTHLY IDCW Payout;112.0458;15-Sep-2026
+108274;INF209K01LN7;-;Aditya Birla Sun Life Banking & PSU Debt Fund;Regular Plan;QUARTERLY IDCW Payout;102.4903;15-Sep-2026
+108273;INF209K01LV0;-;Aditya Birla Sun Life Banking & PSU Debt Fund;Regular Plan;GROWTH;387.5177;15-Sep-2026
+119550;INF209K01YN0;-;Aditya Birla Sun Life Banking & PSU Debt Fund;Direct Plan;GROWTH;403.8381;15-Sep-2026
+ 
+Franklin Templeton Mutual Fund
+ 
+129008;INF090I01KR8;-;Franklin India Banking & PSU Debt Fund;Direct Plan;Growth;25.2890;15-Sep-2026
+129006;INF090I01KO5;-;Franklin India Banking & PSU Debt Fund;Regular Plan;Growth;24.1203;15-Sep-2026
+129009;INF090I01KS6;INF090I01KT4;Franklin India Banking & PSU Debt Fund;Direct Plan;IDCW;11.6234;15-Sep-2026
+129007;INF090I01KP2;INF090I01KQ0;Franklin India Banking & PSU Debt Fund;Regular Plan;IDCW;10.9863;15-Sep-2026
+ 
+HDFC Mutual Fund
+ 
+128628;INF179KA1JC4;-;HDFC Banking and PSU Debt Fund;Regular Plan;Growth Option;24.3379;15-Sep-2026
+128629;INF179KA1IZ7;-;HDFC Banking and PSU Debt Fund;Direct Plan;Growth Option;25.4555;15-Sep-2026
+128627;INF179KA1JD2;INF179KA1JE0;HDFC Banking and PSU Debt Fund;Regular Plan;IDCW Option;10.0946;15-Sep-2026
+128626;INF179KA1JA8;INF179KA1JB6;HDFC Banking and PSU Debt Fund;Direct Plan;IDCW Option;9.9887;15-Sep-2026
+ 
+ITI Mutual Fund
+ 
+148534;INF00XX01861;-;ITI Banking & PSU Debt Fund;Direct Plan;Growth Option;14.2240;15-Sep-2026
+148536;INF00XX01879;INF00XX01887;ITI Banking & PSU Debt Fund;Direct Plan;IDCW Option;14.2223;15-Sep-2026
+148535;INF00XX01838;-;ITI Banking & PSU Debt Fund;Regular Plan;Growth Option;13.7714;15-Sep-2026
+148533;INF00XX01846;INF00XX01853;ITI Banking & PSU Debt Fund;Regular Plan;IDCW Option;13.7726;15-Sep-2026
+ 
+Kotak Mahindra Mutual Fund
+116153;INF090I01ET7;-;Franklin India Credit Risk Fund (No. of segregated portfolios-3);;;25.3348;11-Jun-2023
+116154;INF090I01ES9;INF090I01ER1;Franklin India Credit Risk Fund (No. of segregated portfolios-3);;;13.5858;11-Jun-2023
+148304;INF090I01VZ8;-;Franklin India Credit Risk Fund (No. of segregated portfolios-3);Direct Plan;Growth;0.0000;15-Sep-2026
+148303;INF090I01VX3;-;Franklin India Credit Risk Fund (No. of segregated portfolios-3);Regular Plan;Growth;0.0000;15-Sep-2026
+147956;INF090I01TK4;-;Franklin India Credit Risk Fund (No. of segregated portfolios-3);Direct Plan;;0.0000;20-Jul-2020

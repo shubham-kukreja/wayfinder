@@ -142,3 +142,30 @@ describe("snapshot persistence — saved reviews", () => {
     expect(list[0]!.parentId).toBe(parentId);
   });
 });
+
+// The publish route accepted a `reason` and echoed it back long before
+// there was a column to hold it, so the field the audit trail most
+// depends on was written nowhere. These pin the round-trip.
+describe("snapshot persistence — audit reason", () => {
+  it("round-trips the reason a publish was given", () => {
+    const id = saveSnapshot(db, healthySnapshot, "Q3 review", {
+      isReview: true,
+      published: true,
+      actor: "dev",
+      reason: "Quarterly sector re-score; capital goods qualified.",
+    });
+
+    const row = listSnapshots(db).find((r) => r.id === id);
+    expect(row!.reason).toBe("Quarterly sector re-score; capital goods qualified.");
+  });
+
+  it("leaves reason null when none was given, rather than storing an empty string", () => {
+    const id = saveSnapshot(db, healthySnapshot, "No reason", { isReview: true, published: true, actor: "dev" });
+    expect(listSnapshots(db).find((r) => r.id === id)!.reason).toBeNull();
+  });
+
+  it("keeps reason null for the legacy boolean isReview call signature", () => {
+    const id = saveSnapshot(db, healthySnapshot, "Legacy call", true);
+    expect(listSnapshots(db).find((r) => r.id === id)!.reason).toBeNull();
+  });
+});

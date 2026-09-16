@@ -82,6 +82,20 @@ export function migrate(db: Database.Database): void {
       error        TEXT,
       rows_written INTEGER NOT NULL DEFAULT 0
     );
+
+    -- AMFI publishes ~14,000 live schemes with no server-side filter, so
+    -- unlike every other adapter's small fixed series list, "which schemes
+    -- to pull NAV history for" is a runtime allowlist, not a compile-time
+    -- constant. observations.series_id for a tracked scheme is
+    -- "amfi_nav:<scheme_code>" — no schema change needed there.
+    CREATE TABLE IF NOT EXISTS tracked_schemes (
+      scheme_code TEXT PRIMARY KEY,
+      scheme_name TEXT NOT NULL,
+      isin_growth TEXT,
+      category    TEXT,
+      added_at    TEXT NOT NULL,
+      active      INTEGER NOT NULL DEFAULT 1
+    );
   `);
 
   ensureColumn(db, "manual_scores", "reason", "TEXT");
@@ -92,4 +106,8 @@ export function migrate(db: Database.Database): void {
   ensureColumn(db, "snapshots", "parent_id", "TEXT");
   ensureColumn(db, "snapshots", "published", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "snapshots", "actor", "TEXT");
+  // The publish route has always accepted a reason and echoed it back in its
+  // response, but had nowhere to put it — so the one field the audit trail
+  // most depends on was silently dropped on write.
+  ensureColumn(db, "snapshots", "reason", "TEXT");
 }

@@ -95,6 +95,18 @@ export default {
       transitionTimingFunction: {
         cta: "cubic-bezier(0.4, 0, 0.2, 1)",
       },
+      // Indeterminate progress: a short segment sweeping the full track.
+      // Used where work has no measurable percentage to report — the
+      // refresh is one blocking call, so a numeric bar would be a fiction.
+      keyframes: {
+        "indeterminate-sweep": {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(400%)" },
+        },
+      },
+      animation: {
+        "indeterminate-sweep": "indeterminate-sweep 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite",
+      },
       maxWidth: {
         measure: "65ch",
       },

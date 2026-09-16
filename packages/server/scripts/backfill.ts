@@ -13,6 +13,8 @@ import { createAmfiAdapter } from "../src/adapters/amfi.js";
 import { createNiftyIndicesAdapter } from "../src/adapters/niftyindices.js";
 import { createYahooMetalsAdapter, GOLD_USD_FUTURES_SERIES_ID, SILVER_USD_FUTURES_SERIES_ID } from "../src/adapters/yahooMetals.js";
 import { createDbNomicsAdapter } from "../src/adapters/dbnomics.js";
+import { fetchTrackedNavHistory, amfiNavSeriesId } from "../src/adapters/amfiNav.js";
+import { listTrackedSchemes } from "../src/store/trackedSchemes.js";
 import { loadConfig } from "../src/config.js";
 import { DEFAULT_PARAMS } from "@wayfinder/engine";
 
@@ -214,6 +216,67 @@ async function backfillDbNomics(db: ReturnType<typeof openDb>, years = 10): Prom
   return backfillRanged(db, "DBNOMICS", adapter.series, adapter.fetchHistory, from);
 }
 
+// Backfills only currently-tracked schemes (store/trackedSchemes.ts) — an
+// empty tracked list means an empty backfill, not an error, since there's
+// no default universe to guess at (§9: never guess). Uses
+// fetchTrackedNavHistory directly rather than backfillRanged's shared
+// runner because its signature is (codes, from, to), not (from, to) —
+// createAmfiNavAdapter().fetchHistory already binds the tracked set as a
+// closure for the refresh pipeline, but backfill's own coverage report
+// needs the resolved series list up front, so this stays a small
+// dedicated function instead of forcing that shape through the shared
+// runner.
+async function backfillAmfiNav(db: ReturnType<typeof openDb>, years = 10): Promise<CoverageReport[]> {
+  const tracked = listTrackedSchemes(db, { activeOnly: true });
+  if (tracked.length === 0) {
+    console.log("  SKIPPED: no schemes are currently tracked (tracked_schemes is empty).");
+    return [];
+  }
+
+  const trackedCodes = new Set(tracked.map((s) => s.schemeCode));
+  const to = new Date();
+  const from = new Date();
+  from.setFullYear(from.getFullYear() - years);
+
+  const startedAt = new Date().toISOString();
+  try {
+    const observations = await fetchTrackedNavHistory(trackedCodes, from, to);
+    const fetchedAt = new Date().toISOString();
+    const written = insertObservations(
+      db,
+      observations.map((o) => ({
+        seriesId: o.seriesId,
+        date: o.date,
+        value: o.value,
+        basis: o.basis ?? null,
+        source: "AMFI_NAV",
+        fetchedAt,
+      }))
+    );
+    insertFetchLog(db, { source: "AMFI_NAV", startedAt, finishedAt: fetchedAt, status: "ok", error: null, rowsWritten: written });
+  } catch (err) {
+    insertFetchLog(db, {
+      source: "AMFI_NAV",
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      status: "failed",
+      error: err instanceof Error ? err.message : String(err),
+      rowsWritten: 0,
+    });
+    console.error(`AMFI_NAV backfill failed: ${err instanceof Error ? err.message : err}`);
+  }
+
+  return tracked.map((s) => {
+    const seriesId = amfiNavSeriesId(s.schemeCode);
+    const coverage = seriesCoverage(db, seriesId);
+    return {
+      seriesId,
+      ...coverage,
+      meetsMinimum: coverage.observations >= DEFAULT_PARAMS.percentileMinObservations,
+    };
+  });
+}
+
 async function main() {
   const config = loadConfig();
   const db = openDb(config.dbPath);
@@ -239,6 +302,9 @@ async function main() {
 
   console.log("-- DB.NOMICS --");
   reports.push(...(await backfillDbNomics(db)));
+
+  console.log("-- AMFI NAV (tracked schemes only) --");
+  reports.push(...(await backfillAmfiNav(db)));
 
   // Bullion (IBJA/metals.dev) has no historical range endpoint on the free
   // tier (see adapters/bullion.ts fetchHistory) — its backfill needs a

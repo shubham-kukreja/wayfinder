@@ -8,6 +8,7 @@ import { registerScoresRoute } from "./routes/scores.js";
 import { registerVetoesRoute } from "./routes/vetoes.js";
 import { registerParamsRoute } from "./routes/params.js";
 import { registerDatapointsRoute } from "./routes/datapoints.js";
+import { registerSchemesRoute } from "./routes/schemes.js";
 import { registerLoginRoute } from "./routes/login.js";
 import { loadConfig } from "./config.js";
 import { verifyToken } from "./auth.js";
@@ -74,6 +75,7 @@ async function main() {
   registerVetoesRoute(app);
   registerParamsRoute(app);
   registerDatapointsRoute(app);
+  registerSchemesRoute(app);
 
   await app.listen({ port: PORT, host: "0.0.0.0" });
 }

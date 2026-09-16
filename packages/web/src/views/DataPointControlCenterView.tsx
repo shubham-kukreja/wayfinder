@@ -5,6 +5,7 @@ import { computeAllocation } from "@wayfinder/engine";
 import { listDataPoints, refreshDataPoints, type DataPointFreshness, type DataPointRow } from "../lib/datapointsApi.js";
 import { scoresFromSnapshot, vetoesFromSnapshot } from "../hooks/useLocalAllocation.js";
 import { CalculationInspector } from "../components/CalculationInspector.js";
+import { DistributionStrip } from "../components/DistributionStrip.js";
 import { formatScore } from "../lib/format.js";
 
 type GroupMode = "model" | "operation" | "attention";
@@ -290,7 +291,23 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
           })}
         </div>
 
-        {refreshMessage && (
+        {/* Indeterminate by design: the refresh is one blocking call that
+            reports nothing until it returns, so a percentage would be
+            invented. A segment sweeping the tab row's own rule says "working"
+            without claiming to know how far along it is. Sits flush under
+            that rule so it reads as the rule activating, not as a new
+            element pushing the page down. */}
+        {refreshing && (
+          <div
+            role="progressbar"
+            aria-label="Refreshing data sources"
+            className="relative -mt-px h-0.5 w-full overflow-hidden bg-paper-2"
+          >
+            <span className="absolute inset-y-0 left-0 w-1/4 animate-indeterminate-sweep bg-ink" />
+          </div>
+        )}
+
+        {refreshMessage && !refreshing && (
           <p className="mt-4 flex items-start gap-2 text-[13px] text-muted">
             <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 bg-brand-500" />
             {refreshMessage}
@@ -352,10 +369,17 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
             </div>
           </div>
 
-          {loading && <p className="py-4 text-sm text-muted">Loading data registry...</p>}
+          {/* During a refresh the reload is part of that same operation, so
+              the rows dim in place rather than being replaced by a second
+              loading message competing with the progress bar above. */}
+          {loading && !refreshing && <p className="py-4 text-sm text-muted">Loading data registry...</p>}
           {error && <p className="py-4 text-sm text-danger-500">{error}</p>}
-          {!loading && !error && (
-            <div className="max-h-[720px] overflow-y-auto">
+          {(!loading || refreshing) && !error && (
+            <div
+              className={`max-h-[720px] overflow-y-auto transition-opacity duration-150 ease-in ${
+                refreshing ? "opacity-40" : "opacity-100"
+              }`}
+            >
               {groupedRows.map(([key, items]) => (
                 <section key={key}>
                   <div className="sticky top-0 z-10 border-b border-line bg-paper py-2 text-xs font-bold uppercase tracking-eyebrow text-muted">
@@ -443,13 +467,38 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                 <div className="flex justify-between gap-4 py-1.5"><dt className="text-muted">Last updated</dt><dd className="text-ink">{formatDate(selectedRow.lastUpdated)}</dd></div>
                 <div className="flex justify-between gap-4 py-1.5"><dt className="text-muted">Observed at</dt><dd className="text-ink">{formatDate(selectedRow.observedAt)}</dd></div>
               </dl>
+              {/* Upstream series, each against its own history. "Where does
+                  this input sit in its own distribution" is a per-datapoint
+                  question, so it belongs beside the datapoint rather than in
+                  a flat list on the audit page, which is where it used to
+                  live. A bare series id told the reader nothing; the strip
+                  says whether the input is at an extreme. */}
               <div>
                 <p className="text-[13px] text-muted">Upstream series</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {selectedRow.upstreamSeries.length > 0 ? selectedRow.upstreamSeries.map((id) => (
-                    <span key={id} className="rounded-sm border border-line px-2 py-0.5 text-[11px] text-ink-2">{id}</span>
-                  )) : <span className="text-[13px] text-muted">No upstream series</span>}
-                </div>
+                {selectedRow.upstreamSeries.length > 0 ? (
+                  <div className="mt-2 space-y-2.5">
+                    {selectedRow.upstreamSeries.map((id) => {
+                      const series = snapshot.series[id as keyof typeof snapshot.series];
+                      return (
+                        <div key={id}>
+                          <div className="flex items-baseline justify-between gap-3">
+                            <span className="truncate text-[12px] text-ink-2">{id}</span>
+                            <span className="shrink-0 text-[12px] tabular-nums text-muted">
+                              {series?.percentile !== null && series?.percentile !== undefined
+                                ? `${series.percentile.toFixed(0)}th pct`
+                                : "—"}
+                            </span>
+                          </div>
+                          <div className="mt-1">
+                            <DistributionStrip percentile={series?.percentile ?? null} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-1 text-[13px] text-muted">No upstream series</p>
+                )}
               </div>
               {isScoreCellId(selectedRow.id) ? (
                 <button

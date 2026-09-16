@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { Snapshot } from "@wayfinder/engine";
 import { L1_SIGNALS, NODE_LABELS, TILT_GROUP_NODES, computeAllocation } from "@wayfinder/engine";
@@ -6,6 +6,8 @@ import { AllocationBar, segmentSwatchStyle, type AllocationDepth, type CompareBa
 import { CalculationInspector } from "../components/CalculationInspector.js";
 import { SignalHeatmap } from "../components/SignalHeatmap.js";
 import { TabRow } from "../components/ui/TabRow.js";
+import { InfoPopover } from "../components/ui/InfoPopover.js";
+import { listReviews, type ReviewListItem } from "../lib/reviewsApi.js";
 import { scoresFromSnapshot, vetoesFromSnapshot } from "../hooks/useLocalAllocation.js";
 import { formatPct, formatSignedPct } from "../lib/format.js";
 
@@ -77,6 +79,10 @@ function sleeveFilterFromSearch(value: string | null): SleeveFilter {
   return value === "equity" || value === "debt" || value === "metals" ? value : "all";
 }
 
+function formatPublishedAt(iso: string): string {
+  return new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
 function formatAsOf(asOf: string): string {
   return new Date(asOf).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
@@ -104,6 +110,13 @@ const COMPARE_LABELS: Record<CompareBasis, string> = {
 
 export function OverviewView({ snapshot }: { snapshot: Snapshot }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  // The newest published entry is the one this page is serving.
+  const [activeVersion, setActiveVersion] = useState<ReviewListItem | null>(null);
+  useEffect(() => {
+    listReviews()
+      .then((rows) => setActiveVersion(rows.find((r) => r.published) ?? null))
+      .catch(() => setActiveVersion(null));
+  }, []);
   const depth = depthFromSearch(searchParams.get("depth"));
   const compare = compareFromSearch(searchParams.get("compare"));
   const selectedNode = searchParams.get("node");
@@ -186,7 +199,54 @@ export function OverviewView({ snapshot }: { snapshot: Snapshot }) {
               select line up rather than drifting apart. */}
           <div className="flex shrink-0 items-end gap-8">
             <div>
-              <div className="text-[11px] font-bold uppercase leading-4 tracking-eyebrow text-muted">As of</div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-bold uppercase leading-4 tracking-eyebrow text-muted">As of</span>
+                {/* Overview serves the published version, not the live draft,
+                    so the exact version behind these numbers is worth being
+                    able to check without leaving the page. */}
+                <InfoPopover label="Which version is this?" title="Published version">
+                  {activeVersion ? (
+                    <>
+                      <p>
+                        <strong className="font-semibold text-ink">{activeVersion.label ?? "Unlabelled"}</strong>
+                      </p>
+                      <dl className="space-y-1.5 border-t border-line pt-2.5 text-[12px]">
+                        <div className="flex justify-between gap-4">
+                          <dt className="text-muted">Published</dt>
+                          <dd className="text-right text-ink">{formatPublishedAt(activeVersion.createdAt)}</dd>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <dt className="text-muted">Version id</dt>
+                          <dd className="text-right font-mono text-ink">{activeVersion.id.slice(0, 8)}</dd>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <dt className="text-muted">Published by</dt>
+                          <dd className="text-right text-ink">{activeVersion.actor ?? "unknown"}</dd>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <dt className="text-muted">Snapshot as of</dt>
+                          <dd className="text-right text-ink">{formatPublishedAt(snapshot.asOf)}</dd>
+                        </div>
+                      </dl>
+                      {activeVersion.reason && (
+                        <p className="border-t border-line pt-2.5">
+                          <span className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Reason</span>
+                          <br />
+                          {activeVersion.reason}
+                        </p>
+                      )}
+                      <p className="border-t border-line pt-2.5 text-[12px] text-muted">
+                        This allocation is frozen at publish time. Tuning the model does not change it until you publish again.
+                      </p>
+                    </>
+                  ) : (
+                    <p>
+                      Nothing has been published yet, so this shows the current draft. Publish a version from Governance to fix
+                      an allocation of record.
+                    </p>
+                  )}
+                </InfoPopover>
+              </div>
               <div className="mt-1 flex h-8 items-center text-sm font-semibold tabular-nums text-ink">
                 {formatAsOf(snapshot.asOf)}
               </div>

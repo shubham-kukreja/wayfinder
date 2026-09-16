@@ -54,7 +54,10 @@ export default function App() {
             <Route path="/methodology" element={<MethodologyView snapshot={snapshot} />} />
             <Route path="/model/methodology" element={<Navigate to="/methodology" replace />} />
             <Route path="/model/parameters" element={<ParametersView snapshot={snapshot} />} />
-            <Route path="/reviews" element={<HistoryView snapshot={snapshot} />} />
+            <Route path="/reviews" element={<Navigate to="/reviews/decide" replace />} />
+            <Route path="/reviews/decide" element={<HistoryView snapshot={snapshot} section="decide" />} />
+            <Route path="/reviews/history" element={<HistoryView snapshot={snapshot} section="history" />} />
+            <Route path="/reviews/cadence" element={<HistoryView snapshot={snapshot} section="cadence" />} />
             <Route path="*" element={<Navigate to="/overview" replace />} />
           </Routes>
         )}

@@ -7,6 +7,7 @@ export interface SaveSnapshotOptions {
   parentId?: string | null;
   published?: boolean;
   actor?: string | null;
+  reason?: string | null;
 }
 
 export interface SnapshotListItem {
@@ -17,16 +18,19 @@ export interface SnapshotListItem {
   parentId: string | null;
   published: boolean;
   actor: string | null;
+  reason: string | null;
 }
 
 export function saveSnapshot(db: Database.Database, snapshot: Snapshot, label: string | null, isReviewOrOptions: boolean | SaveSnapshotOptions): string {
   const options: SaveSnapshotOptions =
-    typeof isReviewOrOptions === "boolean" ? { isReview: isReviewOrOptions, published: false, parentId: null, actor: null } : isReviewOrOptions;
+    typeof isReviewOrOptions === "boolean"
+      ? { isReview: isReviewOrOptions, published: false, parentId: null, actor: null, reason: null }
+      : isReviewOrOptions;
   const id = randomUUID();
   db.prepare(
     `
-    INSERT INTO snapshots (id, label, json, is_review, parent_id, published, actor, created_at)
-    VALUES (@id, @label, @json, @isReview, @parentId, @published, @actor, @createdAt)
+    INSERT INTO snapshots (id, label, json, is_review, parent_id, published, actor, reason, created_at)
+    VALUES (@id, @label, @json, @isReview, @parentId, @published, @actor, @reason, @createdAt)
     `
   ).run({
     id,
@@ -36,6 +40,7 @@ export function saveSnapshot(db: Database.Database, snapshot: Snapshot, label: s
     parentId: options.parentId ?? null,
     published: options.published ? 1 : 0,
     actor: options.actor ?? null,
+    reason: options.reason ?? null,
     createdAt: snapshot.asOf,
   });
   return id;
@@ -44,10 +49,10 @@ export function saveSnapshot(db: Database.Database, snapshot: Snapshot, label: s
 export function listSnapshots(db: Database.Database, reviewsOnly = false): SnapshotListItem[] {
   const rows = db
     .prepare(
-      `SELECT id, label, created_at as createdAt, is_review as isReview, parent_id as parentId, published, actor
+      `SELECT id, label, created_at as createdAt, is_review as isReview, parent_id as parentId, published, actor, reason
        FROM snapshots ${reviewsOnly ? "WHERE is_review = 1" : ""} ORDER BY created_at DESC`
     )
-    .all() as Array<{ id: string; label: string | null; createdAt: string; isReview: number; parentId: string | null; published: number; actor: string | null }>;
+    .all() as Array<{ id: string; label: string | null; createdAt: string; isReview: number; parentId: string | null; published: number; actor: string | null; reason: string | null }>;
   return rows.map((r) => ({ ...r, isReview: r.isReview === 1, published: r.published === 1 }));
 }
 

@@ -1,0 +1,40 @@
+# Web service: builds the Vite SPA, then serves it with server.mjs (static
+# files + an /api proxy that injects x-api-secret server-side).
+#
+# Build context is the REPO ROOT — @wayfinder/web depends on
+# @wayfinder/engine via `workspace:*`.
+FROM node:22-slim AS build
+
+ENV PNPM_HOME=/pnpm
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/engine/package.json ./packages/engine/
+COPY packages/web/package.json ./packages/web/
+RUN pnpm install --frozen-lockfile --filter @wayfinder/web...
+
+COPY packages/engine ./packages/engine
+COPY packages/web ./packages/web
+
+# Vite inlines import.meta.env at BUILD time, so this must be set here —
+# a runtime variable would silently do nothing. Empty string makes
+# API_BASE_URL fall back to same-origin (constants.ts), so the browser
+# calls /api/* on this service and server.mjs proxies onward. That is what
+# keeps the secret out of the bundle.
+ENV VITE_API_BASE_URL=""
+RUN pnpm --filter @wayfinder/web build
+
+# --- runtime ---
+FROM node:22-slim
+WORKDIR /app/packages/web
+
+# server.mjs uses only node: builtins, so no node_modules are needed.
+COPY --from=build /app/packages/web/dist ./dist
+COPY packages/web/server.mjs ./server.mjs
+
+ENV NODE_ENV=production
+EXPOSE 8080
+CMD ["node", "server.mjs"]

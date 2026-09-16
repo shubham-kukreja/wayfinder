@@ -1,0 +1,50 @@
+Scheme Code;NAV Name;Plan;Option;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Net Asset Value;Date
+
+Open Ended Schemes ( Money Market )
+
+
+Taurus Mutual Fund
+139619;Taurus Investor Education Pool - Unclaimed Dividend - Growth;;;;;10.0000;01-Jan-2024
+139619;Taurus Investor Education Pool - Unclaimed Dividend - Growth;;;;;10.0000;02-Jan-2024
+139619;Taurus Investor Education Pool - Unclaimed Dividend - Growth;;;;;10.0000;03-Jan-2024
+139619;Taurus Investor Education Pool - Unclaimed Dividend - Growth;;;;;10.0000;04-Jan-2024
+139619;Taurus Investor Education Pool - Unclaimed Dividend - Growth;;;;;10.0000;05-Jan-2024
+139618;Taurus Investor Education Pool - Unclaimed Redemption - Growth;;Growth;;;10.0000;01-Jan-2024
+139618;Taurus Investor Education Pool - Unclaimed Redemption - Growth;;Growth;;;10.0000;02-Jan-2024
+139618;Taurus Investor Education Pool - Unclaimed Redemption - Growth;;Growth;;;10.0000;03-Jan-2024
+139618;Taurus Investor Education Pool - Unclaimed Redemption - Growth;;Growth;;;10.0000;04-Jan-2024
+139618;Taurus Investor Education Pool - Unclaimed Redemption - Growth;;Growth;;;10.0000;05-Jan-2024
+139616;Taurus Unclaimed Dividend - Growth;;;;;15.6180;01-Jan-2024
+139616;Taurus Unclaimed Dividend - Growth;;;;;15.6201;02-Jan-2024
+139616;Taurus Unclaimed Dividend - Growth;;;;;15.6222;03-Jan-2024
+139616;Taurus Unclaimed Dividend - Growth;;;;;15.6243;04-Jan-2024
+139616;Taurus Unclaimed Dividend - Growth;;;;;15.6265;05-Jan-2024
+139617;Taurus Unclaimed Redemption - Growth;;Growth;;;15.6190;01-Jan-2024
+139617;Taurus Unclaimed Redemption - Growth;;Growth;;;15.6211;02-Jan-2024
+139617;Taurus Unclaimed Redemption - Growth;;Growth;;;15.6232;03-Jan-2024
+139617;Taurus Unclaimed Redemption - Growth;;Growth;;;15.6253;04-Jan-2024
+139617;Taurus Unclaimed Redemption - Growth;;Growth;;;15.6275;05-Jan-2024
+
+Open Ended Schemes ( Equity Scheme - Multi Cap Fund )
+
+
+Aditya Birla Sun Life Mutual Fund
+148921;Aditya Birla Sun Life Multi-Cap Fund-Direct Growth;Direct Plan;GROWTH;INF209KB1Y49;;16.62;01-Jan-2024
+148921;Aditya Birla Sun Life Multi-Cap Fund-Direct Growth;Direct Plan;GROWTH;INF209KB1Y49;;16.53;02-Jan-2024
+148921;Aditya Birla Sun Life Multi-Cap Fund-Direct Growth;Direct Plan;GROWTH;INF209KB1Y49;;16.51;03-Jan-2024
+148921;Aditya Birla Sun Life Multi-Cap Fund-Direct Growth;Direct Plan;GROWTH;INF209KB1Y49;;16.69;04-Jan-2024
+148921;Aditya Birla Sun Life Multi-Cap Fund-Direct Growth;Direct Plan;GROWTH;INF209KB1Y49;;16.72;05-Jan-2024
+148920;Aditya Birla Sun Life Multi-Cap Fund-Direct IDCW Payout;Direct Plan;IDCW Payout;INF209KB1Y56;;16.62;01-Jan-2024
+148920;Aditya Birla Sun Life Multi-Cap Fund-Direct IDCW Payout;Direct Plan;IDCW Payout;INF209KB1Y56;;16.53;02-Jan-2024
+148920;Aditya Birla Sun Life Multi-Cap Fund-Direct IDCW Payout;Direct Plan;IDCW Payout;INF209KB1Y56;;16.5;03-Jan-2024
+148920;Aditya Birla Sun Life Multi-Cap Fund-Direct IDCW Payout;Direct Plan;IDCW Payout;INF209KB1Y56;;16.69;04-Jan-2024
+148920;Aditya Birla Sun Life Multi-Cap Fund-Direct IDCW Payout;Direct Plan;IDCW Payout;INF209KB1Y56;;16.71;05-Jan-2024
+148918;Aditya Birla Sun Life Multi-Cap Fund-Regular Growth;Regular Plan;GROWTH;INF209KB1Y23;;15.93;01-Jan-2024
+148918;Aditya Birla Sun Life Multi-Cap Fund-Regular Growth;Regular Plan;GROWTH;INF209KB1Y23;;15.85;02-Jan-2024
+148918;Aditya Birla Sun Life Multi-Cap Fund-Regular Growth;Regular Plan;GROWTH;INF209KB1Y23;;15.82;03-Jan-2024
+148918;Aditya Birla Sun Life Multi-Cap Fund-Regular Growth;Regular Plan;GROWTH;INF209KB1Y23;;16.;04-Jan-2024
+148918;Aditya Birla Sun Life Multi-Cap Fund-Regular Growth;Regular Plan;GROWTH;INF209KB1Y23;;16.02;05-Jan-2024
+148919;Aditya Birla Sun Life Multi-Cap Fund-Regular-IDCW Payout;Regular Plan;IDCW Payout;INF209KB1Y31;;15.94;01-Jan-2024
+148919;Aditya Birla Sun Life Multi-Cap Fund-Regular-IDCW Payout;Regular Plan;IDCW Payout;INF209KB1Y31;;15.85;02-Jan-2024
+148919;Aditya Birla Sun Life Multi-Cap Fund-Regular-IDCW Payout;Regular Plan;IDCW Payout;INF209KB1Y31;;15.83;03-Jan-2024
+148919;Aditya Birla Sun Life Multi-Cap Fund-Regular-IDCW Payout;Regular Plan;IDCW Payout;INF209KB1Y31;;16.;04-Jan-2024

@@ -1,14 +1,19 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { MODEL_ROUTES, PRIMARY_ROUTES } from "../../lib/constants.js";
+import { ALLOCATION_ROUTES, GOVERNANCE_ROUTES, MODEL_ROUTES, REFERENCE_ROUTES } from "../../lib/constants.js";
 
 // Persistent left rail: wordmark up top, collapsible route groups beneath,
 // and a collapse affordance that narrows the rail to icons-off/labels-off.
 // Links are quiet by default and only go ink-dark plus a tint when active —
 // the rail never competes with the content area for attention.
+//
+// The groups mirror how the system actually splits: Allocation is the
+// published answer, Model is the draft you tune, Governance is the gate
+// between the two. Methodology sits outside them as reference.
 const GROUPS: Array<{ id: string; label: string; routes: readonly { path: string; label: string }[] }> = [
-  { id: "primary", label: "Workspace", routes: PRIMARY_ROUTES },
+  { id: "allocation", label: "Allocation", routes: ALLOCATION_ROUTES },
   { id: "model", label: "Model", routes: MODEL_ROUTES },
+  { id: "governance", label: "Governance", routes: GOVERNANCE_ROUTES },
 ];
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -29,7 +34,7 @@ function ChevronIcon({ open }: { open: boolean }) {
 }
 
 export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ primary: true, model: true });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ allocation: true, model: true, governance: true });
 
   // One element across both states rather than two separate returns: React
   // then updates this node's width instead of swapping nodes, which is what
@@ -96,6 +101,25 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
               </div>
             );
           })}
+
+          {/* Reference sits under a rule with no group heading of its own:
+              it is not a state of the model, so giving it a peer heading
+              would imply it belongs to the same sequence as the rest. */}
+          <div className="mt-3 border-t border-line pt-3">
+            {REFERENCE_ROUTES.map((route) => (
+              <NavLink
+                key={route.path}
+                to={route.path}
+                className={({ isActive }) =>
+                  `block rounded-sm px-2 py-1.5 text-[13px] transition-colors duration-100 ease-in ${
+                    isActive ? "bg-paper-2 font-semibold text-ink" : "text-muted hover:bg-paper-2 hover:text-ink"
+                  }`
+                }
+              >
+                {route.label}
+              </NavLink>
+            ))}
+          </div>
         </nav>
       )}
     </aside>

@@ -27,8 +27,8 @@ export function DraftStatusBanner() {
         <span>
           Editing an unpublished draft: {status.diff.totalChanges} input{status.diff.totalChanges === 1 ? "" : "s"} changed since the last published version.
         </span>
-        <Link className="shrink-0 font-medium text-warn-800 underline underline-offset-2" to="/reviews">
-          Review changes
+        <Link className="shrink-0 font-medium text-warn-800 underline underline-offset-2" to="/reviews/decide">
+          Review &amp; publish
         </Link>
       </div>
     </div>

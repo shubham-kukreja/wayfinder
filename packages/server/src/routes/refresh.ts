@@ -13,10 +13,13 @@ import { createYahooMetalsAdapter } from "../adapters/yahooMetals.js";
 import { createTradingEconomicsAdapter } from "../adapters/tradingEconomics.js";
 import { createDbNomicsAdapter } from "../adapters/dbnomics.js";
 import { createAaa3yAdapter } from "../adapters/aaa3y.js";
+import { createAmfiNavAdapter } from "../adapters/amfiNav.js";
 import { runRefresh } from "../pipeline/refresh.js";
 import { buildCurrentSnapshot } from "../pipeline/currentSnapshot.js";
 import { loadConfig } from "../config.js";
+import { listTrackedSchemes } from "../store/trackedSchemes.js";
 import type { SourceAdapter } from "../adapters/types.js";
+import type Database from "better-sqlite3";
 
 // §11.5 / §13.1 POST /api/refresh[?sources=fred,bullion,amfi,rbi,nse,yahoo].
 // Default (no query param) now fans out to EVERY registered adapter,
@@ -52,6 +55,7 @@ export const AVAILABLE_SOURCES = [
   "tradingeconomics",
   "dbnomics",
   "aaa3y",
+  "amfi_nav",
 ] as const;
 export type SourceName = (typeof AVAILABLE_SOURCES)[number];
 
@@ -64,7 +68,11 @@ export function parseRequestedSources(sourcesParam: string | undefined): SourceN
   return requested as SourceName[];
 }
 
-export function buildAdapters(names: SourceName[], config: ReturnType<typeof loadConfig>): SourceAdapter[] {
+// Takes `db` (unlike every other adapter builder here) only for
+// amfi_nav: its series list isn't known until the tracked_schemes table
+// is read at request time, unlike every other adapter's fixed compile-time
+// series list — see adapters/amfiNav.ts's file-level comment.
+export function buildAdapters(names: SourceName[], config: ReturnType<typeof loadConfig>, db: Database.Database): SourceAdapter[] {
   const out: SourceAdapter[] = [];
   if (names.includes("fred")) out.push(createFredAdapter({ apiKey: config.fredApiKey, series: FRED_SERIES }));
   if (names.includes("bullion")) out.push(createBullionAdapter({ apiKey: config.metalsDevApiKey, series: BULLION_SERIES }));
@@ -79,6 +87,10 @@ export function buildAdapters(names: SourceName[], config: ReturnType<typeof loa
   if (names.includes("tradingeconomics")) out.push(createTradingEconomicsAdapter());
   if (names.includes("dbnomics")) out.push(createDbNomicsAdapter());
   if (names.includes("aaa3y")) out.push(createAaa3yAdapter());
+  if (names.includes("amfi_nav")) {
+    const trackedCodes = listTrackedSchemes(db, { activeOnly: true }).map((s) => s.schemeCode);
+    out.push(createAmfiNavAdapter(trackedCodes));
+  }
   return out;
 }
 
@@ -103,7 +115,7 @@ export function registerRefreshRoute(app: FastifyInstance): void {
         return requested;
       }
 
-      const adapters = buildAdapters(requested, config);
+      const adapters = buildAdapters(requested, config, db);
       // RBI's live test (test/rbi.live.test.ts) took ~19s end-to-end
       // (browser launch + page navigation + AG Grid pagination) — give
       // every source in this batch a longer timeout when RBI is among

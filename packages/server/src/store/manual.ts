@@ -59,3 +59,14 @@ export function allManualVetoes(db: Database.Database): ManualVetoRow[] {
   >;
   return rows.map((r) => ({ ...r, active: r.active === 1 }));
 }
+
+// Reverting replaces the whole manual-override set rather than merging into
+// it: a snapshot records the overrides that were in force at that moment, so
+// an override added since must disappear, not survive the revert.
+export function clearManualScores(db: Database.Database): void {
+  db.prepare(`DELETE FROM manual_scores`).run();
+}
+
+export function clearManualVetoes(db: Database.Database): void {
+  db.prepare(`DELETE FROM manual_vetoes`).run();
+}

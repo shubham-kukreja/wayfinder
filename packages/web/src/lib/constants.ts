@@ -1,24 +1,30 @@
-export type SurfaceId = "allocation" | "drivers" | "inputs" | "parameters" | "history";
-
-export const SURFACES: Array<{ id: SurfaceId; label: string }> = [
-  { id: "allocation", label: "Allocation" },
-  { id: "drivers", label: "Drivers" },
-  { id: "inputs", label: "Inputs" },
-  { id: "parameters", label: "Parameters" },
-  { id: "history", label: "History & Review" },
-];
-
-export const PRIMARY_ROUTES: Array<{ path: string; label: string }> = [
-  { path: "/overview", label: "Overview" },
-  { path: "/methodology", label: "Methodology" },
-  { path: "/reviews", label: "Reviews" },
-];
+// Navigation follows the system's real fault line: the published snapshot
+// Overview reads, the draft every model surface edits, and the gate between
+// them. Grouping by that means each heading is one sentence — what you act
+// on, what you tune, how tuning becomes acting — rather than a bag labelled
+// "Workspace" holding the answer, the docs and the publish gate at once.
+export const ALLOCATION_ROUTES: Array<{ path: string; label: string }> = [{ path: "/overview", label: "Overview" }];
 
 export const MODEL_ROUTES: Array<{ path: string; label: string }> = [
   { path: "/model/signals", label: "Signals" },
   { path: "/model/datapoints", label: "Data Points" },
   { path: "/model/parameters", label: "Parameters" },
 ];
+
+// The three governance surfaces are separate routes rather than tabs: they
+// serve different readers on different days — deciding now, reconstructing a
+// past decision, and checking what is due — so each deserves its own URL.
+export const GOVERNANCE_ROUTES: Array<{ path: string; label: string }> = [
+  { path: "/reviews/decide", label: "Compare & Publish" },
+  { path: "/reviews/history", label: "History" },
+  { path: "/reviews/cadence", label: "Cadence" },
+];
+
+// Reference material, deliberately outside the groups: Methodology is the
+// one page that never changes with the data, so it is not a state of the
+// model the way the grouped surfaces are.
+export const REFERENCE_ROUTES: Array<{ path: string; label: string }> = [{ path: "/methodology", label: "Methodology" }];
+
 
 // Dev-only fixture switcher. The live server only serves the healthy
 // snapshot so far (GET /api/snapshot — see routes/snapshot.ts), so the

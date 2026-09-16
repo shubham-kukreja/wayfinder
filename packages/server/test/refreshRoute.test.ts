@@ -1,6 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import Database from "better-sqlite3";
 import { parseRequestedSources, buildAdapters, AVAILABLE_SOURCES } from "../src/routes/refresh.js";
 import { loadConfig } from "../src/config.js";
+import { migrate } from "../src/store/schema.js";
+
+let db: Database.Database;
+
+beforeEach(() => {
+  db = new Database(":memory:");
+  migrate(db);
+});
+
+afterEach(() => {
+  db.close();
+});
 
 describe("parseRequestedSources — POST /api/refresh?sources=... (§13.1, §11.5)", () => {
   it("defaults to every registered source — a full refresh now includes the slow headless-browser adapters too", () => {
@@ -60,20 +73,25 @@ describe("parseRequestedSources — POST /api/refresh?sources=... (§13.1, §11.
 
   it("every available source name is buildable", () => {
     const config = loadConfig();
-    const adapters = buildAdapters([...AVAILABLE_SOURCES], config);
-    // 13 source names -> 13 adapter instances, though "rbi" and
+    const adapters = buildAdapters([...AVAILABLE_SOURCES], config, db);
+    // 14 source names -> 14 adapter instances, though "rbi" and
     // "rbi_homepage" both report id "RBI" (two different mechanisms
     // fetching different RBI-sourced series — the dbie.rbihub.in mirror
-    // vs. rbi.org.in's own homepage), so the id list has only 12 unique
+    // vs. rbi.org.in's own homepage), so the id list has only 13 unique
     // values. "ccil" reports id "CCIL" — a distinct source writing to
     // the same tbill_1y series "rbi" (dbie.rbihub.in) already populates.
     // "aaa3y" reports id "AAA3Y_MOCK" — an intentional always-fails
     // adapter (see adapters/aaa3y.ts) so aaa_3y surfaces honestly as
-    // missing/failed rather than being silently absent.
-    expect(adapters).toHaveLength(13);
+    // missing/failed rather than being silently absent. "amfi_nav"
+    // reports id "AMFI_NAV" with an empty series list here since no
+    // schemes are tracked in this in-memory test DB (see
+    // adapters/amfiNav.ts's file-level comment on why its series list is
+    // read from the DB at construction time rather than fixed).
+    expect(adapters).toHaveLength(14);
     expect(adapters.map((a) => a.id).sort()).toEqual([
       "AAA3Y_MOCK",
       "AMFI",
+      "AMFI_NAV",
       "CCIL",
       "DBNOMICS",
       "FRED",
@@ -90,7 +108,7 @@ describe("parseRequestedSources — POST /api/refresh?sources=... (§13.1, §11.
 
   it("buildAdapters only includes the requested sources", () => {
     const config = loadConfig();
-    const adapters = buildAdapters(["fred"], config);
+    const adapters = buildAdapters(["fred"], config, db);
     expect(adapters).toHaveLength(1);
     expect(adapters[0]!.id).toBe("FRED");
   });
