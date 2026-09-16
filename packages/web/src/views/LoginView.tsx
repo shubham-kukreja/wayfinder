@@ -58,7 +58,7 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
           />
 
           <div className="relative flex h-full flex-col justify-end p-10">
-            <p className="font-display text-[46px] font-extrabold leading-[0.98] tracking-display text-white">
+            <p className="max-w-[13ch] font-display text-[clamp(40px,4.6vw,76px)] font-extrabold leading-[0.92] tracking-[-0.035em] text-white">
               Make wealth work
               <br />
               alongside you.
