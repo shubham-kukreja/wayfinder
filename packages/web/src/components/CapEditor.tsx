@@ -21,9 +21,9 @@ export function CapEditor({
 }) {
   return (
     <div className="grid grid-cols-[1fr_1fr_60px] items-center gap-3 text-sm">
-      <span className="truncate text-neutral-600">{label}</span>
+      <span className="truncate text-ink-2">{label}</span>
       <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full" />
-      <span className="text-right tabular-nums text-neutral-800">{isPercent ? `${(value * 100).toFixed(0)}%` : value}</span>
+      <span className="text-right tabular-nums text-ink-2">{isPercent ? `${(value * 100).toFixed(0)}%` : value}</span>
     </div>
   );
 }

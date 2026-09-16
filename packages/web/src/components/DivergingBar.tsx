@@ -8,7 +8,7 @@ export function DivergingBar({ value, max = 50 }: { value: number; max?: number 
 
   return (
     <div className="relative h-5 w-full">
-      <div className="absolute left-1/2 top-0 h-full w-px bg-neutral-300" />
+      <div className="absolute left-1/2 top-0 h-full w-px bg-line" />
       <div className="flex h-full w-full">
         <div className="flex w-1/2 justify-end">
           {!isPositive && (

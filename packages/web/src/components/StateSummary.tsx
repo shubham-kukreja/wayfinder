@@ -15,5 +15,5 @@ export function StateSummary({ snapshot }: { snapshot: Snapshot }) {
   if (activeVetoes > 0) parts.push(`${activeVetoes} veto${activeVetoes === 1 ? "" : "es"} active`);
   parts.push(qualifyingSectors > 0 ? `${qualifyingSectors} sector${qualifyingSectors === 1 ? "" : "s"} qualifying` : "no sectors qualifying");
 
-  return <p className="text-sm text-neutral-500">{parts.join(" · ")}</p>;
+  return <p className="text-sm text-muted">{parts.join(" · ")}</p>;
 }

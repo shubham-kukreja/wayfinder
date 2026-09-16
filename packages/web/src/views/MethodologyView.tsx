@@ -1,16 +1,13 @@
-import { useState } from "react";
 import type { Snapshot } from "@wayfinder/engine";
-import { GROUP_LABELS, L1_SIGNALS, EQUITY_SIGNALS, DEBT_SIGNALS, METALS_SIGNALS } from "@wayfinder/engine";
 import { formatPct } from "../lib/format.js";
 
-// §24-26 of the UX spec ("Methodology screen" / "Standing framework
-// rules"): explanatory, philosophy-first content — expandable "How X is
-// scored" sections with the model's real configured weights and tilt
-// caps, plus the governance rules that apply between reviews. This is
+// §24-26 of the UX spec ("Methodology screen" / "Standing framework rules"):
+// explanatory, philosophy-first content — the model's real configured weights
+// and tilt caps, plus the governance rules that apply between reviews. This is
 // deliberately READ-ONLY; the editable weights/caps UI lives at
-// /model/parameters (ParametersView) — this page explains WHY those
-// numbers exist, not how to change them ("explain philosophy, not
-// expose spreadsheet plumbing by default," per the spec).
+// /model/parameters (ParametersView) — this page explains WHY those numbers
+// exist, not how to change them ("explain philosophy, not expose spreadsheet
+// plumbing by default," per the spec).
 const SIGNAL_LABELS: Record<string, string> = {
   valuation: "Valuation / Carry",
   macro: "Macro / Cycle",
@@ -29,6 +26,14 @@ const SIGNAL_LABELS: Record<string, string> = {
   real_rates: "Real-rates trend benefit",
   industrial: "Industrial demand cycle",
 };
+
+const WEIGHT_GROUPS: ReadonlyArray<{ key: "l1" | "equity" | "debt" | "metals" | "sector"; title: string; blurb: string }> = [
+  { key: "l1", title: "Asset classes", blurb: "equity vs debt vs metals" },
+  { key: "equity", title: "Equity segments", blurb: "across market caps" },
+  { key: "debt", title: "Debt buckets", blurb: "duration and credit" },
+  { key: "metals", title: "Precious metals", blurb: "gold vs silver" },
+  { key: "sector", title: "Sector satellite", blurb: "the optional sleeve" },
+];
 
 const STANDING_RULES = [
   "No tilt changes between reviews on news or price alone. Wait for the appropriate scheduled review, or a veto trigger.",
@@ -63,38 +68,61 @@ const REVIEW_CADENCE = [
   { cadence: "Annual", activity: "Neutral weight and policy review", note: "Risk-profile driven only, not framework-driven" },
 ];
 
-function ExpandableSection({ title, weightSummary, defaultOpen = false, children }: { title: string; weightSummary: string; defaultOpen?: boolean; children: React.ReactNode }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="border border-neutral-200 bg-white">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left"
-        aria-expanded={open}
-      >
-        <span className="text-sm font-semibold text-neutral-900">{title}</span>
-        <span className="flex items-center gap-3">
-          <span className="text-xs text-neutral-400">{weightSummary}</span>
-          <span className={`text-neutral-400 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true">
-            ⌄
-          </span>
-        </span>
-      </button>
-      {open && <div className="border-t border-neutral-100 px-4 py-3">{children}</div>}
-    </div>
-  );
-}
+// How the model turns raw data into a weight, in the order it happens. This is
+// the spine of the page: a reader who understands only this section already
+// understands the system.
+const PIPELINE = [
+  {
+    step: "Observe",
+    title: "Each input becomes a percentile",
+    body: "Every tracked series — valuations, flows, rates, spreads — is scored against its own history rather than an absolute threshold. A P/E of 22 means nothing on its own; being in the 85th percentile of the last decade means something.",
+  },
+  {
+    step: "Score",
+    title: "Percentiles combine into a composite",
+    body: "Each node gets one composite out of 100, a weighted blend of its signals. 50 is neutral. The weights are policy, set at an annual review, not something the model tunes for itself.",
+  },
+  {
+    step: "Tilt",
+    title: "Distance from 50 becomes a tilt",
+    body: "A composite above 50 argues for an overweight, below 50 for an underweight. How far it can actually move is bounded by the tilt cap for that level.",
+  },
+  {
+    step: "Gate",
+    title: "Vetoes can block an overweight",
+    body: "A risk gate does not produce a score. It removes permission to overweight a node, no matter how attractive the composite looks. It never forces an underweight.",
+  },
+  {
+    step: "Normalise",
+    title: "Weights are rebalanced to sum to 100%",
+    body: "Capping and vetoing leave the book off-target, so the remaining weights are scaled back to a full allocation. This is why a node's final weight can differ from its raw tilt.",
+  },
+];
 
-function WeightRows({ weights, labels }: { weights: Record<string, number>; labels: Record<string, string> }) {
+const PRINCIPLES = [
+  {
+    title: "Relative, not absolute",
+    body: "Nothing is judged against a fixed number. Every score is a position within that series' own history, which is what makes the framework portable across regimes.",
+  },
+  {
+    title: "Bounded by design",
+    body: "Caps exist so a single loud signal cannot dominate the book. The model is meant to lean, not to swing.",
+  },
+  {
+    title: "Slow on purpose",
+    body: "Tilts change on a schedule, not on news. The cadence below is the only route to a change, apart from a veto trigger.",
+  },
+  {
+    title: "Neutral is a real position",
+    body: "When signals disagree, the answer is the neutral weight. The model is not obliged to have a view.",
+  },
+];
+
+function StatRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="space-y-2">
-      {Object.entries(weights).map(([signal, weight]) => (
-        <div key={signal} className="flex items-center justify-between gap-4 text-sm">
-          <span className="text-neutral-600">{labels[signal] ?? signal}</span>
-          <span className="font-medium tabular-nums text-neutral-900">{formatPct(weight, 0)}</span>
-        </div>
-      ))}
+    <div className="flex items-baseline justify-between gap-4 border-b border-line py-2.5 last:border-0">
+      <span className="text-[13px] text-ink-2">{label}</span>
+      <span className="text-[13px] font-semibold tabular-nums text-ink">{value}</span>
     </div>
   );
 }
@@ -103,117 +131,170 @@ export function MethodologyView({ snapshot }: { snapshot: Snapshot }) {
   const { params } = snapshot;
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="mb-1 font-display text-xl font-extrabold tracking-tight text-neutral-900">Methodology</h1>
-      <p className="mb-8 text-sm text-neutral-500">
-        How each signal is weighted, how far the model can tilt from neutral, and the standing rules that govern when changes take effect.
-        Live weights and caps below reflect the model's current configuration. To edit them, use{" "}
-        <a href="/model/parameters" className="font-medium text-neutral-700 underline">
-          Parameters
-        </a>
-        .
-      </p>
-
-      <section className="mb-10">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">How each signal is scored</h2>
-        <div className="space-y-2">
-          <ExpandableSection title={`How ${GROUP_LABELS.l1 ?? "Asset Classes"} is scored`} weightSummary="5 signals" defaultOpen>
-            <WeightRows weights={params.signalWeights.l1} labels={SIGNAL_LABELS} />
-          </ExpandableSection>
-          <ExpandableSection title={`How ${GROUP_LABELS.equity ?? "Equity Segments"} is scored`} weightSummary="5 signals">
-            <WeightRows weights={params.signalWeights.equity} labels={SIGNAL_LABELS} />
-          </ExpandableSection>
-          <ExpandableSection title={`How ${GROUP_LABELS.debt ?? "Debt Buckets"} is scored`} weightSummary="4 signals">
-            <WeightRows weights={params.signalWeights.debt} labels={SIGNAL_LABELS} />
-          </ExpandableSection>
-          <ExpandableSection title={`How ${GROUP_LABELS.metals ?? "Precious Metals"} is scored`} weightSummary="3 signals">
-            <WeightRows weights={params.signalWeights.metals} labels={SIGNAL_LABELS} />
-          </ExpandableSection>
-          <ExpandableSection title="How the Sector Satellite is scored" weightSummary="4 signals">
-            <WeightRows weights={params.signalWeights.sector} labels={SIGNAL_LABELS} />
-          </ExpandableSection>
-        </div>
-        <p className="mt-2 text-xs text-neutral-400">
-          Reference: {L1_SIGNALS.length} L1 signals, {EQUITY_SIGNALS.length} equity segment signals, {DEBT_SIGNALS.length} debt bucket signals, {METALS_SIGNALS.length} metals signals.
+    <div className="mx-auto w-full max-w-[1600px] px-6 py-8">
+      <div className="mb-16 max-w-[72ch] border-b border-line pb-10">
+        <p className="text-xs font-bold uppercase tracking-eyebrow text-muted">Workspace</p>
+        <h1 className="mt-2 font-display text-3xl text-ink">How this model works</h1>
+        <p className="mt-5 text-xl leading-[1.55] text-ink-2">
+          This framework decides how much to hold of each asset class, and how far to lean away from a fixed neutral
+          position when conditions justify it. It is rules-driven: the same inputs always produce the same allocation,
+          and every number on the dashboard can be traced back to a series and a weight.
         </p>
+        <p className="mt-4 text-base leading-[1.7] text-ink-2">
+          It is not a forecasting model. It does not predict returns. It reads where each market sits relative to its own
+          history and leans modestly toward what looks better priced.
+        </p>
+      </div>
+
+      {/* The pipeline is the spine of the page: five steps, in the order the
+          engine performs them, so a new reader can follow one number end to
+          end before meeting any configuration tables. */}
+      <section className="mb-16 grid grid-cols-1 gap-x-16 gap-y-6 lg:grid-cols-[minmax(220px,300px)_minmax(0,1fr)]">
+        <div className="lg:sticky lg:top-24 lg:self-start">
+          <h2 className="font-display text-xl text-ink">From data to allocation</h2>
+          <p className="mt-2 text-[15px] leading-[1.6] text-muted">
+            Five steps, in the order they happen. Every weight on the Overview is the output of this sequence.
+          </p>
+        </div>
+        <ol className="border-t border-line">
+          {PIPELINE.map((stage, i) => (
+            <li key={stage.step} className="grid grid-cols-[auto_1fr] gap-x-6 border-b border-line py-7">
+              <div className="flex flex-col items-center">
+                <span className="flex h-7 w-7 items-center justify-center bg-ink text-[12px] font-bold tabular-nums text-paper">
+                  {i + 1}
+                </span>
+                {i < PIPELINE.length - 1 && <span className="mt-2 w-px flex-1 bg-line" aria-hidden="true" />}
+              </div>
+              <div className="max-w-[68ch]">
+                <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">{stage.step}</p>
+                <h3 className="mt-1 text-[15px] font-semibold text-ink">{stage.title}</h3>
+                <p className="mt-2 text-[15px] leading-[1.7] text-ink-2">{stage.body}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
       </section>
 
-      <section className="mb-10">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Tilt caps</h2>
-        <p className="mb-3 text-xs text-neutral-400">The maximum a node can move away from its neutral weight in a single review cycle.</p>
-        <div className="border border-neutral-200 bg-white px-4 py-3">
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-neutral-600">Max tilt — L1 asset classes</span>
-              <span className="font-medium tabular-nums text-neutral-900">{formatPct(params.maxTilt.l1, 0)}</span>
+      <section className="mb-16 grid grid-cols-1 gap-x-16 gap-y-6 lg:grid-cols-[minmax(220px,300px)_minmax(0,1fr)]">
+        <div className="lg:sticky lg:top-24 lg:self-start">
+          <h2 className="font-display text-xl text-ink">What the framework assumes</h2>
+          <p className="mt-2 text-[15px] leading-[1.6] text-muted">
+            Four choices that explain most of the model's behaviour.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-x-12 gap-y-9 sm:grid-cols-2 xl:gap-x-16">
+          {PRINCIPLES.map((principle) => (
+            <div key={principle.title} className="border-t-2 border-ink pt-3">
+              <h3 className="text-[15px] font-semibold text-ink">{principle.title}</h3>
+              <p className="mt-2 text-[15px] leading-[1.7] text-ink-2">{principle.body}</p>
             </div>
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-neutral-600">Max tilt — Equity segments</span>
-              <span className="font-medium tabular-nums text-neutral-900">{formatPct(params.maxTilt.equity, 0)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-neutral-600">Max tilt — Debt buckets</span>
-              <span className="font-medium tabular-nums text-neutral-900">{formatPct(params.maxTilt.debt, 0)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-neutral-600">Max tilt — Gold/Silver split</span>
-              <span className="font-medium tabular-nums text-neutral-900">{formatPct(params.maxTilt.metals, 0)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-4 border-t border-neutral-100 pt-2">
-              <span className="text-neutral-600">Sector sleeve cap</span>
-              <span className="font-medium tabular-nums text-neutral-900">{formatPct(params.sector.sleeveCap, 0)} of Equity</span>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-neutral-600">Max sectors held</span>
-              <span className="font-medium tabular-nums text-neutral-900">{params.sector.maxSectors}</span>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-neutral-600">Sector qualification threshold (composite)</span>
-              <span className="font-medium tabular-nums text-neutral-900">{params.sector.threshold}</span>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 
-      <section className="mb-10">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Review cadence</h2>
-        <div className="space-y-0 border border-neutral-200 bg-white">
+      <section className="mb-16 grid grid-cols-1 gap-x-16 gap-y-6 lg:grid-cols-[minmax(220px,300px)_minmax(0,1fr)]">
+        <div className="lg:sticky lg:top-24 lg:self-start">
+          <h2 className="font-display text-xl text-ink">When things change</h2>
+          <p className="mt-2 text-[15px] leading-[1.6] text-muted">
+            Nothing moves between these points, except when a veto gate trips.
+          </p>
+        </div>
+        <div className="border-t border-line">
           {REVIEW_CADENCE.map((row, i) => (
-            <div key={i} className={`grid grid-cols-[110px_1fr] gap-4 px-4 py-3 text-sm ${i > 0 ? "border-t border-neutral-100" : ""}`}>
-              <span className="font-medium text-neutral-500">{row.cadence}</span>
-              <div>
-                <p className="text-neutral-800">{row.activity}</p>
-                <p className="mt-0.5 text-xs text-neutral-400">{row.note}</p>
+            <div key={i} className="grid grid-cols-[150px_minmax(0,1fr)] gap-8 border-b border-line py-5">
+              <span className="text-[13px] font-semibold text-ink">{row.cadence}</span>
+              <div className="max-w-[68ch]">
+                <p className="text-[15px] leading-[1.6] text-ink-2">{row.activity}</p>
+                <p className="mt-0.5 text-[13px] text-muted">{row.note}</p>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="mb-10">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Standing framework rules</h2>
-        <p className="mb-3 text-xs text-neutral-400">Product logic, not optional visual notes — these are respected by the allocation engine, not just displayed here.</p>
-        <ol className="space-y-2.5 border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-700">
+      <section className="mb-16 grid grid-cols-1 gap-x-16 gap-y-6 lg:grid-cols-[minmax(220px,300px)_minmax(0,1fr)]">
+        <div className="lg:sticky lg:top-24 lg:self-start">
+          <h2 className="font-display text-xl text-ink">Veto gates</h2>
+          <p className="mt-2 text-[15px] leading-[1.6] text-muted">
+            A veto is a risk gate, not a negative score. It removes permission to overweight a node; it never forces an
+            underweight.
+          </p>
+        </div>
+        <div className="border-t border-line">
+          {VETO_GATES.map((row) => (
+            <div key={row.gate} className="grid grid-cols-[180px_minmax(0,1fr)] gap-8 border-b border-line py-5">
+              <span className="text-[13px] font-semibold text-ink">{row.gate}</span>
+              <div className="max-w-[68ch]">
+                <p className="text-[15px] leading-[1.6] text-ink-2">{row.trigger}</p>
+                <p className="mt-0.5 text-[13px] text-muted">Applies to {row.appliesTo.toLowerCase()}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="mb-16 grid grid-cols-1 gap-x-16 gap-y-6 lg:grid-cols-[minmax(220px,300px)_minmax(0,1fr)]">
+        <div className="lg:sticky lg:top-24 lg:self-start">
+          <h2 className="font-display text-xl text-ink">Standing rules</h2>
+          <p className="mt-2 text-[15px] leading-[1.6] text-muted">
+            Product logic, not display notes — the allocation engine enforces these.
+          </p>
+        </div>
+        <ol className="grid grid-cols-1 gap-x-12 border-t border-line xl:grid-cols-2">
           {STANDING_RULES.map((rule, i) => (
-            <li key={i} className="flex gap-3">
-              <span className="shrink-0 font-medium text-neutral-400">{i + 1}.</span>
-              <span>{rule}</span>
+            <li key={i} className="flex gap-5 border-b border-line py-4">
+              <span className="shrink-0 text-[13px] font-semibold tabular-nums text-muted">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <span className="max-w-[68ch] text-[15px] leading-[1.7] text-ink-2">{rule}</span>
             </li>
           ))}
         </ol>
       </section>
 
-      <section>
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Veto gates</h2>
-        <p className="mb-3 text-xs text-neutral-400">Risk gates, not negative scores — vetoes block overweights only, never force underweights.</p>
-        <div className="border border-neutral-200 bg-white">
-          {VETO_GATES.map((row, i) => (
-            <div key={row.gate} className={`grid grid-cols-[130px_1fr_auto] gap-4 px-4 py-3 text-sm ${i > 0 ? "border-t border-neutral-100" : ""}`}>
-              <span className="font-medium text-neutral-900">{row.gate}</span>
-              <span className="text-neutral-600">{row.trigger}</span>
-              <span className="shrink-0 text-right text-xs text-neutral-400">{row.appliesTo}</span>
-            </div>
-          ))}
+      {/* Live configuration last: the numbers matter, but they are reference
+          material once the reader understands what they govern. */}
+      <section className="grid grid-cols-1 gap-x-16 gap-y-6 lg:grid-cols-[minmax(220px,300px)_minmax(0,1fr)]">
+        <div className="lg:sticky lg:top-24 lg:self-start">
+          <h2 className="font-display text-xl text-ink">Current configuration</h2>
+          <p className="mt-2 text-[15px] leading-[1.6] text-muted">
+            The live values behind the rules above. To change them, use{" "}
+            <a href="/model/parameters" className="font-medium text-ink underline underline-offset-2">
+              Parameters
+            </a>
+            .
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-x-12 gap-y-10 sm:grid-cols-2 xl:grid-cols-3">
+          <div>
+            <h3 className="mb-3 border-b border-line pb-2 text-[11px] font-bold uppercase tracking-eyebrow text-muted">Tilt caps</h3>
+            <StatRow label="L1 asset classes" value={`±${formatPct(params.maxTilt.l1, 0)}`} />
+            <StatRow label="Equity segments" value={`±${formatPct(params.maxTilt.equity, 0)}`} />
+            <StatRow label="Debt buckets" value={`±${formatPct(params.maxTilt.debt, 0)}`} />
+            <StatRow label="Gold / silver split" value={`±${formatPct(params.maxTilt.metals, 0)}`} />
+          </div>
+          <div>
+            <h3 className="mb-3 border-b border-line pb-2 text-[11px] font-bold uppercase tracking-eyebrow text-muted">Sector satellite</h3>
+            <StatRow label="Sleeve cap" value={`${formatPct(params.sector.sleeveCap, 0)} of equity`} />
+            <StatRow label="Max sectors held" value={String(params.sector.maxSectors)} />
+            <StatRow label="Qualification threshold" value={String(params.sector.threshold)} />
+            <StatRow label="Forced exit" value={`After ${params.sector.maxConsecutiveQuarters} quarters`} />
+          </div>
+          {WEIGHT_GROUPS.map((groupDef) => {
+            const weights = params.signalWeights[groupDef.key] as Record<string, number>;
+            return (
+              <div key={groupDef.key}>
+                <h3 className="mb-3 border-b border-line pb-2 text-[11px] font-bold uppercase tracking-eyebrow text-muted">
+                  {groupDef.title} weights
+                </h3>
+                {Object.entries(weights)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([signal, weight]) => (
+                    <StatRow key={signal} label={SIGNAL_LABELS[signal] ?? signal} value={formatPct(weight, 0)} />
+                  ))}
+              </div>
+            );
+          })}
         </div>
       </section>
     </div>

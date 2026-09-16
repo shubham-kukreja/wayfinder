@@ -1,17 +1,70 @@
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Snapshot } from "@wayfinder/engine";
-import { NODE_LABELS, TILT_GROUP_NODES, GROUP_LABELS, L1_SIGNALS, EQUITY_SIGNALS, DEBT_SIGNALS, METALS_SIGNALS, computeAllocation } from "@wayfinder/engine";
+import { TILT_GROUP_NODES, L1_SIGNALS, EQUITY_SIGNALS, DEBT_SIGNALS, METALS_SIGNALS, computeAllocation } from "@wayfinder/engine";
 import { scoresFromSnapshot, vetoesFromSnapshot } from "../hooks/useLocalAllocation.js";
 import { useLatestReview } from "../hooks/useLatestReview.js";
-import { DivergingBar } from "../components/DivergingBar.js";
 import { SignalMatrix } from "../components/SignalMatrix.js";
+import { TabRow } from "../components/ui/TabRow.js";
 import { CalculationInspector } from "../components/CalculationInspector.js";
 import { computeSensitivity } from "../lib/sensitivity.js";
 import { attributeChanges } from "../lib/attribution.js";
-import { formatPct, formatScore } from "../lib/format.js";
+import { formatPct } from "../lib/format.js";
 
 const TILT_GROUPS = ["l1", "equity", "debt", "metals"] as const;
+
+const GROUP_TABS: ReadonlyArray<{ id: (typeof TILT_GROUPS)[number]; label: string }> = [
+  { id: "l1", label: "Asset classes" },
+  { id: "equity", label: "Equity" },
+  { id: "debt", label: "Debt" },
+  { id: "metals", label: "Metals" },
+];
+
+function groupFromSearch(value: string | null): (typeof TILT_GROUPS)[number] {
+  return value === "equity" || value === "debt" || value === "metals" ? value : "l1";
+}
+
+const SIGNAL_PANELS: ReadonlyArray<{
+  id: string;
+  title: string;
+  subtitle: string;
+  group: (typeof TILT_GROUPS)[number];
+  signals: readonly string[];
+  nodes: readonly string[];
+}> = [
+  {
+    id: "l1",
+    title: "Asset-class signals",
+    subtitle: "The split between equity, debt and metals.",
+    group: "l1",
+    signals: L1_SIGNALS,
+    nodes: TILT_GROUP_NODES.l1,
+  },
+  {
+    id: "equity",
+    title: "Equity segment signals",
+    subtitle: "How the equity sleeve splits across market caps.",
+    group: "equity",
+    signals: EQUITY_SIGNALS,
+    nodes: TILT_GROUP_NODES.equity,
+  },
+  {
+    id: "debt",
+    title: "Debt bucket signals",
+    subtitle: "How the debt sleeve splits across duration and credit.",
+    group: "debt",
+    signals: DEBT_SIGNALS,
+    nodes: TILT_GROUP_NODES.debt,
+  },
+  {
+    id: "metals",
+    title: "Precious metals signals",
+    subtitle: "How the metals sleeve splits between gold and silver.",
+    group: "metals",
+    signals: METALS_SIGNALS,
+    nodes: TILT_GROUP_NODES.metals,
+  },
+];
 
 export function DriversView({ snapshot }: { snapshot: Snapshot }) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -34,10 +87,25 @@ export function DriversView({ snapshot }: { snapshot: Snapshot }) {
     setSearchParams(next);
   }
 
-  const l1Composites = Object.fromEntries(TILT_GROUP_NODES.l1.map((id) => [id, allocation.groups.l1.nodes[id]!.composite]));
-  const equityComposites = Object.fromEntries(TILT_GROUP_NODES.equity.map((id) => [id, allocation.groups.equity.nodes[id]!.composite]));
-  const debtComposites = Object.fromEntries(TILT_GROUP_NODES.debt.map((id) => [id, allocation.groups.debt.nodes[id]!.composite]));
-  const metalsComposites = Object.fromEntries(TILT_GROUP_NODES.metals.map((id) => [id, allocation.groups.metals.nodes[id]!.composite]));
+  const group = groupFromSearch(searchParams.get("group"));
+  const activePanel = SIGNAL_PANELS.find((panel) => panel.group === group) ?? SIGNAL_PANELS[0]!;
+
+  function setGroup(nextGroup: (typeof TILT_GROUPS)[number]) {
+    const next = new URLSearchParams(searchParams);
+    if (nextGroup === "l1") next.delete("group");
+    else next.set("group", nextGroup);
+    setSearchParams(next);
+  }
+
+  function weightsFor(group: (typeof TILT_GROUPS)[number]): Record<string, number> {
+    return (snapshot.params.signalWeights as Record<string, Record<string, number>>)[group] ?? {};
+  }
+
+  function compositesFor(group: (typeof TILT_GROUPS)[number]): Record<string, number> {
+    return Object.fromEntries(
+      TILT_GROUP_NODES[group].map((id) => [id, allocation.groups[group].nodes[id]!.composite]),
+    );
+  }
 
   const sensitivity = useMemo(() => computeSensitivity(scores, vetoes, snapshot.params).slice(0, 10), [scores, vetoes, snapshot.params]);
 
@@ -59,106 +127,104 @@ export function DriversView({ snapshot }: { snapshot: Snapshot }) {
   }, [scores, baselineScores, baselineVetoes, allocation, snapshot.params]);
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
+    <div className="mx-auto w-full max-w-[1600px] px-6 py-8">
       <CalculationInspector snapshot={snapshot} allocation={allocation} selectedId={selectedNode} onClose={closeInspector} />
 
-      <h1 className="mb-1 font-display text-xl font-extrabold tracking-tight text-neutral-900">Drivers</h1>
-      <p className="mb-8 text-sm text-neutral-500">Composite decomposition, change attribution, and sensitivity — the "why" behind the allocation.</p>
+      <div className="mb-6">
+        <p className="text-xs font-bold uppercase tracking-eyebrow text-muted">Model Explorer</p>
+        <h1 className="mt-1 font-display text-2xl text-ink">Signals</h1>
+        <p className="mt-1 max-w-measure text-sm text-muted">
+          Composite decomposition, change attribution, and sensitivity — the "why" behind the allocation.
+        </p>
+      </div>
 
-      {/* §14 of the UX spec ("Signal Matrix") - the actual per-signal
-          breakdown behind each composite, replacing spreadsheet-style
-          input blocks. Small inline bars per cell (not giant colored
-          heatmap tiles, per the spec), click-through to
-          CalculationInspector for raw input / percentile / weight /
-          contribution detail on that exact node::signal. */}
-      <section className="mb-10 space-y-8">
-        <div>
-          <h2 className="mb-3 text-sm font-semibold text-neutral-700">L1 signal matrix</h2>
-          <SignalMatrix title="L1 asset-class signals" signals={L1_SIGNALS} nodes={TILT_GROUP_NODES.l1} scores={scores} composites={l1Composites} onSelect={selectNode} />
-        </div>
-        <div>
-          <h2 className="mb-3 text-sm font-semibold text-neutral-700">Equity segment signals</h2>
-          <SignalMatrix title="Equity segment signals" signals={EQUITY_SIGNALS} nodes={TILT_GROUP_NODES.equity} scores={scores} composites={equityComposites} onSelect={selectNode} />
-        </div>
-        <div>
-          <h2 className="mb-3 text-sm font-semibold text-neutral-700">Debt bucket signals</h2>
-          <SignalMatrix title="Debt bucket signals" signals={DEBT_SIGNALS} nodes={TILT_GROUP_NODES.debt} scores={scores} composites={debtComposites} onSelect={selectNode} />
-        </div>
-        <div>
-          <h2 className="mb-3 text-sm font-semibold text-neutral-700">Precious metals signals</h2>
-          <SignalMatrix title="Precious metals signals" signals={METALS_SIGNALS} nodes={TILT_GROUP_NODES.metals} scores={scores} composites={metalsComposites} onSelect={selectNode} />
-        </div>
+      {/* §14 of the UX spec ("Signal Matrix") — the per-signal breakdown behind
+          each composite, one asset class at a time. Tabs rather than four
+          stacked matrices: the groups are alternatives to look at, not a
+          sequence to read, and stacking them buried the lower ones. They sit
+          above the panel rather than inside it, since they switch what the
+          panel contains rather than being part of its content. */}
+      <TabRow options={GROUP_TABS} value={group} onChange={setGroup} className="mb-6" />
+
+      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+        <p className="max-w-measure text-[13px] text-muted">{activePanel.subtitle}</p>
+        <p className="shrink-0 text-[13px] text-muted">
+          {activePanel.signals.length} signals · {activePanel.nodes.length} nodes
+        </p>
+      </div>
+
+      <section className="rounded-lg border border-line bg-paper p-5">
+        <SignalMatrix
+          title={activePanel.title}
+          signals={activePanel.signals}
+          nodes={activePanel.nodes}
+          scores={scores}
+          composites={compositesFor(activePanel.group)}
+          weights={weightsFor(activePanel.group)}
+          onSelect={selectNode}
+        />
       </section>
 
-      <section className="mb-10">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Composites</h2>
-        <div className="space-y-6">
-          {TILT_GROUPS.map((group) => (
-            <div key={group}>
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-400">{GROUP_LABELS[group]}</h3>
-              <div className="space-y-2">
-                {TILT_GROUP_NODES[group].map((nodeId) => {
-                  const node = allocation.groups[group].nodes[nodeId]!;
-                  const signFlip = Math.sign(node.vsNeutralRaw) !== Math.sign(node.vsNeutralFinal) && node.vsNeutralRaw !== 0 && node.vsNeutralFinal !== 0;
-                  return (
-                    <div key={nodeId} className="grid grid-cols-[140px_1fr_70px] items-center gap-3 text-sm">
-                      <span className="text-neutral-700">{NODE_LABELS[nodeId]}</span>
-                      <DivergingBar value={node.composite} />
-                      <span className="text-right tabular-nums text-neutral-500">
-                        {formatScore(node.composite)}
-                        {signFlip && (
-                          <span className="ml-1 text-amber-600" title="Tilt direction and final-weight direction disagree — normalisation flipped the sign">
-                            ⚠
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+      <section className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="rounded-lg border border-line bg-paper p-5">
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-ink">Change attribution</h2>
+            <p className="mt-0.5 text-[13px] text-muted">
+              {review ? "Versus the last saved review" : "Versus a neutral baseline — no review saved yet"}
+            </p>
+          </div>
+          {reviewLoading ? (
+            <p className="text-[13px] text-muted">Loading baseline…</p>
+          ) : attribution.length === 0 ? (
+            <p className="text-[13px] text-muted">No line item differs from the baseline by more than 0.1pp.</p>
+          ) : (
+            <div>
+              {attribution.map((row) => (
+                <div key={row.rollupId} className="border-b border-line py-3 first:pt-0 last:border-0 last:pb-0">
+                  <div className="flex items-baseline justify-between gap-4">
+                    <span className="text-[15px] text-ink">{row.label}</span>
+                    <span
+                      className={`shrink-0 text-[15px] font-semibold tabular-nums ${
+                        row.delta >= 0 ? "text-brand-800" : "text-danger-500"
+                      }`}
+                    >
+                      {row.delta >= 0 ? "+" : ""}
+                      {formatPct(row.delta)}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex items-baseline justify-between gap-4">
+                    <span className="text-[13px] text-muted">
+                      {row.explanation ? `because ${row.explanation}` : ""}
+                    </span>
+                    <span className="shrink-0 text-[13px] tabular-nums text-muted">
+                      {formatPct(row.before)} → {formatPct(row.after)}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+        </div>
+
+        <div className="rounded-lg border border-line bg-paper p-5">
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-ink">Sensitivity</h2>
+            <p className="mt-0.5 max-w-measure text-[13px] text-muted">
+              How far a ±10-point move in each score shifts the total allocation. Highest impact first — these are
+              the scores worth research time.
+            </p>
+          </div>
+          <div>
+            {sensitivity.map((s) => (
+              <div key={s.scoreKey} className="flex items-center justify-between gap-4 border-b border-line py-2.5 first:pt-0 last:border-0 last:pb-0">
+                <span className="min-w-0 truncate font-mono text-[12px] text-ink-2">{s.scoreKey}</span>
+                <span className="shrink-0 text-[13px] font-semibold tabular-nums text-ink">{formatPct(s.impact)}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
-      <section className="mb-10">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">
-          Change attribution {review ? "(vs. last saved review)" : "(vs. neutral baseline — no review saved yet)"}
-        </h2>
-        {reviewLoading ? (
-          <p className="text-sm text-neutral-400">Loading baseline…</p>
-        ) : attribution.length === 0 ? (
-          <p className="text-sm text-neutral-400">No line item differs from the baseline by more than 0.1pp.</p>
-        ) : (
-          <ul className="space-y-1.5 text-sm">
-            {attribution.map((row) => (
-              <li key={row.rollupId} className="flex items-baseline justify-between gap-4">
-                <span className="text-neutral-700">
-                  {row.label} {formatPct(row.before)} → {formatPct(row.after)}
-                  {row.explanation && <span className="text-neutral-400"> — because {row.explanation}</span>}
-                </span>
-                <span className={`shrink-0 font-mono tabular-nums ${row.delta >= 0 ? "text-brand-800" : "text-danger-500"}`}>
-                  {row.delta >= 0 ? "+" : ""}
-                  {formatPct(row.delta)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section>
-        <h2 className="mb-1 text-sm font-semibold text-neutral-700">Sensitivity</h2>
-        <p className="mb-3 text-xs text-neutral-400">How far a ±10-point move in each score shifts the total allocation. Highest-impact scores first — these are the ones worth research time.</p>
-        <ul className="space-y-1.5 text-sm">
-          {sensitivity.map((s) => (
-            <li key={s.scoreKey} className="flex items-center justify-between gap-4">
-              <span className="text-neutral-700">{s.scoreKey}</span>
-              <span className="tabular-nums text-neutral-500">{formatPct(s.impact)}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
     </div>
   );
 }

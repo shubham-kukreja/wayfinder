@@ -5,9 +5,9 @@
 // error.
 export function ColdStartBanner({ insufficientCount, totalCount }: { insufficientCount: number; totalCount: number }) {
   return (
-    <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-      <p className="text-sm font-medium text-blue-900">Not yet informative</p>
-      <p className="mt-0.5 text-sm text-blue-800">
+    <div className="mb-6 rounded-lg border border-line bg-paper-2 px-4 py-3">
+      <p className="text-sm font-semibold text-ink">Not yet informative</p>
+      <p className="mt-0.5 max-w-measure text-sm text-ink-2">
         {insufficientCount} of {totalCount} series have too little history for a real percentile (minimum 24 observations). The
         allocation below is neutral by policy, not a signal — it will start reflecting real market conditions once enough history
         accumulates.

@@ -65,14 +65,14 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
+    <div className="mx-auto w-full max-w-[1600px] px-6 py-8">
       <div className="mb-8 flex items-start justify-between">
         <div>
-          <h1 className="mb-1 font-display text-xl font-extrabold tracking-tight text-neutral-900">Parameters</h1>
-          <p className="text-sm text-neutral-500">
+          <h1 className="mb-1 font-display text-xl text-ink">Parameters</h1>
+          <p className="text-sm text-muted">
             Every weight, cap and threshold is editable. Recomputes locally, no network call — saving writes it to the
             server so it applies everywhere and survives a reload. See{" "}
-            <a href="/model/methodology" className="font-medium text-neutral-700 underline">
+            <a href="/methodology" className="font-medium text-ink-2 underline">
               Methodology
             </a>{" "}
             for what each one means and why.
@@ -81,7 +81,7 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
         <div className="flex items-center gap-3">
           {saveError && <span className="text-xs text-danger-500">Save failed: {saveError}</span>}
           {!saveError && !isDirty && <span className="text-xs text-brand-800">Saved</span>}
-          {isDirty && <span className="text-xs text-amber-600">Unsaved changes</span>}
+          {isDirty && <span className="text-xs text-warn-600">Unsaved changes</span>}
           <button
             onClick={() => setParams(lastSavedParams)}
             disabled={!isDirty}
@@ -92,22 +92,22 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
           <button
             onClick={handleSave}
             disabled={!isDirty || saving}
-            className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-black transition duration-100 ease-in hover:brightness-105 hover:-translate-y-px disabled:opacity-40"
+            className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white transition duration-100 ease-in hover:brightness-105 hover:-translate-y-px disabled:opacity-40"
           >
             {saving ? "Saving…" : "Save"}
           </button>
         </div>
       </div>
 
-      <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-4">
-        <h2 className="mb-2 text-sm font-semibold text-neutral-800">Live allocation</h2>
-        <p className="mb-3 text-xs text-neutral-400">Recomputed live from the weights and caps below, using the same allocation bar as Overview.</p>
+      <section className="mb-8 rounded-lg border border-line bg-paper p-5">
+        <h2 className="mb-2 text-sm font-semibold text-ink-2">Live allocation</h2>
+        <p className="mb-3 text-xs text-muted">Recomputed live from the weights and caps below, using the same allocation bar as Overview.</p>
         <AllocationBar allocation={allocation} depth="detail" />
       </section>
 
       <section className="mb-8">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Signal weights</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <h2 className="mb-3 text-sm font-semibold text-ink-2">Signal weights</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {TILT_GROUPS.map((group) => (
             <WeightEditor
               key={group}
@@ -122,19 +122,19 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
 
       <section className="mb-8">
         <div className="mb-3 flex items-center gap-3">
-          <h2 className="text-sm font-semibold text-neutral-700">Neutral weights (policy)</h2>
+          <h2 className="text-sm font-semibold text-ink-2">Neutral weights (policy)</h2>
           {!neutralEditUnlocked ? (
             <button
               onClick={() => setNeutralEditUnlocked(true)}
-              className="rounded-md border border-neutral-300 px-2 py-0.5 text-xs text-neutral-600 hover:bg-neutral-100"
+              className="rounded-md border border-line px-2 py-0.5 text-xs text-ink-2 hover:bg-paper-2"
             >
               Unlock to edit
             </button>
           ) : (
-            <span className="text-xs font-medium text-amber-700">Editing policy weights — reviewed annually, not automated</span>
+            <span className="text-xs font-medium text-warn-600">Editing policy weights — reviewed annually, not automated</span>
           )}
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {TILT_GROUPS.map((group) => (
             <div key={group} className={neutralEditUnlocked ? "" : "pointer-events-none opacity-60"}>
               <WeightEditor
@@ -150,11 +150,11 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
       </section>
 
       <section className="mb-8">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Tilt caps</h2>
-        <p className="mb-3 text-xs text-neutral-400">The maximum a node can move away from its neutral weight in a single review cycle. See Methodology for the reasoning behind each cap.</p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="border border-neutral-200 bg-white p-4">
-            <h3 className="mb-3 text-sm font-semibold text-neutral-800">Max tilt</h3>
+        <h2 className="mb-3 text-sm font-semibold text-ink-2">Tilt caps</h2>
+        <p className="mb-3 text-xs text-muted">The maximum a node can move away from its neutral weight in a single review cycle. See Methodology for the reasoning behind each cap.</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="rounded-lg border border-line bg-paper p-5">
+            <h3 className="mb-3 text-sm font-semibold text-ink-2">Max tilt</h3>
             <div className="space-y-2">
               <CapEditor label="L1 asset classes" value={params.maxTilt.l1} onChange={(v) => updateMaxTilt("l1", v)} />
               <CapEditor label="Equity segments" value={params.maxTilt.equity} onChange={(v) => updateMaxTilt("equity", v)} />
@@ -162,8 +162,8 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
               <CapEditor label="Gold/Silver split" value={params.maxTilt.metals} onChange={(v) => updateMaxTilt("metals", v)} />
             </div>
           </div>
-          <div className="border border-neutral-200 bg-white p-4">
-            <h3 className="mb-3 text-sm font-semibold text-neutral-800">Sector satellite</h3>
+          <div className="rounded-lg border border-line bg-paper p-5">
+            <h3 className="mb-3 text-sm font-semibold text-ink-2">Sector satellite</h3>
             <div className="space-y-2">
               <CapEditor label="Sleeve cap (% of Equity)" value={params.sector.sleeveCap} onChange={(v) => updateSectorCap("sleeveCap", v)} />
               <CapEditor label="Max sectors held" value={params.sector.maxSectors} onChange={(v) => updateSectorCap("maxSectors", v)} isPercent={false} min={1} max={8} step={1} />
@@ -174,15 +174,15 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
         </div>
       </section>
 
-      <section className="mb-8 rounded-lg border border-neutral-200 bg-white p-4">
-        <h2 className="mb-2 text-sm font-semibold text-neutral-800">Normalisation</h2>
+      <section className="mb-8 rounded-lg border border-line bg-paper p-5">
+        <h2 className="mb-2 text-sm font-semibold text-ink-2">Normalisation</h2>
         <div className="flex gap-2">
           {(["proportional", "zero_sum"] as const).map((mode) => (
             <button
               key={mode}
               onClick={() => setParams((p) => ({ ...p, normalisation: mode }))}
               className={`rounded-md px-3 py-1.5 text-xs font-medium ${
-                params.normalisation === mode ? "bg-brand-500 text-black" : "border border-neutral-200 text-neutral-600"
+                params.normalisation === mode ? "bg-brand-500 text-white" : "border border-line text-ink-2"
               }`}
             >
               {mode === "proportional" ? "Proportional (default)" : "Zero-sum"}
@@ -193,10 +193,10 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
 
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-neutral-700">Fragility test</h2>
+          <h2 className="text-sm font-semibold text-ink-2">Fragility test</h2>
           <button
             onClick={() => setShowFragility((v) => !v)}
-            className="rounded-md border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100"
+            className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink-2 hover:bg-paper-2"
           >
             {showFragility ? "Hide" : "Run: perturb every weight ±10%"}
           </button>
@@ -205,8 +205,8 @@ export function ParametersView({ snapshot }: { snapshot: Snapshot }) {
           <ul className="space-y-1.5 text-sm">
             {fragility.map((f) => (
               <li key={f.rollupId} className="flex items-center justify-between gap-4">
-                <span className="text-neutral-700">{f.label}</span>
-                <span className={`tabular-nums ${f.stable ? "text-neutral-500" : "text-amber-600 font-medium"}`}>
+                <span className="text-ink-2">{f.label}</span>
+                <span className={`tabular-nums ${f.stable ? "text-muted" : "text-warn-600 font-medium"}`}>
                   {formatPct(f.minObserved)} – {formatPct(f.maxObserved)} {!f.stable && "· unstable"}
                 </span>
               </li>

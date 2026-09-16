@@ -12,10 +12,14 @@
   font-style: italic;
   font-display: swap;
 }
+/* Display face. The live product uses a proprietary geometric grotesk (KMR
+   Waldenburg); Inter Tight is the closest open substitute — flat terminals
+   and a tight display cut. Bricolage Grotesque, the previous stand-in, has
+   rounded characterful terminals that read nothing like the wordmark. */
 @font-face {
-  font-family: "Bricolage Grotesque";
-  src: url("/fonts/BricolageGrotesque-Variable.ttf") format("truetype-variations");
-  font-weight: 200 800;
+  font-family: "Inter Tight";
+  src: url("/fonts/InterTight-Variable.ttf") format("truetype-variations");
+  font-weight: 100 900;
   font-style: normal;
   font-display: swap;
 }
@@ -45,8 +49,32 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: "Plus Jakarta Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+@layer base {
+  body {
+    font-family: "Plus Jakarta Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: theme("colors.paper");
+    color: theme("colors.ink");
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Display type is for headlines and hero statements only. Heavy weight,
+     negative tracking, and a compressed line-height are what make a heading
+     read as loud rather than large. Scoped to h1 deliberately: most h2s in
+     this app are small card titles, which stay in the body face and opt into
+     display treatment with `font-display` only when they are true headlines. */
+  h1 {
+    font-family: "Inter Tight", "Helvetica Neue", Arial, sans-serif;
+    font-weight: 800;
+    letter-spacing: theme("letterSpacing.display");
+    line-height: theme("lineHeight.display");
+  }
+
+  ::selection {
+    background: theme("colors.brand.500");
+    color: #000;
+  }
 }
 
 /* Brand-accented range slider matching the Altruist system: 6px radius
@@ -67,7 +95,7 @@ input[type="range"]::-webkit-slider-thumb {
   width: 14px;
   height: 14px;
   border-radius: 9999px;
-  background: #01bc48; /* brand */
+  background: #3ecf5f; /* brand */
   cursor: pointer;
   margin-top: 0;
 }
@@ -76,7 +104,7 @@ input[type="range"]::-moz-range-thumb {
   height: 14px;
   border: none;
   border-radius: 9999px;
-  background: #01bc48;
+  background: #3ecf5f;
   cursor: pointer;
 }
 input[type="range"]::-moz-range-track {

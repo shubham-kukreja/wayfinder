@@ -27,13 +27,13 @@ export function WeightEditor({
   }
 
   return (
-    <div className={`rounded-lg border p-4 ${friction ? "border-amber-300 bg-amber-50/40" : "border-neutral-200 bg-white"}`}>
+    <div className={`rounded-lg border p-4 ${friction ? "border-warn-200 bg-warn-50/40" : "border-line bg-paper"}`}>
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-neutral-800">{title}</h3>
-        <span className={`text-xs tabular-nums ${isBalanced ? "text-neutral-400" : "text-amber-600 font-medium"}`}>
+        <h3 className="text-sm font-semibold text-ink-2">{title}</h3>
+        <span className={`text-xs tabular-nums ${isBalanced ? "text-muted" : "text-warn-600 font-medium"}`}>
           sum {(sum * 100).toFixed(1)}%
           {!isBalanced && (
-            <button onClick={normalise} className="ml-2 rounded border border-amber-400 px-1.5 py-0.5 text-amber-700 hover:bg-amber-100">
+            <button onClick={normalise} className="ml-2 rounded border border-warn-200 px-1.5 py-0.5 text-warn-600 hover:bg-warn-50">
               Normalise
             </button>
           )}
@@ -42,7 +42,7 @@ export function WeightEditor({
       <div className="space-y-2">
         {Object.entries(weights).map(([key, value]) => (
           <div key={key} className="grid grid-cols-[100px_1fr_50px] items-center gap-3 text-sm">
-            <span className="truncate text-neutral-600">{labels?.[key] ?? key}</span>
+            <span className="truncate text-ink-2">{labels?.[key] ?? key}</span>
             <input
               type="range"
               min={0}
@@ -52,7 +52,7 @@ export function WeightEditor({
               onChange={(e) => setWeight(key, Number(e.target.value))}
               className="w-full"
             />
-            <span className="text-right tabular-nums text-neutral-800">{(value * 100).toFixed(0)}%</span>
+            <span className="text-right tabular-nums text-ink-2">{(value * 100).toFixed(0)}%</span>
           </div>
         ))}
       </div>

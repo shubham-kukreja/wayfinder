@@ -115,17 +115,17 @@ export function HistoryView({ snapshot }: { snapshot: Snapshot }) {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
-      <h1 className="mb-1 font-display text-xl font-extrabold tracking-tight text-neutral-900">Reviews & Audit</h1>
-      <p className="mb-8 text-sm text-neutral-500">
+    <div className="mx-auto w-full max-w-[1600px] px-6 py-8">
+      <h1 className="mb-1 font-display text-xl text-ink">Reviews & Audit</h1>
+      <p className="mb-8 text-sm text-muted">
         Published allocation versions, saved reviews, data distributions, and the audit trail. Refreshing data is not publishing a model version.
       </p>
 
-      <section className="mb-10 rounded-lg border border-neutral-200 bg-white p-4">
+      <section className="mb-10 rounded-lg border border-line bg-paper p-5">
         <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-neutral-800">Version actions</h2>
-            <p className="mt-1 text-xs text-neutral-400">Save freezes a review. Publish creates a versioned baseline for audit.</p>
+            <h2 className="text-sm font-semibold text-ink-2">Version actions</h2>
+            <p className="mt-1 text-xs text-muted">Save freezes a review. Publish creates a versioned baseline for audit.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <input
@@ -133,26 +133,26 @@ export function HistoryView({ snapshot }: { snapshot: Snapshot }) {
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="Optional label"
-              className="rounded-md border border-neutral-200 px-2 py-1 text-xs text-neutral-700"
+              className="rounded-md border border-line px-2 py-1 text-xs text-ink-2"
             />
             <input
               type="text"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Reason"
-              className="rounded-md border border-neutral-200 px-2 py-1 text-xs text-neutral-700"
+              className="rounded-md border border-line px-2 py-1 text-xs text-ink-2"
             />
             <button
               onClick={handleStartReview}
               disabled={saving || publishing}
-              className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-black transition duration-100 ease-in hover:brightness-105 hover:-translate-y-px disabled:opacity-50"
+              className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white transition duration-100 ease-in hover:brightness-105 hover:-translate-y-px disabled:opacity-50"
             >
               {saving ? "Saving…" : "Start a review"}
             </button>
             <button
               onClick={handlePublish}
               disabled={saving || publishing}
-              className="rounded-md border-[1.5px] border-ink px-3 py-1.5 text-xs font-medium text-ink hover:bg-neutral-100 disabled:opacity-50"
+              className="rounded-md border-[1.5px] border-ink px-3 py-1.5 text-xs font-medium text-ink hover:bg-paper-2 disabled:opacity-50"
             >
               {publishing ? "Publishing…" : "Publish version"}
             </button>
@@ -165,41 +165,41 @@ export function HistoryView({ snapshot }: { snapshot: Snapshot }) {
         {loadReviewError && <p className="mb-2 text-xs text-danger-500">Failed to load review: {loadReviewError}</p>}
         {deleteError && <p className="mb-2 text-xs text-danger-500">Failed to delete: {deleteError}</p>}
 
-        {reviews === null && !loadError && <p className="text-sm text-neutral-400">Loading…</p>}
+        {reviews === null && !loadError && <p className="text-sm text-muted">Loading…</p>}
 
         {reviews && reviews.length === 0 && (
-          <p className="text-sm text-neutral-400">
+          <p className="text-sm text-muted">
             No reviews saved yet. Starting one freezes the current state as an immutable snapshot with notes — that becomes the baseline the Drivers surface compares against.
           </p>
         )}
 
         {reviews && reviews.length > 0 && (
-          <ul className="divide-y divide-neutral-100">
+          <ul className="divide-y divide-paper-2">
             {reviews.map((r) => (
               <li key={r.id} className="grid grid-cols-[1fr_auto_auto] items-center gap-4 py-3 text-sm">
                 <span className="min-w-0">
                   <span className="flex items-center gap-2">
-                    <span className="truncate text-neutral-700">{r.label ?? <span className="italic text-neutral-400">Unlabelled</span>}</span>
+                    <span className="truncate text-ink-2">{r.label ?? <span className="italic text-muted">Unlabelled</span>}</span>
                     {r.published ? (
                       <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-800">Published</span>
                     ) : (
-                      <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-500">Review</span>
+                      <span className="rounded-full bg-paper-2 px-2 py-0.5 text-[11px] font-medium text-muted">Review</span>
                     )}
                     {loadedReview?.id === r.id && (
-                      <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600">Viewing</span>
+                      <span className="rounded-full bg-paper-2 px-2 py-0.5 text-[11px] font-medium text-ink-2">Viewing</span>
                     )}
                   </span>
-                  <span className="mt-1 block truncate text-xs text-neutral-400">
+                  <span className="mt-1 block truncate text-xs text-muted">
                     {r.actor ? `Actor ${r.actor}` : "Actor unknown"}
                     {r.parentId ? ` · parent ${r.parentId.slice(0, 8)}` : ""}
                   </span>
                 </span>
-                <span className="whitespace-nowrap text-right text-xs text-neutral-400">{formatDate(r.createdAt)}</span>
+                <span className="whitespace-nowrap text-right text-xs text-muted">{formatDate(r.createdAt)}</span>
                 <span className="flex items-center gap-1.5">
                   <button
                     onClick={() => handleLoadReview(r)}
                     disabled={loadingReviewId === r.id}
-                    className="rounded-md border-[1.5px] border-ink px-2 py-1 text-xs font-medium text-ink hover:bg-neutral-50 disabled:opacity-50"
+                    className="rounded-md border-[1.5px] border-ink px-2 py-1 text-xs font-medium text-ink hover:bg-paper-2 disabled:opacity-50"
                   >
                     {loadingReviewId === r.id ? "Loading…" : "Load"}
                   </button>
@@ -218,19 +218,19 @@ export function HistoryView({ snapshot }: { snapshot: Snapshot }) {
       </section>
 
       {loadedReview && (
-        <section className="mb-10 rounded-lg border border-neutral-200 bg-neutral-50/60 p-4">
+        <section className="mb-10 rounded-lg border border-line bg-paper-2/60 p-5">
           <div className="mb-3 flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-sm font-semibold text-neutral-800">
-                Viewing: {loadedReview.item.label ?? <span className="italic text-neutral-400">Unlabelled</span>}
+              <h2 className="text-sm font-semibold text-ink-2">
+                Viewing: {loadedReview.item.label ?? <span className="italic text-muted">Unlabelled</span>}
               </h2>
-              <p className="mt-1 text-xs text-neutral-400">
+              <p className="mt-1 text-xs text-muted">
                 {loadedReview.item.published ? "Published version" : "Saved review"} · {formatDate(loadedReview.item.createdAt)} · read-only, frozen state
               </p>
             </div>
             <button
               onClick={() => setLoadedReview(null)}
-              className="rounded-md border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-100"
+              className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink-2 hover:bg-paper-2"
             >
               Close
             </button>
@@ -240,40 +240,40 @@ export function HistoryView({ snapshot }: { snapshot: Snapshot }) {
       )}
 
       {draftStatus && (
-        <section className="mb-10 rounded-lg border border-neutral-200 bg-white p-4">
+        <section className="mb-10 rounded-lg border border-line bg-paper p-5">
           <div className="mb-3 flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-sm font-semibold text-neutral-800">Unpublished draft impact</h2>
-              <p className="mt-1 text-xs text-neutral-400">
+              <h2 className="text-sm font-semibold text-ink-2">Unpublished draft impact</h2>
+              <p className="mt-1 text-xs text-muted">
                 Compared with {draftStatus.hasPublishedVersion ? `published version ${draftStatus.latestPublishedId?.slice(0, 8)}` : "no published baseline yet"}.
               </p>
             </div>
-            <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${draftStatus.diff.totalChanges > 0 || !draftStatus.hasPublishedVersion ? "bg-amber-50 text-amber-800" : "bg-brand-50 text-brand-800"}`}>
+            <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${draftStatus.diff.totalChanges > 0 || !draftStatus.hasPublishedVersion ? "bg-warn-50 text-warn-800" : "bg-brand-50 text-brand-800"}`}>
               {draftStatus.diff.totalChanges} change{draftStatus.diff.totalChanges === 1 ? "" : "s"}
             </span>
           </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div className="rounded-lg border border-neutral-200 p-3">
-              <p className="text-xs text-neutral-400">Scores</p>
-              <p className="mt-1 text-xl font-semibold tabular-nums text-neutral-950">{draftStatus.diff.changedScores.length}</p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-4">
+            <div className="rounded-lg border border-line p-3">
+              <p className="text-xs text-muted">Scores</p>
+              <p className="mt-1 text-xl font-semibold tabular-nums text-ink">{draftStatus.diff.changedScores.length}</p>
             </div>
-            <div className="rounded-lg border border-neutral-200 p-3">
-              <p className="text-xs text-neutral-400">Vetoes</p>
-              <p className="mt-1 text-xl font-semibold tabular-nums text-neutral-950">{draftStatus.diff.changedVetoes.length}</p>
+            <div className="rounded-lg border border-line p-3">
+              <p className="text-xs text-muted">Vetoes</p>
+              <p className="mt-1 text-xl font-semibold tabular-nums text-ink">{draftStatus.diff.changedVetoes.length}</p>
             </div>
-            <div className="rounded-lg border border-neutral-200 p-3">
-              <p className="text-xs text-neutral-400">Parameters</p>
-              <p className="mt-1 text-xl font-semibold text-neutral-950">{draftStatus.diff.paramsChanged ? "Changed" : "No change"}</p>
+            <div className="rounded-lg border border-line p-3">
+              <p className="text-xs text-muted">Parameters</p>
+              <p className="mt-1 text-xl font-semibold text-ink">{draftStatus.diff.paramsChanged ? "Changed" : "No change"}</p>
             </div>
           </div>
           {draftStatus.diff.changedScores.length > 0 && (
             <div className="mt-4">
-              <p className="mb-2 text-xs font-medium text-neutral-500">Largest changed score rows</p>
-              <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200">
+              <p className="mb-2 text-xs font-medium text-muted">Largest changed score rows</p>
+              <ul className="divide-y divide-paper-2 rounded-lg border border-line">
                 {draftStatus.diff.changedScores.slice(0, 6).map((row) => (
                   <li key={row.id} className="flex items-center justify-between gap-4 px-3 py-2 text-sm">
-                    <span className="truncate text-neutral-700">{row.id}</span>
-                    <span className="shrink-0 font-mono tabular-nums text-neutral-500">
+                    <span className="truncate text-ink-2">{row.id}</span>
+                    <span className="shrink-0 font-mono tabular-nums text-muted">
                       {row.before === null ? "-" : formatScore(row.before)} {"->"} {formatScore(row.after)}
                     </span>
                   </li>
@@ -285,18 +285,18 @@ export function HistoryView({ snapshot }: { snapshot: Snapshot }) {
       )}
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Series, each within its own distribution</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink-2">Series, each within its own distribution</h2>
         <div className="space-y-3">
           {series.map((s) => (
             <div key={s.id} className="grid grid-cols-[160px_1fr_90px_60px] items-center gap-4 text-sm">
-              <span className="truncate text-neutral-700">{s.id}</span>
+              <span className="truncate text-ink-2">{s.id}</span>
               <DistributionStrip percentile={s.percentile} />
-              <span className="text-right tabular-nums text-neutral-500">
+              <span className="text-right tabular-nums text-muted">
                 {s.latest !== null ? formatScore(s.latest) : "—"}
               </span>
               <span
                 className={`text-right text-xs ${
-                  s.status === "ok" ? "text-neutral-400" : s.status === "stale" ? "text-amber-600" : "text-danger-500"
+                  s.status === "ok" ? "text-muted" : s.status === "stale" ? "text-warn-600" : "text-danger-500"
                 }`}
               >
                 {s.status}
@@ -322,9 +322,9 @@ function ReviewSnapshotPreview({ snapshot }: { snapshot: Snapshot }) {
 
   return (
     <div>
-      <AllocationBar allocation={allocation} depth="detail" compactLegend />
+      <AllocationBar allocation={allocation} depth="detail" />
       {activeVetoes.length > 0 && (
-        <p className="mt-3 text-xs text-amber-700">
+        <p className="mt-3 text-xs text-warn-600">
           {activeVetoes.length} veto{activeVetoes.length === 1 ? "" : "es"} active in this snapshot.
         </p>
       )}

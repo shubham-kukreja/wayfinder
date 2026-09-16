@@ -48,14 +48,14 @@ export function RubricPicker({
   }
 
   return (
-    <div className="space-y-2 rounded-md bg-neutral-50 p-3">
+    <div className="space-y-2 rounded-md bg-paper-2 p-3">
       {spec.fields.map((field) => (
         <div key={field.key} className="grid grid-cols-[160px_1fr] items-center gap-2">
-          <span className="text-xs text-neutral-500">{field.label}</span>
+          <span className="text-xs text-muted">{field.label}</span>
           <select
             value={selection[field.key] ?? ""}
             onChange={(e) => setField(field.key, e.target.value)}
-            className="rounded-md border border-neutral-200 px-2 py-1 text-xs text-neutral-800"
+            className="rounded-md border border-line px-2 py-1 text-xs text-ink-2"
           >
             <option value="" disabled>
               Select…
@@ -68,14 +68,14 @@ export function RubricPicker({
           </select>
         </div>
       ))}
-      <div className="flex items-center justify-between border-t border-neutral-200 pt-2 text-xs">
-        <span className="text-neutral-500">{isComplete ? "Resulting score" : "Pick every condition to compute a score"}</span>
+      <div className="flex items-center justify-between border-t border-line pt-2 text-xs">
+        <span className="text-muted">{isComplete ? "Resulting score" : "Pick every condition to compute a score"}</span>
         <div className="flex items-center gap-2">
-          <span className={`font-medium tabular-nums ${isComplete ? "text-neutral-900" : "text-neutral-400"}`}>{previewValue.toFixed(1)}</span>
+          <span className={`font-medium tabular-nums ${isComplete ? "text-ink" : "text-muted"}`}>{previewValue.toFixed(1)}</span>
           <button
             onClick={handleSave}
             disabled={!isComplete || saving}
-            className="rounded-md bg-brand-500 px-2 py-1 text-xs font-medium text-black transition duration-100 ease-in hover:brightness-105 hover:-translate-y-px disabled:opacity-40"
+            className="rounded-md bg-brand-500 px-2 py-1 text-xs font-medium text-white transition duration-100 ease-in hover:brightness-105 hover:-translate-y-px disabled:opacity-40"
           >
             {saving ? "Saving…" : "Save"}
           </button>

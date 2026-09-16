@@ -10,13 +10,13 @@ export const SURFACES: Array<{ id: SurfaceId; label: string }> = [
 
 export const PRIMARY_ROUTES: Array<{ path: string; label: string }> = [
   { path: "/overview", label: "Overview" },
+  { path: "/methodology", label: "Methodology" },
   { path: "/reviews", label: "Reviews" },
 ];
 
 export const MODEL_ROUTES: Array<{ path: string; label: string }> = [
   { path: "/model/signals", label: "Signals" },
   { path: "/model/datapoints", label: "Data Points" },
-  { path: "/model/methodology", label: "Methodology" },
   { path: "/model/parameters", label: "Parameters" },
 ];
 
