@@ -38,7 +38,7 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
     "focus:outline-none disabled:opacity-50";
 
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="relative min-h-screen bg-paper">
       <div className="mx-auto flex min-h-screen w-full flex-col gap-8 p-5 lg:h-screen lg:flex-row lg:items-stretch lg:gap-[14%] lg:p-8">
         {/* ---------- left: artwork card ---------- */}
         {/* Inset with its own radius rather than bleeding to the viewport edge,
@@ -68,14 +68,28 @@ export function LoginView({ onSuccess }: { onSuccess: () => void }) {
 
         {/* ---------- right: form column ---------- */}
         <div className="flex w-full flex-col self-stretch lg:w-[360px] lg:shrink-0">
-          <p className="pt-3 text-right text-[13px] text-ink-2">
+          <p className="absolute right-8 top-8 text-right text-[13px] text-ink-2">
             Need access?{" "}
             <span className="font-semibold text-ink underline underline-offset-2">Contact your admin</span>
           </p>
 
           <main className="flex flex-1 flex-col justify-center py-10">
+            {/* The O carries a slash, as in the empty-set mark. Drawn as a span
+                over the letter rather than using the ∅ glyph: that character
+                comes from a fallback face and would not match the display
+                cut's weight or width. aria-label keeps it readable as "CORE". */}
             <div className="mb-12 flex items-baseline justify-center gap-2">
-              <h1 className="font-display text-[38px] font-extrabold leading-none tracking-display text-ink">CORE</h1>
+              <h1
+                aria-label="CORE"
+                className="font-display text-[38px] font-extrabold leading-none tracking-display text-ink"
+              >
+                <span aria-hidden="true">C</span>
+                <span aria-hidden="true" className="relative inline-block">
+                  O
+                  <span className="absolute left-1/2 top-1/2 h-[2.5px] w-[1.15em] -translate-x-1/2 -translate-y-1/2 -rotate-45 bg-ink" />
+                </span>
+                <span aria-hidden="true">RE</span>
+              </h1>
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" aria-hidden="true" />
             </div>
 
