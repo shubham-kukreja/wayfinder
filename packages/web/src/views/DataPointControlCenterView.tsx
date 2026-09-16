@@ -16,7 +16,7 @@ const GROUP_MODE_OPTIONS: Array<{ id: GroupMode; label: string }> = [
 ];
 
 const FRESHNESS_CLASS: Record<DataPointFreshness, string> = {
-  current: "bg-brand-50 text-brand-800 border-brand-100",
+  current: "bg-paper-2 text-muted border-line",
   due: "bg-warn-50 text-warn-600 border-warn-200",
   stale: "bg-warn-50 text-warn-600 border-warn-200",
   failed: "bg-danger-50 text-danger-500 border-danger-500/30",
@@ -147,7 +147,7 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
           <select
             value={refreshSource}
             onChange={(event) => setRefreshSource(event.target.value)}
-            className="h-9 rounded-sm border border-line bg-paper px-2 text-[13px] text-ink-2"
+            className="h-9 border border-line bg-paper px-2.5 text-[13px] text-ink-2 focus:border-ink focus:outline-none"
             aria-label="Refresh source"
           >
             <option value="fred">FRED</option>
@@ -160,16 +160,16 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
             type="button"
             onClick={() => void handleRefresh()}
             disabled={refreshing}
-            className="h-9 rounded-sm bg-brand-500 px-4 text-[13px] font-semibold text-white transition duration-100 ease-in hover:-translate-y-px hover:brightness-105 disabled:opacity-50"
+            className="h-9 bg-ink px-4 text-[13px] font-semibold text-paper transition duration-100 ease-in hover:brightness-[1.15] disabled:pointer-events-none disabled:opacity-40"
           >
             {refreshing ? "Refreshing…" : "Refresh source"}
           </button>
         </div>
       </div>
 
-      {refreshMessage && <p className="mb-6 rounded-sm border border-line bg-paper px-3 py-2 text-[13px] text-ink-2">{refreshMessage}</p>}
+      {refreshMessage && <p className="mb-6 border border-line bg-paper-2 px-3 py-2 text-[13px] text-ink-2">{refreshMessage}</p>}
 
-      <section className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-6">
+      <section className="mb-8 grid grid-cols-2 divide-line border border-line bg-paper md:grid-cols-6 md:divide-x">
         {(["total", "current", "due", "stale", "failed", "overridden"] as const).map((key) => {
           // "Total" always clears the filter rather than filtering to a
           // freshness value called "total" (no such row state exists) -
@@ -180,29 +180,29 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
               key={key}
               type="button"
               onClick={() => setParam("freshness", key === "total" ? null : freshnessFilter === key ? null : key)}
-              className={`rounded-sm border p-4 text-left transition-colors duration-100 ease-in ${
-                isActive ? "border-ink bg-ink text-paper" : "border-line bg-paper hover:bg-paper-2"
+              className={`px-4 py-3.5 text-left transition-colors duration-100 ease-in ${
+                isActive ? "bg-ink text-paper" : "hover:bg-paper-2"
               }`}
             >
               <p className={`text-[11px] font-bold uppercase tracking-eyebrow ${isActive ? "text-paper/70" : "text-muted"}`}>{key}</p>
-              <p className={`mt-1.5 text-2xl font-semibold tabular-nums ${isActive ? "text-paper" : "text-ink"}`}>{summary[key] ?? 0}</p>
+              <p className={`mt-1 font-mono text-[26px] font-medium leading-none tabular-nums ${isActive ? "text-paper" : "text-ink"}`}>{summary[key] ?? 0}</p>
             </button>
           );
         })}
       </section>
 
       <section className="grid grid-cols-1 gap-5 lg:grid-cols-[240px_1fr_360px]">
-        <aside className="rounded-lg border border-line bg-paper p-5">
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-ink">Filters</h2>
-            <p className="mt-0.5 text-[13px] text-muted">Narrow the registry</p>
+        <aside className="border border-line bg-paper">
+          <div className="border-b border-line bg-paper-2 px-4 py-2.5">
+            <h2 className="text-[13px] font-semibold text-ink">Filters</h2>
           </div>
+          <div className="p-4">
           <label className="block text-xs font-medium text-muted">
             Search
             <input
               value={query}
               onChange={(e) => setParam("q", e.target.value || null)}
-              className="mt-1 h-9 w-full rounded-sm border border-line px-2 text-[13px] text-ink-2"
+              className="mt-1.5 h-9 w-full border border-line bg-paper px-2.5 text-[13px] text-ink-2 placeholder:text-muted focus:border-ink focus:outline-none"
               placeholder="Name, source, key"
             />
           </label>
@@ -214,8 +214,8 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                   key={option.id}
                   type="button"
                   onClick={() => setParam("group", option.id === "model" ? null : option.id)}
-                  className={`w-full rounded-sm px-2 py-1.5 text-left text-[13px] transition-colors duration-100 ease-in ${
-                    groupMode === option.id ? "bg-ink text-paper" : "text-ink-2 hover:bg-paper-2"
+                  className={`w-full border px-2.5 py-1.5 text-left text-[13px] transition-colors duration-100 ease-in ${
+                    groupMode === option.id ? "border-ink bg-ink font-medium text-paper" : "border-transparent text-ink-2 hover:border-line hover:bg-paper-2"
                   }`}
                 >
                   {option.label}
@@ -223,12 +223,13 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
               ))}
             </div>
           </div>
+          </div>
         </aside>
 
-        <div className="min-w-0 rounded-lg border border-line bg-paper">
-          <div className="border-b border-line px-5 py-4">
-            <h2 className="text-lg font-semibold text-ink">Registry</h2>
-            <p className="mt-0.5 text-[13px] text-muted">{filteredRows.length} visible rows</p>
+        <div className="min-w-0 border border-line bg-paper">
+          <div className="flex items-baseline justify-between border-b border-line bg-paper-2 px-4 py-2.5">
+            <h2 className="text-[13px] font-semibold text-ink">Registry</h2>
+            <p className="font-mono text-[11px] tabular-nums text-muted">{filteredRows.length} rows</p>
           </div>
           {loading && <p className="p-4 text-sm text-muted">Loading data registry...</p>}
           {error && <p className="p-4 text-sm text-danger-500">{error}</p>}
@@ -237,7 +238,7 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
               {groupedRows.map(([key, items]) => (
                 <section key={key}>
                   <div className="sticky top-0 z-10 border-y border-paper-2 bg-paper-2 px-4 py-2 text-xs font-bold uppercase tracking-eyebrow text-muted">
-                    {groupLabel(key)} <span className="font-normal text-muted">({items.length})</span>
+                    {groupLabel(key)} <span className="ml-1 font-mono text-[11px] font-normal normal-case tracking-normal">{items.length}</span>
                   </div>
                   <div className="divide-y divide-paper-2">
                     {items.map((row) => (
@@ -245,18 +246,23 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                         key={row.id}
                         type="button"
                         onClick={() => setParam("point", row.id)}
-                        className={`grid w-full grid-cols-[1fr_auto] gap-4 px-4 py-3 text-left hover:bg-paper-2 ${
-                          selectedRow?.id === row.id ? "bg-paper-2" : ""
+                        className={`grid w-full grid-cols-[1fr_auto] gap-4 border-l-2 px-4 py-2.5 text-left transition-colors duration-100 ease-in ${
+                          selectedRow?.id === row.id
+                            ? "border-l-ink bg-paper-2"
+                            : "border-l-transparent hover:bg-paper-2"
                         }`}
                       >
                         <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium text-ink">{row.label}</span>
-                          <span className="mt-0.5 block truncate text-xs text-muted">{row.technicalKey}</span>
-                          <span className="mt-1 block truncate text-xs text-muted">{row.dependency}</span>
+                          <span className="block truncate text-[13px] font-medium text-ink">{row.label}</span>
+                          <span className="mt-0.5 block truncate font-mono text-[11px] text-muted">{row.technicalKey}</span>
                         </span>
                         <span className="flex flex-col items-end gap-1">
-                          <span className="tabular-nums text-sm font-semibold text-ink">{formatValue(row)}</span>
-                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${FRESHNESS_CLASS[row.freshness]}`}>{groupLabel(row.freshness)}</span>
+                          <span className="font-mono text-[13px] font-medium tabular-nums text-ink">{formatValue(row)}</span>
+                          {row.freshness !== "current" && (
+                            <span className={`border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-eyebrow ${FRESHNESS_CLASS[row.freshness]}`}>
+                              {groupLabel(row.freshness)}
+                            </span>
+                          )}
                         </span>
                       </button>
                     ))}
@@ -267,11 +273,11 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
           )}
         </div>
 
-        <aside className="rounded-lg border border-line bg-paper p-5">
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-ink">Live impact</h2>
-            <p className="mt-0.5 text-[13px] text-muted">Effect of the selected row</p>
+        <aside className="border border-line bg-paper">
+          <div className="border-b border-line bg-paper-2 px-4 py-2.5">
+            <h2 className="text-[13px] font-semibold text-ink">Live impact</h2>
           </div>
+          <div className="p-4">
           {selectedRow ? (
             <div className="space-y-4">
               <div>
@@ -279,29 +285,29 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                 <p className="mt-1 text-sm font-medium text-ink">{selectedRow.label}</p>
                 <p className="mt-0.5 break-all text-xs text-muted">{selectedRow.technicalKey}</p>
               </div>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-lg border border-line p-3">
-                  <p className="text-xs text-muted">Value</p>
-                  <p className="mt-1 font-semibold tabular-nums text-ink">{formatValue(selectedRow)}</p>
+              <div className="grid grid-cols-2 divide-x divide-line border border-line">
+                <div className="px-3 py-2.5">
+                  <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Value</p>
+                  <p className="mt-1 font-mono text-lg font-medium leading-none tabular-nums text-ink">{formatValue(selectedRow)}</p>
                 </div>
-                <div className="rounded-lg border border-line p-3">
-                  <p className="text-xs text-muted">Score</p>
-                  <p className="mt-1 font-semibold tabular-nums text-ink">{selectedRow.score !== null ? formatScore(selectedRow.score) : "-"}</p>
+                <div className="px-3 py-2.5">
+                  <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Score</p>
+                  <p className="mt-1 font-mono text-lg font-medium leading-none tabular-nums text-ink">{selectedRow.score !== null ? formatScore(selectedRow.score) : "-"}</p>
                 </div>
               </div>
-              <dl className="space-y-2 text-sm">
-                <div className="flex justify-between gap-4"><dt className="text-muted">Update type</dt><dd className="text-ink">{groupLabel(selectedRow.updateType)}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-muted">Source</dt><dd className="text-right text-ink">{selectedRow.source}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-muted">Owner</dt><dd className="text-ink">{groupLabel(selectedRow.owner)}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-muted">Frequency</dt><dd className="text-ink">{groupLabel(selectedRow.frequency)}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-muted">Last updated</dt><dd className="text-ink">{formatDate(selectedRow.lastUpdated)}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-muted">Observed at</dt><dd className="text-ink">{formatDate(selectedRow.observedAt)}</dd></div>
+              <dl className="divide-y divide-line border-y border-line text-[13px]">
+                <div className="flex justify-between gap-4 py-1.5"><dt className="text-muted">Update type</dt><dd className="text-ink">{groupLabel(selectedRow.updateType)}</dd></div>
+                <div className="flex justify-between gap-4 py-1.5"><dt className="text-muted">Source</dt><dd className="text-right text-ink">{selectedRow.source}</dd></div>
+                <div className="flex justify-between gap-4 py-1.5"><dt className="text-muted">Owner</dt><dd className="text-ink">{groupLabel(selectedRow.owner)}</dd></div>
+                <div className="flex justify-between gap-4 py-1.5"><dt className="text-muted">Frequency</dt><dd className="text-ink">{groupLabel(selectedRow.frequency)}</dd></div>
+                <div className="flex justify-between gap-4 py-1.5"><dt className="text-muted">Last updated</dt><dd className="text-ink">{formatDate(selectedRow.lastUpdated)}</dd></div>
+                <div className="flex justify-between gap-4 py-1.5"><dt className="text-muted">Observed at</dt><dd className="text-ink">{formatDate(selectedRow.observedAt)}</dd></div>
               </dl>
               <div>
                 <p className="text-xs font-medium text-muted">Upstream series</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {selectedRow.upstreamSeries.length > 0 ? selectedRow.upstreamSeries.map((id) => (
-                    <span key={id} className="rounded bg-paper-2 px-2 py-1 text-xs text-ink-2">{id}</span>
+                    <span key={id} className="border border-line bg-paper-2 px-2 py-0.5 font-mono text-[11px] text-ink-2">{id}</span>
                   )) : <span className="text-xs text-muted">No upstream series</span>}
                 </div>
               </div>
@@ -309,12 +315,12 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                 <button
                   type="button"
                   onClick={() => setParam("inspect", selectedRow.id)}
-                  className="h-9 w-full rounded-sm bg-brand-500 px-3 text-[13px] font-semibold text-white transition duration-100 ease-in hover:-translate-y-px hover:brightness-105"
+                  className="h-9 w-full bg-ink px-3 text-[13px] font-semibold text-paper transition duration-100 ease-in hover:brightness-[1.15]"
                 >
                   View exact formula & contribution
                 </button>
               ) : (
-                <p className="rounded-lg border border-line bg-paper-2 px-3 py-2 text-xs leading-5 text-muted">
+                <p className="border border-line bg-paper-2 px-3 py-2 text-xs leading-5 text-muted">
                   {selectedRow.modelGroup === "governance"
                     ? "Governance parameters configure the engine directly — see Methodology for what each one means."
                     : selectedRow.modelGroup === "vetoes"
@@ -322,13 +328,14 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                       : "This data point has no formula breakdown."}
                 </p>
               )}
-              <p className="rounded-lg border border-line bg-paper-2 px-3 py-2 text-xs leading-5 text-muted">
+              <p className="border border-line bg-paper-2 px-3 py-2 text-xs leading-5 text-muted">
                 Draft preview, edit reason, expiry and publish impact land in Slice 4. This panel is read-only for the current MVP slice.
               </p>
             </div>
           ) : (
-            <p className="mt-4 text-sm text-muted">Select a registry row to inspect freshness and dependencies.</p>
+            <p className="text-[13px] text-muted">Select a registry row to inspect freshness and dependencies.</p>
           )}
+          </div>
         </aside>
       </section>
 
