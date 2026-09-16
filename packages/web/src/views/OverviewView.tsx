@@ -185,7 +185,7 @@ export function OverviewView({ snapshot }: { snapshot: Snapshot }) {
   }
 
   return (
-    <main className="mx-auto w-full max-w-[1600px] px-6 py-8">
+    <main className="w-full max-w-[1600px] px-6 py-8">
       <CalculationInspector snapshot={snapshot} allocation={allocation} selectedId={selectedNode} onClose={closeInspector} />
 
       <section className="rounded-lg border border-line bg-paper p-5">

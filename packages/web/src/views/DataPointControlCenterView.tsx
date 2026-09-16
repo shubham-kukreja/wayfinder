@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { Snapshot } from "@wayfinder/engine";
-import { computeAllocation } from "@wayfinder/engine";
+import type { ScoreState, SeriesState, Snapshot } from "@wayfinder/engine";
+import { SCORE_MAP } from "@wayfinder/engine";
 import { listDataPoints, refreshDataPoints, type DataPointFreshness, type DataPointRow } from "../lib/datapointsApi.js";
-import { scoresFromSnapshot, vetoesFromSnapshot } from "../hooks/useLocalAllocation.js";
-import { CalculationInspector } from "../components/CalculationInspector.js";
 import { DistributionStrip } from "../components/DistributionStrip.js";
 import { formatScore } from "../lib/format.js";
 
@@ -82,6 +80,68 @@ function formatDate(value: string | null): string {
   return new Date(value).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
+function formatSeriesValue(series: SeriesState | undefined): string {
+  if (!series || series.latest === null) return "-";
+  return series.latest.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+}
+
+function isExternalSeries(series: SeriesState | undefined): boolean {
+  return !!series && series.source !== "MANUAL";
+}
+
+function isStaleSeries(series: SeriesState | undefined): boolean {
+  return !!series && (series.status === "stale" || !!series.error || (series.staleDays !== null && series.staleDays > 7));
+}
+
+function statusLabel(status: string): string {
+  return status.replace(/_/g, " ");
+}
+
+function transformExplanation(scoreState: ScoreState): string {
+  if (scoreState.transform === "percentile") {
+    return "The latest reading is ranked against its own stored history. Higher readings score higher.";
+  }
+  if (scoreState.transform === "inverted") {
+    return "The latest reading is ranked against its own stored history, then flipped because lower readings are more attractive.";
+  }
+  if (scoreState.transform === "average") {
+    return "Multiple ranked inputs are combined by the backend into one score.";
+  }
+  if (scoreState.transform === "rubric") {
+    return "A rubric maps the source reading into a score band.";
+  }
+  if (scoreState.transform === "static") {
+    return "This is a policy baseline, not a market feed.";
+  }
+  return "This value is carried through without a percentile transform.";
+}
+
+function scoreFormulaLine(scoreState: ScoreState): string {
+  if (scoreState.transform === "percentile") return `score = percentile = ${formatScore(scoreState.value)}`;
+  if (scoreState.transform === "inverted") {
+    const rawPercentile = 100 - scoreState.value;
+    return `score = 100 - ${rawPercentile.toFixed(1)} = ${formatScore(scoreState.value)}`;
+  }
+  if (scoreState.transform === "static") return `static score = ${formatScore(scoreState.value)}`;
+  if (scoreState.transform === "rubric") return `rubric score = ${formatScore(scoreState.value)}`;
+  if (scoreState.transform === "average") return `combined score = ${formatScore(scoreState.value)}`;
+  return `score = ${formatScore(scoreState.value)}`;
+}
+
+function declaredSourceIds(scoreId: string): string[] {
+  return SCORE_MAP.find((cell) => cell.scoreId === scoreId)?.series ?? [];
+}
+
+function effectiveSourceIds(row: DataPointRow, scoreState: ScoreState | undefined): string[] {
+  const rowSeries = row.upstreamSeries;
+  if (rowSeries.length > 0 && !rowSeries.includes("series:example")) return rowSeries;
+
+  const scoreSeries = scoreState?.derivedFrom ?? [];
+  if (scoreSeries.length > 0 && !scoreSeries.includes("series:example")) return scoreSeries;
+
+  return declaredSourceIds(row.id);
+}
+
 function groupKey(row: DataPointRow, mode: GroupMode): string {
   if (mode === "operation") return row.updateType;
   if (mode === "attention") return row.freshness;
@@ -109,16 +169,186 @@ function groupModeFromSearch(value: string | null): GroupMode {
   return value === "operation" || value === "attention" ? value : "model";
 }
 
+function CalculationBreakdown({
+  row,
+  scoreState,
+  seriesById,
+}: {
+  row: DataPointRow;
+  scoreState: ScoreState | undefined;
+  seriesById: Snapshot["series"];
+}) {
+  if (!scoreState) {
+    return (
+      <div className="rounded-sm border border-line bg-paper-2 p-3">
+        <p className="text-[13px] font-semibold text-ink">Calculation breakdown</p>
+        <p className="mt-1 text-[12px] leading-5 text-muted">No computed score is available for this row yet.</p>
+      </div>
+    );
+  }
+
+  const sourceIds = effectiveSourceIds(row, scoreState);
+  const sources = sourceIds.map((id) => ({ id, series: seriesById[id] }));
+  const hasStaleSource = sources.some(({ series }) => isStaleSeries(series));
+  const oneSeries = sources.length === 1 ? sources[0] : null;
+  const rawPercentile =
+    oneSeries?.series?.percentile ??
+    (scoreState.transform === "inverted" ? 100 - scoreState.value : scoreState.transform === "percentile" ? scoreState.value : null);
+
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[13px] font-semibold text-ink">Calculation breakdown</p>
+          <p className="mt-0.5 text-[12px] leading-5 text-muted">{transformExplanation(scoreState)}</p>
+        </div>
+        {hasStaleSource && (
+          <span className="shrink-0 rounded-sm bg-warn-50 px-2 py-0.5 text-[11px] font-bold text-warn-800">
+            * stale
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 space-y-2.5">
+        {sources.length > 0 ? (
+          sources.map(({ id, series }) => {
+            const external = isExternalSeries(series);
+            const stale = isStaleSeries(series);
+            return (
+              <div
+                key={id}
+                className="border-t border-line py-3 first:border-t-0"
+              >
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 truncate text-[12px] font-semibold text-ink">
+                    {id}
+                    {stale ? " *" : ""}
+                  </span>
+                  <span className="shrink-0 text-[13px] font-semibold tabular-nums text-ink">{formatSeriesValue(series)}</span>
+                </div>
+                <p className="mt-0.5 text-[11px] leading-4 text-muted">
+                  <span className={external ? "font-semibold text-brand-800" : ""}>
+                    {external ? "External source" : "Internal/manual source"}
+                  </span>{" "}
+                  · {series?.source ?? row.source} · observed {formatDate(series?.latestDate ?? null)}
+                </p>
+                <div className="mt-2">
+                  <DistributionStrip percentile={series?.percentile ?? null} />
+                </div>
+                <div className="mt-1.5 flex justify-between gap-3 text-[11px] text-muted">
+                  <span>{series?.observations ?? 0} observations{series?.windowStart ? ` since ${formatDate(series.windowStart)}` : ""}</span>
+                  <span className="shrink-0">{series?.percentile !== null && series?.percentile !== undefined ? `${series.percentile.toFixed(1)}th pct` : statusLabel(series?.status ?? "missing")}</span>
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <p className="rounded-sm bg-paper-2 px-2.5 py-2 text-[12px] leading-5 text-muted">
+            No upstream market series. The score is {statusLabel(scoreState.provenance)}.
+          </p>
+        )}
+      </div>
+
+      <div className="mt-3 border-t border-line pt-3">
+        {oneSeries && rawPercentile !== null && (
+          <p className="text-[12px] leading-5 text-ink-2">
+            Raw percentile: <span className="font-semibold tabular-nums text-ink">{rawPercentile.toFixed(1)}</span>
+          </p>
+        )}
+        <p className="mt-1 font-mono text-[12px] leading-5 text-ink">{scoreFormulaLine(scoreState)}</p>
+        {scoreState.note && <p className="mt-2 text-[12px] leading-5 text-muted">{scoreState.note}</p>}
+        {hasStaleSource && (
+          <p className="mt-2 text-[11px] leading-4 text-muted">
+            * Stale means this source is past its refresh window or has a recorded source error.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DataPointFormulaModal({
+  row,
+  scoreState,
+  seriesById,
+  onClose,
+}: {
+  row: DataPointRow | null;
+  scoreState: ScoreState | undefined;
+  seriesById: Snapshot["series"];
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!row) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [row, onClose]);
+
+  if (!row) return null;
+  const sourceIds = effectiveSourceIds(row, scoreState);
+  const sourceStates = sourceIds.map((id) => seriesById[id]).filter((series): series is SeriesState => !!series);
+  const observedAt = sourceStates.map((series) => series.latestDate).filter((date): date is string => !!date).sort().at(-1) ?? row.observedAt;
+  const sourceLabel = sourceStates.length > 0 ? [...new Set(sourceStates.map((series) => series.source))].join(" + ") : row.source;
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-ink/30 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="data-point-formula-title">
+      <div className="mx-auto w-full max-w-3xl rounded-lg border border-line bg-paper p-6 shadow-xl">
+        <div className="flex items-start justify-between gap-4 border-b border-line pb-4">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Exact Formula</p>
+            <h2 id="data-point-formula-title" className="mt-1 text-xl font-semibold text-ink">
+              {row.label}
+            </h2>
+            <p className="mt-1 break-all text-[13px] text-muted">{row.technicalKey}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close formula breakdown"
+            className="shrink-0 rounded-sm p-1.5 text-muted transition-colors duration-100 ease-in hover:bg-paper-2 hover:text-ink"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-4 border-b border-line pb-4 sm:grid-cols-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Score</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums text-brand-800">{row.score !== null ? formatScore(row.score) : "-"}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Source</p>
+            <p className="mt-1 truncate text-[13px] font-semibold text-ink">{sourceLabel}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Observed</p>
+            <p className="mt-1 text-[13px] font-semibold text-ink">{formatDate(observedAt)}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Freshness</p>
+            <p className="mt-1 text-[13px] font-semibold text-ink">{groupLabel(row.freshness)}</p>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <CalculationBreakdown row={row} scoreState={scoreState} seriesById={seriesById} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const groupMode = groupModeFromSearch(searchParams.get("group"));
   const query = searchParams.get("q") ?? "";
   const selectedId = searchParams.get("point");
   const inspectingId = searchParams.get("inspect");
-
-  const scores = useMemo(() => scoresFromSnapshot(snapshot.scores), [snapshot.scores]);
-  const vetoes = useMemo(() => vetoesFromSnapshot(snapshot.vetoes), [snapshot.vetoes]);
-  const allocation = useMemo(() => computeAllocation(scores, vetoes, snapshot.params), [scores, vetoes, snapshot.params]);
 
   const [rows, setRows] = useState<DataPointRow[]>([]);
   const [summary, setSummary] = useState<Record<string, number>>({ total: 0 });
@@ -179,6 +409,10 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
   }, [filteredRows, groupMode]);
 
   const selectedRow = rows.find((row) => row.id === selectedId) ?? filteredRows[0] ?? null;
+  const selectedScoreState = selectedRow && isScoreCellId(selectedRow.id) ? snapshot.scores[selectedRow.id] : undefined;
+  const selectedUpstreamIds = selectedRow && selectedScoreState ? effectiveSourceIds(selectedRow, selectedScoreState) : selectedRow?.upstreamSeries ?? [];
+  const inspectingRow = inspectingId ? rows.find((row) => row.id === inspectingId) ?? null : null;
+  const inspectingScoreState = inspectingRow && isScoreCellId(inspectingRow.id) ? snapshot.scores[inspectingRow.id] : undefined;
 
   const total = summary.total ?? 0;
 
@@ -475,9 +709,9 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                   says whether the input is at an extreme. */}
               <div>
                 <p className="text-[13px] text-muted">Upstream series</p>
-                {selectedRow.upstreamSeries.length > 0 ? (
+                {selectedUpstreamIds.length > 0 ? (
                   <div className="mt-2 space-y-2.5">
-                    {selectedRow.upstreamSeries.map((id) => {
+                    {selectedUpstreamIds.map((id) => {
                       const series = snapshot.series[id as keyof typeof snapshot.series];
                       return (
                         <div key={id}>
@@ -506,7 +740,7 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                   onClick={() => setParam("inspect", selectedRow.id)}
                   className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-sm border border-line px-3 text-[13px] font-semibold text-ink transition-colors duration-100 ease-in hover:bg-paper-2"
                 >
-                  View exact formula &amp; contribution
+                  View exact formula
                   <span aria-hidden="true">›</span>
                 </button>
               ) : (
@@ -528,7 +762,12 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
         </aside>
       </section>
 
-      <CalculationInspector snapshot={snapshot} allocation={allocation} selectedId={inspectingId} onClose={() => setParam("inspect", null)} />
+      <DataPointFormulaModal
+        row={inspectingRow}
+        scoreState={inspectingScoreState}
+        seriesById={snapshot.series}
+        onClose={() => setParam("inspect", null)}
+      />
     </main>
   );
 }

@@ -45,10 +45,10 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
         collapsed ? "w-14" : "w-56"
       }`}
     >
-      <div className={`flex h-16 items-center ${collapsed ? "justify-center border-b border-line" : "justify-between px-5"}`}>
+      <div className={`flex h-[77px] items-center ${collapsed ? "justify-center border-b border-line" : "justify-between px-5"}`}>
         {!collapsed && (
           <NavLink to="/overview" className="font-display text-lg font-extrabold tracking-display text-ink">
-            CORE
+            CORE.
           </NavLink>
         )}
         <button

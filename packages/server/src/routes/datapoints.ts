@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { ScoreState, SeriesState, VetoState } from "@wayfinder/engine";
+import { SCORE_MAP, type ScoreState, type SeriesState, type VetoState } from "@wayfinder/engine";
 import { DATA_POINT_REGISTRY, type DataPointRegistryEntry } from "../dataPointRegistry.js";
 import { loadConfig } from "../config.js";
 import { openDb } from "../store/db.js";
@@ -40,7 +40,9 @@ function latestSeriesDate(states: SeriesState[]): string | null {
 }
 
 function rowFromScore(entry: DataPointRegistryEntry, score: ScoreState | undefined, seriesById: Record<string, SeriesState>): DataPointRow {
-  const upstreamSeries = score?.derivedFrom ?? [];
+  const mappedSeries = SCORE_MAP.find((cell) => cell.scoreId === entry.id)?.series ?? [];
+  const derivedFrom = score?.derivedFrom ?? [];
+  const upstreamSeries = derivedFrom.includes("series:example") && mappedSeries.length > 0 ? mappedSeries : derivedFrom;
   const sourceStates = upstreamSeries.map((id) => seriesById[id]).filter((s): s is SeriesState => !!s);
   const freshness = scoreFreshness(score, sourceStates);
   return {
