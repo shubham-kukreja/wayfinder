@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { computeAllocation, snapshotSchema, type Snapshot } from "@wayfinder/engine";
 import { computeAutoScoreCells } from "./scoreCells.js";
 import { buildSeriesState } from "./buildSeriesState.js";
+import { storedSeriesIds } from "../store/observations.js";
 import { allManualScores, allManualVetoes } from "../store/manual.js";
 import { loadCurrentParams } from "../store/params.js";
 
@@ -42,6 +43,20 @@ export function buildCurrentSnapshot(db: Database.Database, asOf: string = new D
   const raw = JSON.parse(readFileSync(MOCK_SNAPSHOT_PATH, "utf-8"));
   raw.asOf = asOf;
 
+  // Everything starts as mock, because everything literally IS mock at
+  // this point — the baseline above is a static demo file. Each layer
+  // below clears the flag on whatever it genuinely replaces with store
+  // data. This is the inverse of the old approach (tag nothing, assume
+  // real), which let a never-overwritten baseline value be served with
+  // "auto" provenance and no indication it was invented. §1 invariant 5.
+  for (const s of Object.values(raw.scores) as Array<Record<string, unknown>>) {
+    s.mock = true;
+    s.mockReason = "Not wired to a live derivation — static demo baseline.";
+  }
+  for (const s of Object.values(raw.series) as Array<Record<string, unknown>>) {
+    s.mock = true;
+  }
+
   const savedParams = loadCurrentParams(db);
   if (savedParams) raw.params = savedParams;
 
@@ -49,7 +64,21 @@ export function buildCurrentSnapshot(db: Database.Database, asOf: string = new D
   const recomputed = computeAutoScoreCells(db, raw.params, asOfDate);
   const recomputedIds: string[] = [];
   for (const cell of recomputed) {
-    if (cell.status !== "ok") continue; // insufficient history: leave the baseline's value, don't overwrite with a fresh 50
+    if (cell.status !== "ok") {
+      // Insufficient history: we still leave the baseline's VALUE alone
+      // (overwriting with a fresh 50 would itself be a guess, and the
+      // baseline at least carries the demo's intent). But the cell must
+      // not keep claiming "auto" provenance as though it were computed —
+      // that is exactly the silent-fallback case this flag exists for.
+      // Name the series that fell short so the reason is actionable.
+      raw.scores[cell.scoreId] = {
+        ...raw.scores[cell.scoreId],
+        mock: true,
+        mockReason: `Wired, but insufficient history to compute — needs ${raw.params.percentileMinObservations} observations from ${cell.derivedFrom.join(" x ")}.`,
+        derivedFrom: cell.derivedFrom,
+      };
+      continue;
+    }
     // staleDays reflects the age of the observation the value was ACTUALLY
     // computed from, not always 0 — a derived series can join sources with
     // different publication lags (e.g. l1.equity::momentum month-joins
@@ -65,21 +94,29 @@ export function buildCurrentSnapshot(db: Database.Database, asOf: string = new D
       derivedFrom: cell.derivedFrom,
       computedAt: asOf,
       staleDays,
+      mock: false,
+      mockReason: null,
     };
     recomputedIds.push(cell.scoreId);
 
-    // Backfill snapshot.series for any raw series this cell reads that
-    // the static mock baseline predates (e.g. nifty50_close,
-    // nifty50_div_yield — added by niftyindices.ts after the baseline
-    // was authored). Without this, a cell's derivedFrom can point at a
-    // series with literally no snapshot.series entry at all, so the UI
-    // has no raw value to show even though the DB has real observations
-    // for it (see CalculationInspector's derivation trace).
-    for (const seriesId of cell.derivedFrom) {
-      if (raw.series[seriesId]) continue; // mock baseline already covers this one
-      const state = buildSeriesState(db, seriesId, asOfDate, raw.params.percentileMinObservations);
-      if (state) raw.series[seriesId] = state;
-    }
+  }
+
+  // Overlay snapshot.series from the observations table — EVERY series
+  // the store actually holds, not just ones a score cell happens to
+  // consume, and unconditionally rather than only where the baseline
+  // lacks an entry.
+  //
+  // This previously ran per-cell over cell.derivedFrom and skipped any
+  // id the mock baseline already had ("mock baseline already covers
+  // this one"). That guard meant the 20 series shipped in the baseline
+  // could never be refreshed from the store: /api/snapshot served
+  // nifty100_pe as 101.31 (not even a P/E — the baseline's filler) while
+  // the store held 520 real observations with a latest of 19.43. Any UI
+  // reading snapshot.series for a derivation trace showed a raw value
+  // that contradicted the score computed from that very series.
+  for (const seriesId of storedSeriesIds(db)) {
+    const state = buildSeriesState(db, seriesId, asOfDate, raw.params.percentileMinObservations);
+    if (state) raw.series[seriesId] = { ...state, mock: false };
   }
 
   const manualScores = allManualScores(db);
@@ -95,6 +132,11 @@ export function buildCurrentSnapshot(db: Database.Database, asOf: string = new D
       note: m.note,
       confidence: m.confidence,
       staleDays: 0,
+      // A human deliberately entered this number. It is not a computed
+      // reading, but it is not demo filler either — the whole point of
+      // "manual" provenance is that it is a real, owned input.
+      mock: false,
+      mockReason: null,
     };
   }
 

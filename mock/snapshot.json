@@ -475,7 +475,7 @@
       "confidence": "medium"
     },
     "equity.large::growth_diff": {
-      "value": 45,
+      "value": 50,
       "provenance": "static",
       "derivedFrom": [
         "series:example"

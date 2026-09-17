@@ -68,6 +68,21 @@ export function latestObservation(db: Database.Database, seriesId: string): Obse
   return rows[rows.length - 1];
 }
 
+// Every series id the observations table currently holds at least one
+// row for. Used by currentSnapshot.ts to overlay real readings onto the
+// mock baseline's snapshot.series without needing a hardcoded list of
+// which series exist — a new adapter's series shows up automatically.
+// Excludes the per-scheme NAV feed (series ids shaped "amfi_nav:<code>",
+// source AMFI_NAV). Those are scheme-level tracking rows for the
+// tracked_schemes table, not model series — they are deliberately
+// outside SeriesSource's enum and must never reach snapshot.series.
+export function storedSeriesIds(db: Database.Database): string[] {
+  return db
+    .prepare("SELECT DISTINCT series_id FROM observations WHERE source <> 'AMFI_NAV' ORDER BY series_id")
+    .all()
+    .map((r) => (r as { series_id: string }).series_id);
+}
+
 export function seriesCoverage(
   db: Database.Database,
   seriesId: string

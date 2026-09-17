@@ -163,7 +163,11 @@ function isScoreCellId(id: string): boolean {
 
 const FRESHNESS_ORDER = ["current", "due", "stale", "failed", "overridden"] as const;
 
-type FreshnessTab = "all" | (typeof FRESHNESS_ORDER)[number];
+// "mock" is not a freshness state — it is a separate trust axis that cuts
+// across all of them. It gets a tab because it is the first thing anyone
+// auditing this page needs to find, and because mock rows report freshness
+// "missing", which has no tab of its own.
+type FreshnessTab = "all" | (typeof FRESHNESS_ORDER)[number] | "mock" | "constant";
 
 function groupModeFromSearch(value: string | null): GroupMode {
   return value === "operation" || value === "attention" ? value : "model";
@@ -395,8 +399,23 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
   const filteredRows = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return rows
-      .filter((row) => !freshnessFilter || row.freshness === freshnessFilter)
-      .filter((row) => !needle || [row.label, row.technicalKey, row.source, row.dependency, row.updateType, row.freshness].some((value) => value.toLowerCase().includes(needle)));
+      // "mock" rides the same URL param as the freshness tabs but is not a
+      // freshness state — it cuts across all of them, so it filters on its
+      // own field rather than matching row.freshness.
+      .filter((row) =>
+        freshnessFilter === "mock"
+          ? row.mock
+          : freshnessFilter === "constant"
+            ? row.updateType === "constant"
+            : !freshnessFilter || row.freshness === freshnessFilter
+      )
+      .filter(
+        (row) =>
+          !needle ||
+          [row.label, row.technicalKey, row.source, row.dependency, row.updateType, row.freshness, row.mock ? "mock" : "live"].some((value) =>
+            value.toLowerCase().includes(needle)
+          )
+      );
   }, [rows, query, freshnessFilter]);
 
   const groupedRows = useMemo(() => {
@@ -447,6 +466,25 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="font-display text-[44px] font-extrabold leading-none tracking-[-0.04em] tabular-nums text-ink">{total}</span>
                 <span className="text-[13px] text-muted">data points</span>
+              </div>
+              {/* The headline count alone implies all of it is real. The
+                  live/mock split sits directly under it so the qualifier
+                  is impossible to read past. */}
+              <div className="mt-2 flex items-center gap-2 text-[13px]">
+                <span className="tabular-nums text-ink">{summary.live ?? 0} live</span>
+                {(summary.mock ?? 0) > 0 && (
+                  <>
+                    <span aria-hidden="true" className="text-line">·</span>
+                    <button
+                      type="button"
+                      onClick={() => setParam("freshness", "mock")}
+                      className="flex items-center gap-1.5 font-semibold text-danger-500 underline-offset-2 hover:underline"
+                    >
+                      <span aria-hidden="true" className="h-2 w-2 shrink-0 bg-danger-500" />
+                      <span className="tabular-nums">{summary.mock} mock</span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -503,10 +541,10 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
             colour as a dot, so the same hue in a registry chip needs no
             second explanation. */}
         <div className="flex gap-[22px] border-b border-line text-[13px] font-semibold">
-          {(["all", ...FRESHNESS_ORDER] as FreshnessTab[]).map((id) => {
+          {(["all", ...FRESHNESS_ORDER, "constant", "mock"] as FreshnessTab[]).map((id) => {
             const active = (freshnessFilter ?? "all") === id;
             const count = id === "all" ? total : summary[id] ?? 0;
-            const style = id === "all" ? null : FRESHNESS_STYLE[id];
+            const style = id === "all" || id === "mock" || id === "constant" ? null : FRESHNESS_STYLE[id];
             return (
               <button
                 key={id}
@@ -518,8 +556,16 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                 }`}
               >
                 {style && <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 ${style.dot}`} />}
-                <span>{id === "all" ? "All" : groupLabel(id)}</span>
-                <span className={`tabular-nums ${active ? "text-ink" : style && count > 0 ? style.text : "text-muted"}`}>{count}</span>
+                {id === "mock" && <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 bg-danger-500" />}
+                {id === "constant" && <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 border border-line" />}
+                <span>{id === "all" ? "All" : id === "mock" ? "Mock" : id === "constant" ? "Constants" : groupLabel(id)}</span>
+                <span
+                  className={`tabular-nums ${
+                    active ? "text-ink" : id === "mock" && count > 0 ? "text-danger-500" : style && count > 0 ? style.text : "text-muted"
+                  }`}
+                >
+                  {count}
+                </span>
               </button>
             );
           })}
@@ -644,12 +690,41 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                         </span>
                       </span>
                       <span className="flex flex-col items-end gap-1">
-                        <span className="text-[15px] font-semibold tabular-nums text-ink">{formatValue(row)}</span>
+                        {/* A mock value is struck through and muted: it is
+                            shown (so the row is not blank) but is visibly
+                            not a number to act on. */}
+                        <span
+                          className={
+                            row.mock
+                              ? "text-[15px] font-semibold tabular-nums text-muted line-through decoration-danger-500/60"
+                              : "text-[15px] font-semibold tabular-nums text-ink"
+                          }
+                        >
+                          {formatValue(row)}
+                        </span>
                         <span className="flex items-center gap-1.5">
-                          {row.score !== null && (
+                          {row.score !== null && !row.mock && (
                             <span className="text-[12px] tabular-nums text-muted">score {formatScore(row.score)}</span>
                           )}
-                          {row.freshness !== "current" && (
+                          {/* Mock is a different axis from freshness — it
+                              says the number is demo filler, not that it is
+                              old. It gets its own chip so the two can never
+                              be conflated, and it is deliberately the
+                              loudest thing on the row. */}
+                          {row.mock && (
+                            <span className="rounded-sm bg-danger-500 px-2 py-0.5 text-[11px] font-bold uppercase tracking-eyebrow text-white">
+                              Mock
+                            </span>
+                          )}
+                          {/* A constant is finished, not pending — a quiet
+                              outline, not a colour that competes with the
+                              states that need action. */}
+                          {row.updateType === "constant" && (
+                            <span className="rounded-sm border border-line px-2 py-0.5 text-[11px] font-bold uppercase tracking-eyebrow text-muted">
+                              Constant
+                            </span>
+                          )}
+                          {row.freshness !== "current" && !row.mock && (
                             <span className={`rounded-sm px-2 py-0.5 text-[11px] font-bold ${FRESHNESS_STYLE[row.freshness].chip}`}>
                               {groupLabel(row.freshness)}
                             </span>
@@ -677,10 +752,41 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
               </div>
               {/* The state, named and explained — the row chip says what it
                   is, this says what it means for the number above. */}
-              <div className={`rounded-sm px-3 py-2 ${FRESHNESS_STYLE[selectedRow.freshness].chip}`}>
-                <p className="text-[11px] font-bold uppercase tracking-eyebrow">{groupLabel(selectedRow.freshness)}</p>
-                <p className="mt-1 text-[12px] leading-5 opacity-90">{FRESHNESS_STYLE[selectedRow.freshness].blurb}</p>
-              </div>
+              {/* Mock supersedes the freshness box entirely. Telling
+                  someone a placeholder is "missing" or "due" invites them
+                  to wait for a refresh that will never change it — the
+                  actionable fact is that no real value exists yet, and
+                  why. */}
+              {selectedRow.updateType === "constant" ? (
+                <div className="rounded-sm border border-line bg-paper-2 px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">
+                    Structural constant — annual review
+                  </p>
+                  <p className="mt-1 text-[12px] leading-5 text-ink">
+                    This value describes the instrument class itself, not a market view, so it does
+                    not move with the market and has no feed to refresh. It is deliberate and
+                    complete — revisit it at the annual strategic review.
+                  </p>
+                </div>
+              ) : selectedRow.mock ? (
+                <div className="rounded-sm border border-danger-500 bg-danger-50 px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase tracking-eyebrow text-danger-500">
+                    Mock — not real data
+                  </p>
+                  <p className="mt-1 text-[12px] leading-5 text-ink">
+                    The value shown is static demo baseline data, not a reading from any source. It
+                    still feeds the allocation, so treat any tilt it drives as provisional.
+                  </p>
+                  {selectedRow.mockReason && (
+                    <p className="mt-2 text-[12px] leading-5 text-danger-500">{selectedRow.mockReason}</p>
+                  )}
+                </div>
+              ) : (
+                <div className={`rounded-sm px-3 py-2 ${FRESHNESS_STYLE[selectedRow.freshness].chip}`}>
+                  <p className="text-[11px] font-bold uppercase tracking-eyebrow">{groupLabel(selectedRow.freshness)}</p>
+                  <p className="mt-1 text-[12px] leading-5 opacity-90">{FRESHNESS_STYLE[selectedRow.freshness].blurb}</p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4 border-y border-line py-3">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Value</p>

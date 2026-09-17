@@ -2,7 +2,7 @@ import { API_BASE_URL } from "./constants.js";
 import { apiFetch } from "./apiFetch.js";
 
 export type DataPointFreshness = "current" | "due" | "stale" | "failed" | "missing" | "overridden";
-export type DataPointUpdateType = "automatic" | "opt_in" | "manual" | "derived" | "governance" | "veto";
+export type DataPointUpdateType = "automatic" | "opt_in" | "manual" | "derived" | "governance" | "veto" | "raw_series" | "constant";
 
 export interface DataPointRow {
   id: string;
@@ -27,6 +27,11 @@ export interface DataPointRow {
   confidence: string | null;
   upstreamSeries: string[];
   sourceStatuses: Array<{ id: string; status: string; latestDate: string | null; staleDays: number | null }>;
+  // True when the value shown is the static demo baseline, not a real
+  // reading. mockReason says why (never wired / wired but not enough
+  // history / no source exists).
+  mock: boolean;
+  mockReason: string | null;
 }
 
 export interface DataPointsResponse {

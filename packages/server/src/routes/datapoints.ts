@@ -21,11 +21,20 @@ interface DataPointRow extends DataPointRegistryEntry {
   confidence: string | null;
   upstreamSeries: string[];
   sourceStatuses: Array<{ id: string; status: SeriesState["status"]; latestDate: string | null; staleDays: number | null }>;
+  // True when the value shown is still the static demo baseline rather
+  // than a real reading/derivation. Surfaced explicitly in the Control
+  // Center so a placeholder can never be mistaken for a live number.
+  mock: boolean;
+  mockReason: string | null;
 }
 
 function scoreFreshness(score: ScoreState | undefined, sourceStates: SeriesState[]): FreshnessState {
   if (!score) return "missing";
   if (score.provenance === "manual") return "overridden";
+  // A mock value has never been observed or computed, whatever
+  // provenance the demo baseline happens to claim for it. Report it as
+  // "missing" so it cannot sit in the Control Center reading "current".
+  if (score.mock) return "missing";
   if (sourceStates.some((s) => s.status === "failed")) return "failed";
   if (sourceStates.some((s) => s.status === "insufficient_history")) return "missing";
   if (score.staleDays !== null && score.staleDays > 45) return "stale";
@@ -44,7 +53,9 @@ function rowFromScore(entry: DataPointRegistryEntry, score: ScoreState | undefin
   const derivedFrom = score?.derivedFrom ?? [];
   const upstreamSeries = derivedFrom.includes("series:example") && mappedSeries.length > 0 ? mappedSeries : derivedFrom;
   const sourceStates = upstreamSeries.map((id) => seriesById[id]).filter((s): s is SeriesState => !!s);
-  const freshness = scoreFreshness(score, sourceStates);
+  // A constant has no feed to be stale against — it is current until the
+  // annual review changes it, so it never enters the freshness funnel.
+  const freshness = entry.updateType === "constant" ? "current" : scoreFreshness(score, sourceStates);
   return {
     ...entry,
     currentValue: score?.value ?? null,
@@ -59,6 +70,14 @@ function rowFromScore(entry: DataPointRegistryEntry, score: ScoreState | undefin
     confidence: score?.confidence ?? null,
     upstreamSeries,
     sourceStatuses: sourceStates.map((s) => ({ id: s.id, status: s.status, latestDate: s.latestDate, staleDays: s.staleDays })),
+    // A structural constant lives in the mock baseline like every other
+    // unwired cell, so buildCurrentSnapshot's "never overwritten by a
+    // derivation ⇒ mock" rule flags it. That rule is right in general and
+    // wrong here: these values are deliberate, verified against the
+    // engine's own rubric constants, and complete. Reporting them as mock
+    // buries 7 finished cells among the 40 that genuinely need input.
+    mock: entry.updateType === "constant" ? false : score?.mock ?? true,
+    mockReason: entry.updateType === "constant" ? null : score?.mockReason ?? null,
   };
 }
 
@@ -77,6 +96,9 @@ function rowFromGovernance(entry: DataPointRegistryEntry): DataPointRow {
     confidence: null,
     upstreamSeries: [],
     sourceStatuses: [],
+    // Governance parameters are real configured values, not demo filler.
+    mock: false,
+    mockReason: null,
   };
 }
 
@@ -95,6 +117,9 @@ function rowFromVeto(entry: DataPointRegistryEntry, veto: VetoState | undefined)
     confidence: null,
     upstreamSeries: veto?.triggeredBy ?? [],
     sourceStatuses: [],
+    // A veto is a real on/off gate; "inactive" is a genuine state.
+    mock: false,
+    mockReason: null,
   };
 }
 
@@ -119,6 +144,8 @@ function rowFromSeries(entry: DataPointRegistryEntry, seriesState: SeriesState |
       confidence: null,
       upstreamSeries: [],
       sourceStatuses: [],
+      mock: true,
+      mockReason: entry.source,
     };
   }
   // No SeriesState key at all is itself the "missing" signal for a series
@@ -155,6 +182,8 @@ function rowFromSeries(entry: DataPointRegistryEntry, seriesState: SeriesState |
     sourceStatuses: seriesState
       ? [{ id: seriesState.id, status: seriesState.status, latestDate: seriesState.latestDate, staleDays: seriesState.staleDays }]
       : [],
+    mock: seriesState?.mock ?? true,
+    mockReason: seriesState?.mock === false ? null : "Static demo baseline — no stored observations.",
   };
 }
 
@@ -174,6 +203,10 @@ function buildRows(): { rows: DataPointRow[]; summary: Record<string, number> } 
         acc.total = (acc.total ?? 0) + 1;
         acc[row.freshness] = (acc[row.freshness] ?? 0) + 1;
         acc[row.updateType] = (acc[row.updateType] ?? 0) + 1;
+        if (row.mock) acc.mock = (acc.mock ?? 0) + 1;
+        else acc.live = (acc.live ?? 0) + 1;
+        // NOTE: no explicit "constant" tally — acc[row.updateType] above
+        // already counts it, and the Constants tab reads that key.
         return acc;
       },
       { total: 0 }

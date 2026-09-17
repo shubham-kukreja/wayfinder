@@ -154,6 +154,9 @@ export interface SeriesState {
   status: SeriesStatus;
   staleDays: number | null;
   error: string | null;
+  // See schema.ts — true when this is still the static mock baseline,
+  // not a reading from the observations table.
+  mock?: boolean;
 }
 
 export type ScoreProvenance = "auto" | "rubric" | "static" | "manual" | "default";
@@ -170,6 +173,10 @@ export interface ScoreState {
   staleDays: number | null;
   note: string | null;
   confidence: Confidence | null;
+  // See schema.ts — true when the value is still the static mock
+  // baseline (never wired, or wired but insufficient_history).
+  mock?: boolean;
+  mockReason?: string | null;
 }
 
 export interface VetoState {

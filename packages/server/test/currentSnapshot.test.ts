@@ -174,10 +174,13 @@ describe("buildCurrentSnapshot — single source of truth for 'current state'", 
     expect(snapshot.series["nifty50_div_yield"]!.latest).toBe(1.2);
   });
 
-  it("does NOT overwrite a series the mock baseline already covers, even if it's also in derivedFrom", () => {
-    // gold_inr is a real mock-baseline series; seeding fresh observations
-    // for it must not clobber snapshot.series["gold_inr"] with a
-    // DB-derived reconstruction — the baseline's own entry wins.
+  it("overwrites a mock-baseline series with real stored observations", () => {
+    // Inverted 2026-09-17. This previously asserted the OPPOSITE — that
+    // the baseline's entry wins — which is precisely the bug that had
+    // /api/snapshot serving nifty100_pe as 101.31 (the baseline's filler,
+    // not even a P/E) while the store held 520 real observations with a
+    // latest of 19.43. A score computed from a series must never
+    // contradict the series the UI shows beside it.
     const rows = Array.from({ length: 30 }, (_, i) => ({
       seriesId: "gold_inr",
       date: `${2020 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}-01`,
@@ -189,10 +192,32 @@ describe("buildCurrentSnapshot — single source of truth for 'current state'", 
     insertObservations(db, rows);
 
     const { snapshot } = buildCurrentSnapshot(db, "2026-09-08T00:00:00Z");
-    // The mock baseline's own gold_inr entry (whatever value it has) is
-    // untouched — only genuinely MISSING series get backfilled.
     const baseline = JSON.parse(readFileSync(new URL("../../../mock/snapshot.json", import.meta.url), "utf-8"));
-    expect(snapshot.series["gold_inr"]!.latest).toBe(baseline.series.gold_inr.latest);
+
+    // The newest seeded observation wins over the baseline's filler...
+    expect(snapshot.series["gold_inr"]!.latest).toBe(5000 + 29 * 20);
+    expect(snapshot.series["gold_inr"]!.latest).not.toBe(baseline.series.gold_inr.latest);
+    // ...and it is labelled as real, so the Control Center does not flag it.
+    expect(snapshot.series["gold_inr"]!.mock).toBe(false);
+  });
+
+  it("flags a series with no stored observations as mock", () => {
+    // aaa_3y has no adapter at all (FIMMDA/FBIL are confirmed dead ends),
+    // so nothing ever overwrites the baseline's entry for it. It must say
+    // so rather than present the placeholder as a reading.
+    const { snapshot } = buildCurrentSnapshot(db, "2026-09-08T00:00:00Z");
+    expect(snapshot.series["aaa_3y"]!.mock).toBe(true);
+  });
+
+  it("flags a wired score that lacks the history to compute as mock, not auto", () => {
+    // The silent-fallback case: computeAutoScoreCells attempts the cell,
+    // gets insufficient_history, and the baseline's invented value used
+    // to survive wearing "auto" provenance with no indication it was
+    // never computed. It must now carry mock + a reason naming the gap.
+    const { snapshot } = buildCurrentSnapshot(db, "2026-09-08T00:00:00Z");
+    const cell = snapshot.scores["debt.liquid::carry"]!;
+    expect(cell.mock).toBe(true);
+    expect(cell.mockReason).toContain("tbill_1y");
   });
 
   it("staleDays is 0 when the score's underlying observation is dated exactly asOfDate", () => {

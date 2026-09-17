@@ -9,7 +9,7 @@ import {
 } from "@wayfinder/engine";
 import { NODE_LABELS, SECTOR_NODES, TILT_GROUP_NODES } from "@wayfinder/engine";
 
-export type DataPointUpdateType = "automatic" | "opt_in" | "manual" | "derived" | "governance" | "veto" | "raw_series";
+export type DataPointUpdateType = "automatic" | "opt_in" | "manual" | "derived" | "governance" | "veto" | "raw_series" | "constant";
 export type DataPointFrequency = "daily" | "monthly" | "quarterly" | "event_driven" | "annual" | "static";
 export type DataPointOwner = "market_data" | "investment_team" | "model_admin" | "system";
 
@@ -52,6 +52,44 @@ const SIGNAL_LABELS: Record<string, string> = {
   cycle_position: "Cycle position",
 };
 
+// Structural constants (§7, provenance "static"): score cells whose value
+// encodes a fact about the INSTRUMENT CLASS, not a market view. They are
+// set deliberately, reviewed on an annual/strategic cadence, and are
+// CORRECT as they stand — they are not awaiting anybody's input.
+//
+// This set exists to stop them being reported as mock. They live in
+// mock/snapshot.json like every other unwired cell, so the "never
+// overwritten by a derivation ⇒ mock" rule catches them by default and
+// buries 7 finished cells among 40 that genuinely need attention. Each
+// value below is cross-checked against the engine's own rubric constants
+// (rubrics.ts), not taken on faith from the demo baseline:
+//
+//   debt.{liquid,gilt,corporate}::liquidity  90 / 75 / 65 — exactly
+//     DEBT_LIQUIDITY_BASELINE in rubrics.ts. Liquid funds are near-cash,
+//     G-secs trade in a deep sovereign market, corporate paper is thinner.
+//   debt.{liquid,gilt}::spread_cushion  50 — neutral BY DEFINITION: neither
+//     sleeve carries meaningful credit spread, so there is no cushion to
+//     score. (debt.corporate::spread_cushion is deliberately NOT here — it
+//     is a real signal, blocked on the missing aaa_3y source.)
+//   metals.gold::industrial  50 — gold's industrial demand is a small,
+//     stable share of total demand; neutral is the designed answer.
+//     (metals.silver::industrial is NOT here — silver is genuinely an
+//     industrial metal and that cell tracks a real cycle.)
+//   equity.large::growth_diff  50 — large cap is the BASELINE every other
+//     segment's growth gap is measured against, so its own gap is zero by
+//     construction. rubrics.ts and rubricUi.ts both state "large cap is
+//     always 50"; the demo baseline's 45 contradicted that and is
+//     corrected in mock/snapshot.json.
+const STRUCTURAL_CONSTANT_SCORE_IDS = new Set([
+  "debt.liquid::liquidity",
+  "debt.gilt::liquidity",
+  "debt.corporate::liquidity",
+  "debt.liquid::spread_cushion",
+  "debt.gilt::spread_cushion",
+  "metals.gold::industrial",
+  "equity.large::growth_diff",
+]);
+
 const AUTO_WIRED_SCORE_IDS = new Set([
   "l1.equity::flows",
   "l1.debt::flows",
@@ -82,6 +120,7 @@ const AUTO_WIRED_SCORE_IDS = new Set([
 function scoreEntry(nodeId: NodeId, signalId: string, modelGroup: GroupId): DataPointRegistryEntry {
   const id = `${nodeId}::${signalId}`;
   const isAuto = AUTO_WIRED_SCORE_IDS.has(id);
+  const isConstant = STRUCTURAL_CONSTANT_SCORE_IDS.has(id);
   const nodeLabel = NODE_LABELS[nodeId] ?? nodeId;
   const signalLabel = SIGNAL_LABELS[signalId] ?? signalId;
   return {
@@ -89,11 +128,13 @@ function scoreEntry(nodeId: NodeId, signalId: string, modelGroup: GroupId): Data
     label: `${nodeLabel} - ${signalLabel}`,
     technicalKey: id,
     modelGroup,
-    updateType: isAuto ? "derived" : "manual",
-    source: isAuto ? "Model pipeline" : "Manual or rubric input",
-    frequency: isAuto ? "daily" : "quarterly",
-    owner: isAuto ? "system" : "investment_team",
-    description: `${signalLabel} score feeding ${nodeLabel}.`,
+    updateType: isConstant ? "constant" : isAuto ? "derived" : "manual",
+    source: isConstant ? "Model constant" : isAuto ? "Model pipeline" : "Manual or rubric input",
+    frequency: isConstant ? "annual" : isAuto ? "daily" : "quarterly",
+    owner: isConstant ? "model_admin" : isAuto ? "system" : "investment_team",
+    description: isConstant
+      ? `${signalLabel} for ${nodeLabel} — a structural property of the instrument class, not a market view. Reviewed annually.`
+      : `${signalLabel} score feeding ${nodeLabel}.`,
     dependency: `${nodeLabel} -> ${signalLabel}`,
   };
 }

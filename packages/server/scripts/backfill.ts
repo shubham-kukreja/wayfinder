@@ -10,6 +10,7 @@ import { insertObservations, seriesCoverage } from "../src/store/observations.js
 import { insertFetchLog } from "../src/store/fetchLog.js";
 import { createFredAdapter, FRED_SERIES } from "../src/adapters/fred.js";
 import { createAmfiAdapter } from "../src/adapters/amfi.js";
+import { createRbiAdapter } from "../src/adapters/rbi.js";
 import { createNiftyIndicesAdapter } from "../src/adapters/niftyindices.js";
 import { createYahooMetalsAdapter, GOLD_USD_FUTURES_SERIES_ID, SILVER_USD_FUTURES_SERIES_ID } from "../src/adapters/yahooMetals.js";
 import { createDbNomicsAdapter } from "../src/adapters/dbnomics.js";
@@ -206,6 +207,18 @@ async function backfillYahooMetals(db: ReturnType<typeof openDb>, years = 10): P
   return backfillRanged(db, "YAHOO_METALS", [GOLD_USD_FUTURES_SERIES_ID, SILVER_USD_FUTURES_SERIES_ID], adapter.fetchHistory, from);
 }
 
+// RBI's DBIE mirror. Headless-browser scrape, so it is slower than the
+// plain-HTTP sources above; it runs once here rather than on every refresh.
+// The mirror only shows a trailing window per table (~15 months for CPI,
+// ~25 months for the T-bill yield table), so `from` is a request, not a
+// guarantee — the coverage report says what actually landed.
+async function backfillRbi(db: ReturnType<typeof openDb>, chromiumExecutablePath: string | undefined, years = 3): Promise<CoverageReport[]> {
+  const adapter = createRbiAdapter({ executablePath: chromiumExecutablePath });
+  const from = new Date();
+  from.setFullYear(from.getFullYear() - years);
+  return backfillRanged(db, "RBI", ["cpi_index", "cpi_yoy", "tbill_1y"], adapter.fetchHistory, from);
+}
+
 // dbnomics.ts mirrors IMF IFS central-bank gold reserves — a stable,
 // official-data time series (unlike the scraped/unofficial sources
 // above), so a long range is both safe and useful here.
@@ -312,11 +325,19 @@ async function main() {
   // is selected.
   console.log("-- Bullion (IBJA/metals.dev) --");
   console.log("  SKIPPED: no historical range endpoint on the free tier; needs a supplementary archive.");
-  // RBI's fetchHistory only returns whatever trailing window the scraped
-  // mirror displays (~15 months for CPI) — not a true long-range backfill,
-  // so there is nothing this script can usefully request beyond that.
+  // RBI's fetchHistory returns only whatever trailing window the scraped
+  // mirror happens to display — NOT a true arbitrary-range backfill. This
+  // used to be skipped outright on that basis, which was an overcorrection:
+  // the window is short but it is not empty, and for the T-bill yield table
+  // it is 25 monthly rows back to 2024-04 (verified live 2026-09-17) —
+  // enough on its own to clear the 24-observation percentile floor that had
+  // debt.liquid::carry stuck at insufficient_history on 4 CCIL day-rows.
+  //
+  // So: run it, and let the coverage report below say honestly how far it
+  // actually reached rather than assuming in advance that it reaches
+  // nothing. Whatever it returns is real published data.
   console.log("-- RBI --");
-  console.log("  SKIPPED: adapter only exposes a short trailing window (no true historical range) — nothing to backfill.");
+  reports.push(...(await backfillRbi(db, config.chromiumExecutablePath)));
   // NSE (nseindia.com/api/allIndices) is latest-only. Historical index
   // close/P/E/P/B coverage is handled above by NiftyIndices' Daily
   // Snapshot CSV instead.

@@ -15,6 +15,12 @@ const seriesStateSchema = z.object({
   status: z.enum(["ok", "stale", "failed", "insufficient_history", "manual"]),
   staleDays: z.number().nullable(),
   error: z.string().nullable(),
+  // True when this entry is still the static mock/demo baseline rather
+  // than a reading derived from the observations table. Optional so
+  // existing fixtures/snapshots parse unchanged; absent is treated as
+  // "not known to be mock" by consumers, and the server sets it
+  // explicitly on every series it serves (see currentSnapshot.ts).
+  mock: z.boolean().optional(),
 });
 
 const scoreStateSchema = z.object({
@@ -27,6 +33,15 @@ const scoreStateSchema = z.object({
   staleDays: z.number().nullable(),
   note: z.string().nullable(),
   confidence: confidenceSchema.nullable(),
+  // True when this cell's value is still the static mock/demo baseline:
+  // either never wired to a derivation at all, or wired but the
+  // derivation returned insufficient_history so the baseline value
+  // survived. §1 invariant 5 — provenance must stay visible; a mock
+  // value carrying "auto" provenance silently overstates itself.
+  mock: z.boolean().optional(),
+  // Why the value is mock, when it is — e.g. the series that fell short
+  // of the percentile floor. Null for genuinely computed cells.
+  mockReason: z.string().nullable().optional(),
 });
 
 const vetoStateSchema = z.object({

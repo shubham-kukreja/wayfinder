@@ -9,6 +9,8 @@ import {
   centralBankGoldBuyingTrend,
   deriveEarningsYieldGapSeries,
   deriveRealGoldPriceSeries,
+  deriveCpiYoySeries,
+  deriveGoldReturn12mSeries,
   deriveMidLargeSpreadSeries,
   deriveSmallLargeSpreadSeries,
   deriveSectorRelMomentumSeries,
@@ -251,12 +253,27 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
   }
 
   // §7.4 metals.gold::momentum / l1.metals::momentum — gold_return_12m,
-  // percentile as-is. Approximated here as the gold_inr series' own
-  // percentile (a genuine 12m-return series isn't separately computed
-  // yet — flagged as an approximation, not silently treated as exact).
+  // percentile as-is.
+  //
+  // Computed from gold_usd_futures (COMEX GC=F, ~10Y of real monthly
+  // history) rather than gold_inr (IBJA spot, 3 observations and no
+  // historical endpoint on the free tier — it would never clear the
+  // 24-observation floor). This is a genuine 12-month RETURN now, not the
+  // price level's own percentile the way this cell used to approximate it.
+  //
+  // Using a USD series for an INR portfolio is sound HERE specifically
+  // because a return is scale-invariant: the ~15% India landed-cost wedge
+  // over spot (import duty + GST + local premium, confirmed live —
+  // IBJA 15,236 INR/g vs 13,291 implied by futures x FX on 2026-09-16) is
+  // a near-constant multiplier, so it cancels in a ratio of two dates.
+  // It would NOT be sound for a price-level percentile, which is exactly
+  // why l1.metals::valuation below still refuses to substitute it.
+  // Residual honesty note: this is a USD-denominated return, so it omits
+  // the INR/USD move an Indian holder actually experiences.
   {
-    const result = autoScore(db, "gold_inr", params, "percentile");
-    out.push({ scoreId: "l1.metals::momentum", value: result.value, status: result.status, derivedFrom: ["gold_inr"], transform: "percentile", latestDate: result.latestDate });
+    const series = deriveGoldReturn12mSeries(db);
+    const result = autoScoreFromSeries(series, params, "percentile");
+    out.push({ scoreId: "l1.metals::momentum", value: result.value, status: result.status, derivedFrom: ["gold_usd_futures"], transform: "percentile", latestDate: result.latestDate });
   }
 
   // §8.4 — real rates rubric, already wired end-to-end (Phase 2's gating
@@ -296,8 +313,30 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
   // INDIRLTLT01STM; cpi_yoy is RBI's combinedInflation column — both are
   // monthly, so subtracting them date-for-date is a reasonable real-yield
   // approximation without needing a dedicated inflation-adjusted series.
+  //
+  // cpi_yoy comes from two places: the RBI mirror fetches it directly but
+  // only ever exposes a ~15-month window (1 stored observation as of
+  // 2026-09-17), and deriveCpiYoySeries() computes it as the 12-month
+  // change in cpi_index, which now backfills to 2016 via FRED. Directly
+  // fetched observations win on any shared month — they are the
+  // published print, not a reconstruction — and the derived series fills
+  // in the rest of the history so the percentile has a real distribution
+  // to rank against instead of failing the 24-observation floor outright.
   {
-    const realGsec = derivedDifferenceSeries(db, "gsec_10y", "cpi_yoy");
+    const storedCpiYoy = latestObservations(db, "cpi_yoy");
+    const byMonth = new Map(deriveCpiYoySeries(db).map((o) => [o.date.slice(0, 7), o]));
+    for (const row of storedCpiYoy) byMonth.set(row.date.slice(0, 7), { date: row.date, value: row.value });
+    const cpiYoy = [...byMonth.values()].sort((a, b) => a.date.localeCompare(b.date));
+
+    const gsecRows = latestObservations(db, "gsec_10y");
+    const cpiByMonth = new Map(cpiYoy.map((o) => [o.date.slice(0, 7), o.value]));
+    const realGsec: Array<{ date: string; value: number }> = [];
+    for (const g of gsecRows) {
+      const cpi = cpiByMonth.get(g.date.slice(0, 7));
+      if (cpi === undefined) continue;
+      realGsec.push({ date: g.date, value: g.value - cpi });
+    }
+
     const result = autoScoreFromSeries(realGsec, params, "percentile");
     out.push({ scoreId: "l1.debt::valuation", value: result.value, status: result.status, derivedFrom: ["gsec_10y", "cpi_yoy"], transform: "percentile", latestDate: result.latestDate });
   }

@@ -241,18 +241,136 @@ export function deriveEarningsYieldGapSeries(db: Database.Database): Array<{ dat
 // INVERTED." Month-joined against RBI's cpi_index (same reasoning as
 // deriveEarningsYieldGapSeries above — gold_inr/IBJA is daily,
 // cpi_index/RBI is monthly).
+// Prefers a synthetic INR gold level built from gold_usd_futures x
+// usd_inr over the directly-fetched gold_inr (IBJA spot), because IBJA
+// has NO historical endpoint on the free tier — gold_inr holds 3
+// observations and can never clear the 24-observation percentile floor,
+// so this cell was permanently insufficient_history.
+//
+// The synthetic level is NOT the price an Indian buyer pays: it omits
+// the ~15% landed-cost wedge (import duty + GST + local premium —
+// measured live at 1.146x on 2026-09-16). That is acceptable here and
+// ONLY here because this cell percentiles the series against ITS OWN
+// history: a near-constant multiplier shifts every point alike and so
+// leaves the percentile ordering unchanged. It would be wrong to mix the
+// two series within one history, which is why this picks one or the
+// other rather than merging them.
+//
+// Falls back to real gold_inr whenever that series does clear the floor
+// on its own (e.g. after enough daily refreshes accumulate) — a real
+// measured price beats a reconstruction once it is usable.
 export function deriveRealGoldPriceSeries(db: Database.Database): Array<{ date: string; value: number }> {
-  const goldRows = latestObservations(db, "gold_inr");
-  const cpiRows = latestObservations(db, "cpi_index");
-  if (goldRows.length === 0 || cpiRows.length === 0) return [];
-
+  const cpiRows = cpiIndexSingleBase(db);
+  if (cpiRows.length === 0) return [];
   const cpiByMonth = new Map(cpiRows.map((r) => [r.date.slice(0, 7), r.value]));
 
+  const deflate = (rows: Array<{ date: string; value: number }>) => {
+    const out: Array<{ date: string; value: number }> = [];
+    for (const row of rows) {
+      const cpi = cpiByMonth.get(row.date.slice(0, 7));
+      if (cpi === undefined || cpi === 0) continue;
+      out.push({ date: row.date, value: row.value / cpi });
+    }
+    return out;
+  };
+
+  const directly = deflate(latestObservations(db, "gold_inr"));
+  if (directly.length >= 24) return directly;
+
+  const goldUsdRows = latestObservations(db, "gold_usd_futures");
+  const fxRows = latestObservations(db, "usd_inr");
+  if (goldUsdRows.length === 0 || fxRows.length === 0) return directly;
+
+  // FX is daily and gold futures here are monthly; take the closest FX
+  // observation at or before each gold date rather than requiring an
+  // exact date match (which would drop every row landing on a weekend).
+  const synthetic: Array<{ date: string; value: number }> = [];
+  for (const g of goldUsdRows) {
+    const fx = lastRowAtOrBefore(fxRows, g.date);
+    if (!fx) continue;
+    synthetic.push({ date: g.date, value: g.value * fx.value });
+  }
+
+  const syntheticReal = deflate(synthetic);
+  return syntheticReal.length > directly.length ? syntheticReal : directly;
+}
+
+// gold_return_12m — trailing 12-month return on gold, from the COMEX
+// futures series (see the l1.metals::momentum comment in scoreCells.ts
+// for why a USD series is legitimate for a RETURN and not for a level).
+// Uses the same "closest observation at or before the target date"
+// lookback as the other trailing-return derivations here, so an exactly
+// -12-months date that falls on a non-trading day still resolves.
+export function deriveGoldReturn12mSeries(db: Database.Database): Array<{ date: string; value: number }> {
+  const rows = latestObservations(db, "gold_usd_futures");
+  if (rows.length === 0) return [];
+
   const out: Array<{ date: string; value: number }> = [];
-  for (const goldRow of goldRows) {
-    const cpi = cpiByMonth.get(goldRow.date.slice(0, 7));
-    if (cpi === undefined || cpi === 0) continue;
-    out.push({ date: goldRow.date, value: goldRow.value / cpi });
+  for (const row of rows) {
+    const ret = trailingReturn(rows, row.date, 12);
+    if (ret === null) continue;
+    out.push({ date: row.date, value: ret });
+  }
+  return out;
+}
+
+// cpi_index is written by TWO adapters on DIFFERENT index bases: FRED's
+// OECD series is "Index 2015=100" (reaching ~157 by 2025-03), while the
+// RBI mirror publishes on a later base (~104.84 for 2026-03). They are
+// the same concept but not the same scale, and concatenating them makes
+// the level appear to COLLAPSE ~34% between 2025-03 and 2026-03 — which
+// would corrupt every deflated series and invent a huge deflation print
+// in the YoY change.
+//
+// Rebasing one onto the other needs an overlapping period to compute the
+// splice factor from, and there is none (FRED ends 2025-03, RBI starts
+// 2026-03) — so any splice factor would be a guess. Instead: take
+// whichever source supplies the longer continuous run and use ONLY that
+// one. A shorter honest series beats a longer corrupted one.
+function cpiIndexSingleBase(db: Database.Database): Array<{ date: string; value: number }> {
+  const rows = latestObservations(db, "cpi_index");
+  const bySource = new Map<string, Array<{ date: string; value: number }>>();
+  for (const r of rows) {
+    const list = bySource.get(r.source) ?? [];
+    list.push({ date: r.date, value: r.value });
+    bySource.set(r.source, list);
+  }
+  let best: Array<{ date: string; value: number }> = [];
+  for (const list of bySource.values()) if (list.length > best.length) best = list;
+  return best;
+}
+
+// cpi_yoy derived from the cpi_index level: the 12-month percentage
+// change, which is the definition of year-on-year CPI inflation.
+//
+// Why this exists: cpi_yoy is fetched directly by the RBI mirror adapter
+// (its combinedInflation column), but that mirror only ever exposes a
+// ~15-month trailing window, so the stored series sat at 1 observation —
+// far below the 24-observation percentile floor — and l1.debt::valuation
+// (gsec_10y - cpi_yoy) was permanently insufficient_history. cpi_index
+// now backfills properly from FRED's INDCPIALLMINMEI, so the YoY change
+// can be computed across that whole history instead.
+//
+// Matches on YEAR-MONTH exactly 12 months back rather than date
+// arithmetic: CPI is monthly and stamped to the 1st, so the comparison is
+// unambiguous and needs no nearest-neighbour search. Rows whose
+// 12-months-prior month is absent are skipped rather than interpolated —
+// a gap must not become an invented inflation print.
+//
+// Returns a series for percentile purposes only; never writes to the
+// observations table.
+export function deriveCpiYoySeries(db: Database.Database): Array<{ date: string; value: number }> {
+  const rows = cpiIndexSingleBase(db);
+  const byMonth = new Map(rows.map((r) => [r.date.slice(0, 7), r.value]));
+
+  const out: Array<{ date: string; value: number }> = [];
+  for (const row of rows) {
+    const [year, month] = row.date.slice(0, 7).split("-").map(Number);
+    if (!year || !month) continue;
+    const priorKey = `${year - 1}-${String(month).padStart(2, "0")}`;
+    const prior = byMonth.get(priorKey);
+    if (prior === undefined || prior === 0) continue;
+    out.push({ date: row.date, value: ((row.value - prior) / prior) * 100 });
   }
   return out;
 }

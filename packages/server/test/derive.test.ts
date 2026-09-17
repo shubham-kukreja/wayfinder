@@ -9,6 +9,8 @@ import {
   centralBankGoldBuyingTrend,
   deriveEarningsYieldGapSeries,
   deriveRealGoldPriceSeries,
+  deriveCpiYoySeries,
+  deriveGoldReturn12mSeries,
   deriveMidLargeSpreadSeries,
   deriveSmallLargeSpreadSeries,
   deriveSectorRelMomentumSeries,
@@ -281,6 +283,80 @@ describe("deriveRealGoldPriceSeries — §8.4 (Calculation Guide row 21) real go
     seed("gold_inr", "2026-01-15", 65000);
     seed("cpi_index", "2026-01-01", 185);
     expect(deriveRealGoldPriceSeries(db)).toEqual([{ date: "2026-01-15", value: 65000 / 185 }]);
+  });
+
+  it("falls back to gold_usd_futures x usd_inr when gold_inr is too short to percentile", () => {
+    // IBJA spot has no historical endpoint, so gold_inr never reaches the
+    // 24-observation floor on its own; the synthetic INR level does.
+    seed("gold_inr", "2026-01-15", 65000);
+    for (let i = 0; i < 30; i++) {
+      const y = 2024 + Math.floor(i / 12);
+      const m = String((i % 12) + 1).padStart(2, "0");
+      seed("gold_usd_futures", `${y}-${m}-01`, 2000 + i * 10);
+      seed("usd_inr", `${y}-${m}-01`, 85);
+      seed("cpi_index", `${y}-${m}-01`, 150);
+    }
+    const out = deriveRealGoldPriceSeries(db);
+    expect(out.length).toBeGreaterThanOrEqual(24);
+    // (gold in USD x FX) / CPI, not the 3-observation IBJA path.
+    expect(out[0]!.value).toBeCloseTo((2000 * 85) / 150, 6);
+  });
+});
+
+describe("deriveCpiYoySeries — 12-month change in cpi_index", () => {
+  it("returns an empty array without a 12-months-prior month to compare to", () => {
+    seed("cpi_index", "2026-01-01", 110);
+    expect(deriveCpiYoySeries(db)).toEqual([]);
+  });
+
+  it("computes the year-on-year percentage change", () => {
+    seed("cpi_index", "2025-01-01", 100);
+    seed("cpi_index", "2026-01-01", 106);
+    expect(deriveCpiYoySeries(db)).toEqual([{ date: "2026-01-01", value: 6 }]);
+  });
+
+  it("skips a month whose prior-year counterpart is missing rather than interpolating", () => {
+    seed("cpi_index", "2025-01-01", 100);
+    seed("cpi_index", "2026-01-01", 106);
+    seed("cpi_index", "2026-02-01", 107); // no 2025-02 to compare against
+    expect(deriveCpiYoySeries(db).map((o) => o.date)).toEqual(["2026-01-01"]);
+  });
+
+  it("uses only the longest single-base run when two sources disagree on index base", () => {
+    // FRED publishes cpi_index on Index 2015=100; the RBI mirror uses a
+    // later base. Concatenating them would fabricate a ~34% deflation.
+    for (let i = 0; i < 24; i++) {
+      const y = 2024 + Math.floor(i / 12);
+      const m = String((i % 12) + 1).padStart(2, "0");
+      insertObservations(db, [
+        { seriesId: "cpi_index", date: `${y}-${m}-01`, value: 150 + i, basis: null, source: "FRED", fetchedAt: "2026-01-01T00:00:00Z" },
+      ]);
+    }
+    insertObservations(db, [
+      { seriesId: "cpi_index", date: "2026-03-01", value: 104.84, basis: null, source: "RBI", fetchedAt: "2026-01-01T00:00:00Z" },
+    ]);
+    // The lone RBI point on the other base must not appear as a crash
+    // from ~173 down to ~105.
+    for (const o of deriveCpiYoySeries(db)) expect(o.value).toBeGreaterThan(-50);
+  });
+});
+
+describe("deriveGoldReturn12mSeries — trailing 12M return behind l1.metals::momentum", () => {
+  it("returns an empty array without 12 months of history", () => {
+    seed("gold_usd_futures", "2026-01-01", 2000);
+    expect(deriveGoldReturn12mSeries(db)).toEqual([]);
+  });
+
+  it("computes the 12-month return as a fraction, matching trailingReturn's convention", () => {
+    // A fraction, not percent — the other trailing-return derivations
+    // here use the same convention, and the value only ever feeds a
+    // percentile, which is scale-invariant either way.
+    seed("gold_usd_futures", "2025-01-01", 2000);
+    seed("gold_usd_futures", "2026-01-01", 2400);
+    const out = deriveGoldReturn12mSeries(db);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.date).toBe("2026-01-01");
+    expect(out[0]!.value).toBeCloseTo(0.2, 6);
   });
 });
 
