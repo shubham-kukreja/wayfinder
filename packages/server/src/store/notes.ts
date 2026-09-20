@@ -13,14 +13,10 @@ export interface NoteReference {
   position: number;
 }
 
-export interface NoteWidget {
-  id: string;
-  widgetType: string;
-  config: unknown;
-  size: "small" | "medium" | "full";
-  position: number;
-}
-
+// Widgets are not stored separately — they're {{widget:type:size:id}}
+// tokens inline in `body`, the same way a mention is a {{type:id}} token.
+// That's what lets a widget sit anywhere in the text (including
+// mid-paragraph) instead of only ever appending after it.
 export interface Note {
   id: string;
   title: string | null;
@@ -29,7 +25,6 @@ export interface Note {
   createdAt: string;
   updatedAt: string;
   refs: NoteReference[];
-  widgets: NoteWidget[];
 }
 
 export interface NoteListItem {
@@ -57,27 +52,10 @@ function readRefs(db: Database.Database, noteId: string): NoteReference[] {
     .all(noteId) as NoteReference[];
 }
 
-function readWidgets(db: Database.Database, noteId: string): NoteWidget[] {
-  const rows = db
-    .prepare(`SELECT id, widget_type as widgetType, config_json as configJson, size, position FROM note_widgets WHERE note_id = ? ORDER BY position ASC`)
-    .all(noteId) as Array<{ id: string; widgetType: string; configJson: string; size: NoteWidget["size"]; position: number }>;
-  return rows.map((r) => ({ id: r.id, widgetType: r.widgetType, config: JSON.parse(r.configJson), size: r.size, position: r.position }));
-}
-
 function writeRefs(db: Database.Database, noteId: string, refs: NoteReference[]): void {
   db.prepare(`DELETE FROM note_refs WHERE note_id = ?`).run(noteId);
   const insert = db.prepare(`INSERT INTO note_refs (note_id, entity_type, entity_id, position) VALUES (?, ?, ?, ?)`);
   for (const ref of refs) insert.run(noteId, ref.entityType, ref.entityId, ref.position);
-}
-
-function writeWidgets(db: Database.Database, noteId: string, widgets: Array<Omit<NoteWidget, "id"> & { id?: string }>): NoteWidget[] {
-  db.prepare(`DELETE FROM note_widgets WHERE note_id = ?`).run(noteId);
-  const insert = db.prepare(`INSERT INTO note_widgets (id, note_id, widget_type, config_json, size, position) VALUES (?, ?, ?, ?, ?, ?)`);
-  return widgets.map((w) => {
-    const id = w.id ?? randomUUID();
-    insert.run(id, noteId, w.widgetType, JSON.stringify(w.config ?? {}), w.size, w.position);
-    return { id, widgetType: w.widgetType, config: w.config ?? {}, size: w.size, position: w.position };
-  });
 }
 
 export interface CreateNoteInput {
@@ -85,7 +63,6 @@ export interface CreateNoteInput {
   body: string;
   author?: string | null;
   refs?: NoteReference[];
-  widgets?: Array<Omit<NoteWidget, "id">>;
 }
 
 export function createNote(db: Database.Database, input: CreateNoteInput): Note {
@@ -100,15 +77,13 @@ export function createNote(db: Database.Database, input: CreateNoteInput): Note 
     now,
   );
   writeRefs(db, id, input.refs ?? []);
-  const widgets = writeWidgets(db, id, input.widgets ?? []);
-  return { id, title: input.title ?? null, body: input.body, author: input.author ?? null, createdAt: now, updatedAt: now, refs: input.refs ?? [], widgets };
+  return { id, title: input.title ?? null, body: input.body, author: input.author ?? null, createdAt: now, updatedAt: now, refs: input.refs ?? [] };
 }
 
 export interface UpdateNoteInput {
   title?: string | null;
   body?: string;
   refs?: NoteReference[];
-  widgets?: Array<Omit<NoteWidget, "id"> & { id?: string }>;
 }
 
 export function updateNote(db: Database.Database, id: string, input: UpdateNoteInput): Note | undefined {
@@ -123,7 +98,6 @@ export function updateNote(db: Database.Database, id: string, input: UpdateNoteI
   db.prepare(`UPDATE notes SET title = ?, body = ?, updated_at = ? WHERE id = ?`).run(title, body, now, id);
 
   if (input.refs !== undefined) writeRefs(db, id, input.refs);
-  const widgets = input.widgets !== undefined ? writeWidgets(db, id, input.widgets) : readWidgets(db, id);
 
   return {
     id,
@@ -133,7 +107,6 @@ export function updateNote(db: Database.Database, id: string, input: UpdateNoteI
     createdAt: existing.createdAt,
     updatedAt: now,
     refs: input.refs !== undefined ? input.refs : readRefs(db, id),
-    widgets,
   };
 }
 
@@ -142,7 +115,7 @@ export function getNote(db: Database.Database, id: string): Note | undefined {
     | NoteRow
     | undefined;
   if (!row) return undefined;
-  return { ...row, refs: readRefs(db, id), widgets: readWidgets(db, id) };
+  return { ...row, refs: readRefs(db, id) };
 }
 
 export function deleteNote(db: Database.Database, id: string): boolean {

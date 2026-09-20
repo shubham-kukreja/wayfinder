@@ -1,6 +1,8 @@
 import type { Snapshot } from "@wayfinder/engine";
+import { computeAllocation } from "@wayfinder/engine";
 import type { NoteEntityType } from "./notesApi.js";
 import { segmentColor } from "../components/AllocationBar.js";
+import { scoresFromSnapshot, vetoesFromSnapshot } from "../hooks/useLocalAllocation.js";
 import { listReviews } from "./reviewsApi.js";
 
 export interface MentionCandidate {
@@ -23,8 +25,14 @@ const GROUP_LABEL: Record<string, string> = {
 // snapshot already in memory (no extra fetch), signals/rubrics are the
 // fixed model vocabulary, and past versions are fetched lazily since they
 // change far less often than everything else here.
+// Recomputes allocation locally rather than trusting snapshot.allocation —
+// that field is a value the server precomputed at fetch time, which can be
+// stale relative to the scores/params in the same payload (the same reason
+// OverviewView and the note widgets both call computeAllocation themselves
+// instead of reading it off the snapshot).
 export function buildSnapshotCandidates(snapshot: Snapshot): MentionCandidate[] {
   const out: MentionCandidate[] = [];
+  const allocation = computeAllocation(scoresFromSnapshot(snapshot.scores), vetoesFromSnapshot(snapshot.vetoes), snapshot.params);
 
   for (const [id, state] of Object.entries(snapshot.scores)) {
     out.push({
@@ -37,26 +45,31 @@ export function buildSnapshotCandidates(snapshot: Snapshot): MentionCandidate[] 
     });
   }
 
-  for (const r of snapshot.allocation.rollup) {
+  for (const r of allocation.rollup) {
+    // portfolioWeight is a 0-1 fraction (same as every weight computeAllocation
+    // returns), so it needs the same *100 the rest of the app applies via
+    // formatPct before it's shown as a percentage.
+    const pct = (r.portfolioWeight * 100).toFixed(1);
     out.push({
       entityType: "sleeve",
       entityId: r.id,
       label: r.label,
-      meta: `Sleeve · ${r.portfolioWeight.toFixed(1)}% of portfolio`,
-      value: `${r.portfolioWeight.toFixed(1)}%`,
-      color: segmentColor(r.id, snapshot.allocation),
+      meta: `Sleeve · ${pct}% of portfolio`,
+      value: `${pct}%`,
+      color: segmentColor(r.id, allocation),
     });
   }
 
   for (const [id, label] of Object.entries(GROUP_LABEL)) {
-    const node = snapshot.allocation.groups.l1.nodes[id as keyof typeof snapshot.allocation.groups.l1.nodes];
+    const node = allocation.groups.l1.nodes[id as keyof typeof allocation.groups.l1.nodes];
+    const pct = node ? (node.final * 100).toFixed(1) : null;
     out.push({
       entityType: "signal",
       entityId: id,
       label,
-      meta: `Asset class · ${node ? node.final.toFixed(1) + "%" : ""}`,
-      value: node ? `${node.final.toFixed(1)}%` : null,
-      color: segmentColor(id, snapshot.allocation),
+      meta: `Asset class · ${pct ? pct + "%" : ""}`,
+      value: pct ? `${pct}%` : null,
+      color: segmentColor(id, allocation),
     });
   }
 

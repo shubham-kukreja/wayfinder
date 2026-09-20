@@ -121,21 +121,54 @@ export function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_note_refs_note ON note_refs (note_id);
     CREATE INDEX IF NOT EXISTS idx_note_refs_entity ON note_refs (entity_type, entity_id);
 
-    -- Embedded widgets (e.g. the allocation bar) dropped into a note while
-    -- writing it. One row per widget instance; position orders them within
-    -- the note the same way note_refs orders mentions.
-    CREATE TABLE IF NOT EXISTS note_widgets (
-      id          TEXT PRIMARY KEY,
-      note_id     TEXT NOT NULL,
-      widget_type TEXT NOT NULL,
-      config_json TEXT NOT NULL DEFAULT '{}',
-      size        TEXT NOT NULL DEFAULT 'medium',
-      position    INTEGER NOT NULL,
-      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+    -- A saved backtest scenario: named, so several can sit side-by-side for
+    -- comparison rather than each run overwriting the last. legs_json holds
+    -- the fund/amount/date inputs; result is never stored here — it's
+    -- recomputed from live NAV history on open, same "recomputed, never
+    -- frozen at insert time" pattern the note widgets already use, so a
+    -- reopened scenario reflects NAV data fetched since it was saved.
+    CREATE TABLE IF NOT EXISTS backtest_scenarios (
+      id           TEXT PRIMARY KEY,
+      label        TEXT NOT NULL,
+      legs_json    TEXT NOT NULL,
+      benchmark_id TEXT NOT NULL,
+      created_at   TEXT NOT NULL,
+      updated_at   TEXT NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_note_widgets_note ON note_widgets (note_id);
+    -- A queued/running/finished backtest run. Separate from
+    -- backtest_scenarios (a saved named INPUT split, no result attached) —
+    -- a job is one execution of a backtest, with its own status, timing
+    -- and result. status transitions: queued -> running -> completed|failed,
+    -- or queued -> cancelled if removed before the worker picks it up.
+    -- Only one row is ever "running" at a time (see pipeline/backtestQueue.ts)
+    -- — the single-worker, strictly-sequential design the UI's "only one
+    -- runs, others show queued" requirement depends on.
+    CREATE TABLE IF NOT EXISTS backtest_jobs (
+      id           TEXT PRIMARY KEY,
+      label        TEXT NOT NULL,
+      legs_json    TEXT NOT NULL,
+      benchmark_id TEXT NOT NULL,
+      status       TEXT NOT NULL,
+      eta_seconds  REAL,
+      result_json  TEXT,
+      error        TEXT,
+      created_at   TEXT NOT NULL,
+      started_at   TEXT,
+      finished_at  TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_backtest_jobs_status_created
+      ON backtest_jobs (status, created_at);
   `);
+
+  // Embedded widgets (the allocation bar, the model-drivers heatmap) used to
+  // live in their own table, ordered separately from the text they sit
+  // alongside. They're now {{widget:type:size:id}} tokens inline in the same
+  // body string as everything else — which is what lets a widget be dropped
+  // mid-paragraph, not just appended after the text — so the table (and any
+  // row an earlier build wrote to it) is no longer read or written.
+  db.exec(`DROP TABLE IF EXISTS note_widgets;`);
 
   ensureColumn(db, "manual_scores", "reason", "TEXT");
   ensureColumn(db, "manual_scores", "actor", "TEXT");

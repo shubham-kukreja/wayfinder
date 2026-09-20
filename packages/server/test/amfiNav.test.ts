@@ -23,7 +23,14 @@ describe("AMFI NAV adapter — parses real NAV file formats", () => {
     expect(rows.length).toBeGreaterThan(0);
 
     const axis = rows.find((r) => r.schemeCode === "135762");
-    expect(axis).toEqual({ schemeCode: "135762", schemeName: "Axis Children's Fund", nav: 29.5645, date: "2026-09-15" });
+    expect(axis).toEqual({
+      schemeCode: "135762",
+      schemeName: "Axis Children's Fund",
+      nav: 29.5645,
+      date: "2026-09-15",
+      plan: "Direct Plan",
+      option: "Growth Option",
+    });
   });
 
   it("drops rows with a genuine 0.0000 NAV (segregated/distressed schemes) rather than treating zero as a real price", () => {

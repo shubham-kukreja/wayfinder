@@ -1,32 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { openDb } from "../store/db.js";
-import {
-  createNote,
-  deleteNote,
-  getNote,
-  listNotes,
-  listNotesByEntity,
-  updateNote,
-  type NoteEntityType,
-  type NoteReference,
-  type NoteWidget,
-} from "../store/notes.js";
+import { createNote, deleteNote, getNote, listNotes, listNotesByEntity, updateNote, type NoteEntityType, type NoteReference } from "../store/notes.js";
 import { loadConfig } from "../config.js";
 
 const ENTITY_TYPES: NoteEntityType[] = ["datapoint", "sleeve", "signal", "rubric", "snapshot"];
-const WIDGET_SIZES: NoteWidget["size"][] = ["small", "medium", "full"];
 
 interface RefBody {
   entityType?: string;
   entityId?: string;
-  position?: number;
-}
-
-interface WidgetBody {
-  id?: string;
-  widgetType?: string;
-  config?: unknown;
-  size?: string;
   position?: number;
 }
 
@@ -35,7 +16,6 @@ interface NoteBody {
   body?: string;
   author?: string;
   refs?: RefBody[];
-  widgets?: WidgetBody[];
 }
 
 function parseRefs(raw: RefBody[] | undefined): NoteReference[] | undefined {
@@ -51,23 +31,11 @@ function parseRefs(raw: RefBody[] | undefined): NoteReference[] | undefined {
   });
 }
 
-function parseWidgets(raw: WidgetBody[] | undefined): Array<Omit<NoteWidget, "id"> & { id?: string }> | undefined {
-  if (raw === undefined) return undefined;
-  return raw.map((w, i) => {
-    if (typeof w.widgetType !== "string" || w.widgetType.length === 0) {
-      throw new Error("Each widget needs a non-empty string 'widgetType'.");
-    }
-    const size = (w.size ?? "medium") as NoteWidget["size"];
-    if (!WIDGET_SIZES.includes(size)) {
-      throw new Error(`'size', if given, must be one of ${WIDGET_SIZES.join(", ")}.`);
-    }
-    return { id: w.id, widgetType: w.widgetType, config: w.config ?? {}, size, position: w.position ?? i };
-  });
-}
-
 // Notes are a standalone workspace: freeform text that can mention any
-// number of data points, sleeves, signals, rubrics or past versions (see
-// store/notes.ts), plus embedded widgets like a live allocation bar.
+// number of data points, sleeves, signals, rubrics or past versions, and can
+// embed live widgets (an allocation bar, the model-drivers heatmap) anywhere
+// in that text — both are just tokens in the same `body` string (see
+// store/notes.ts and the web client's lib/mentionTokens.ts).
 export function registerNotesRoute(app: FastifyInstance): void {
   app.get<{ Querystring: { q?: string; entityType?: string; entityId?: string } }>("/api/notes", async (req, reply) => {
     const { q, entityType, entityId } = req.query;
@@ -107,7 +75,7 @@ export function registerNotesRoute(app: FastifyInstance): void {
   });
 
   app.post<{ Body: NoteBody }>("/api/notes", async (req, reply) => {
-    const { title, body, author, refs, widgets } = req.body ?? ({} as NoteBody);
+    const { title, body, author, refs } = req.body ?? ({} as NoteBody);
     if (typeof body !== "string") {
       reply.code(400);
       return { error: "Body must include a string 'body' (the note text)." };
@@ -116,7 +84,7 @@ export function registerNotesRoute(app: FastifyInstance): void {
     const config = loadConfig();
     const db = openDb(config.dbPath);
     try {
-      const note = createNote(db, { title: title ?? null, body, author: author ?? null, refs: parseRefs(refs), widgets: parseWidgets(widgets) });
+      const note = createNote(db, { title: title ?? null, body, author: author ?? null, refs: parseRefs(refs) });
       reply.code(201);
       return note;
     } catch (err) {
@@ -128,11 +96,11 @@ export function registerNotesRoute(app: FastifyInstance): void {
   });
 
   app.patch<{ Params: { id: string }; Body: NoteBody }>("/api/notes/:id", async (req, reply) => {
-    const { title, body, refs, widgets } = req.body ?? ({} as NoteBody);
+    const { title, body, refs } = req.body ?? ({} as NoteBody);
     const config = loadConfig();
     const db = openDb(config.dbPath);
     try {
-      const note = updateNote(db, req.params.id, { title, body, refs: parseRefs(refs), widgets: parseWidgets(widgets) });
+      const note = updateNote(db, req.params.id, { title, body, refs: parseRefs(refs) });
       if (!note) {
         reply.code(404);
         return { error: `No note with id '${req.params.id}'.` };

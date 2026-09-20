@@ -13,7 +13,69 @@ import { loadConfig } from "../config.js";
 import { openDb } from "../store/db.js";
 import { buildCurrentSnapshot } from "../pipeline/currentSnapshot.js";
 
-type FreshnessState = "current" | "due" | "stale" | "failed" | "missing" | "overridden";
+type FreshnessState = "current" | "stale" | "failed" | "missing" | "overridden";
+
+// How often a series' SOURCE actually publishes a new observation, in
+// days. A flat "stale after 7 days" threshold was flagging cells fed
+// entirely by monthly government/AMFI data as stale within a week of a
+// perfectly normal print, alongside genuinely overdue daily feeds — the
+// two cases look identical under one number but mean completely
+// different things to a reader. This maps each series to its own
+// publication rhythm; a cell's threshold is the SLOWEST of its declared
+// series (see cellStaleDaysThreshold below), so a cell that joins a
+// daily price to a monthly macro print is judged by the monthly leg,
+// not the daily one.
+//
+// Values are the source's real cadence plus a grace window (source
+// cadence is a promise about when the NEXT print lands, not a deadline
+// that expires the instant it passes) — roughly source-cadence + 40%,
+// rounded, so a monthly series isn't flagged the day after 30 days.
+// Series absent from this map fall back to DEFAULT_STALE_DAYS.
+//
+// Sourced from each adapter's own file comments:
+//   fred.ts        — INDIRLTLT01STM/INDCPIALLMINMEI, OECD-sourced, monthly
+//   rbi.ts         — DBIE mirror CPI/T-bill tables, monthly
+//   tradingeconomics.ts — PMI/CPI calendar prints, monthly
+//   amfi.ts        — AMFI scheme-category flows/AUM, monthly
+//   dbnomics.ts    — IMF IFS gold reserves; monthly cadence but a
+//                    confirmed multi-month mirror lag on top (see that
+//                    adapter's file comment) — given extra room rather
+//                    than flagged "stale" every single day it runs behind
+//   bisPolicyRate.ts/rbiRepoRate.ts — RBI repo rate, event-driven on the
+//                    ~bimonthly MPC calendar, not a fixed cadence
+//   niftyindices.ts/nse.ts/bullion.ts/yahoo*.ts — daily market data
+const SERIES_CADENCE_DAYS: Record<string, number> = {
+  // Monthly government/macro prints (~30d cadence + grace)
+  gsec_10y: 45,
+  cpi_index: 45,
+  cpi_yoy: 45,
+  global_mfg_pmi: 45,
+  // Monthly AMFI scheme-category data
+  flow_equity_3m: 45,
+  aum_equity: 45,
+  flow_duration_3m: 45,
+  aum_duration: 45,
+  flow_goldetf: 45,
+  aum_goldetf: 45,
+  // Monthly, but with a documented extra mirror lag on top of the
+  // source's own publication delay — given real headroom rather than
+  // reporting "stale" on effectively every refresh.
+  cb_gold_reserves_tonnes: 120,
+  // Event-driven on the RBI MPC's ~bimonthly meeting calendar, not a
+  // fixed cadence — closer to bimonthly than monthly in practice.
+  repo_rate: 75,
+};
+
+const DEFAULT_STALE_DAYS = 7;
+
+// The cell's own threshold is the SLOWEST of its declared series' —
+// joining one daily leg to one monthly leg makes the whole cell a
+// monthly-cadence read, since it cannot be any fresher than its
+// slowest input.
+function cellStaleDaysThreshold(sourceStates: SeriesState[]): number {
+  if (sourceStates.length === 0) return DEFAULT_STALE_DAYS;
+  return Math.max(...sourceStates.map((s) => SERIES_CADENCE_DAYS[s.id] ?? DEFAULT_STALE_DAYS));
+}
 type RowState = "published" | "draft_override" | "validation_error";
 
 interface DataPointRow extends DataPointRegistryEntry {
@@ -93,8 +155,7 @@ export function scoreFreshness(
   // derive from.
   if (!isRubric && sourceStates.length > 0 && sourceStates.every((s) => s.latestDate === null)) return "missing";
   if (isRubric && sourceStates.length > 0 && sourceStates.every((s) => s.latestDate === null)) return "missing";
-  if (score.staleDays !== null && score.staleDays > 45) return "stale";
-  if (score.staleDays !== null && score.staleDays > 7) return "due";
+  if (score.staleDays !== null && score.staleDays > cellStaleDaysThreshold(sourceStates)) return "stale";
   if (score.provenance === "default") return "missing";
   return "current";
 }
@@ -256,11 +317,9 @@ function rowFromSeries(entry: DataPointRegistryEntry, seriesState: SeriesState |
       ? "failed"
       : seriesState.status === "insufficient_history"
         ? "missing"
-        : seriesState.staleDays !== null && seriesState.staleDays > 45
+        : seriesState.staleDays !== null && seriesState.staleDays > (SERIES_CADENCE_DAYS[seriesState.id] ?? DEFAULT_STALE_DAYS)
           ? "stale"
-          : seriesState.staleDays !== null && seriesState.staleDays > 7
-            ? "due"
-            : "current";
+          : "current";
   return {
     ...entry,
     awaitingInput: false,

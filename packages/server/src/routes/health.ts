@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as nodePath from "node:path";
 import type { FastifyInstance } from "fastify";
-import { createFredAdapter, FRED_SERIES } from "../adapters/fred.js";
+import { createFredAdapter, checkFredSeriesFreshness, FRED_SERIES } from "../adapters/fred.js";
 import { createBullionAdapter, BULLION_SERIES } from "../adapters/bullion.js";
 import { createAmfiAdapter } from "../adapters/amfi.js";
 import { createNseAdapter } from "../adapters/nse.js";
@@ -57,16 +57,29 @@ export function registerHealthRoute(app: FastifyInstance): void {
     const nse = createNseAdapter();
     const aaa3y = createAaa3yAdapter();
 
-    const [fredHealth, bullionHealth, amfiHealth, nseHealth, aaa3yHealth] = await Promise.all([
+    const [fredHealth, bullionHealth, amfiHealth, nseHealth, aaa3yHealth, fredSeriesFreshness] = await Promise.all([
       fred.health(),
       bullion.health(),
       amfi.health(),
       nse.health(),
       aaa3y.health(),
+      // Reachability alone (fred.health() above) can't tell "FRED is up"
+      // apart from "FRED is up but gsec_10y stopped publishing 3 months
+      // ago" — both look like ok:true. This adds the per-series check
+      // that actually answers the second question.
+      checkFredSeriesFreshness({ apiKey: config.fredApiKey, series: FRED_SERIES }).catch((err) => [
+        { internalSeriesId: "*", latestDate: null, stale: true, error: err instanceof Error ? err.message : String(err) },
+      ]),
     ]);
 
     return {
-      sources: [fredHealth, bullionHealth, amfiHealth, nseHealth, aaa3yHealth],
+      sources: [
+        { ...fredHealth, seriesFreshness: fredSeriesFreshness },
+        bullionHealth,
+        amfiHealth,
+        nseHealth,
+        aaa3yHealth,
+      ],
       checkedAt: new Date().toISOString(),
     };
   });

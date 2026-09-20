@@ -6,3 +6,4 @@ export * from "./rubrics.js";
 export * from "./rubricUi.js";
 export * from "./scoreMap.js";
 export * from "./scoreProvenance.js";
+export * from "./backtest.js";

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useSnapshot } from "./hooks/useSnapshot.js";
 import { OverviewView } from "./views/OverviewView.js";
+import { BacktestView } from "./views/BacktestView.js";
 import { DriversView } from "./views/DriversView.js";
 import { DataPointControlCenterView } from "./views/DataPointControlCenterView.js";
 import { MethodologyView } from "./views/MethodologyView.js";
@@ -19,20 +20,6 @@ import { CURRENT_SNAPSHOT_URL, FIXTURES, PUBLISHED_SNAPSHOT_URL } from "./lib/co
 export default function App() {
   const location = useLocation();
 
-  // The note editor is deliberately not inside the app shell below: opening
-  // a note means seeing only that note, full width and full height, with no
-  // sidebar or top bar competing for the screen — so it renders as an
-  // entirely separate tree rather than one more <Route> inside the shell.
-  if (/^\/notes\/[^/]+$/.test(location.pathname)) {
-    // Still needs a <Route> (not a bare component render) so useParams
-    // inside NoteEditorView can read the :id segment — react-router only
-    // populates route params for elements rendered through matching.
-    return (
-      <Routes>
-        <Route path="/notes/:id" element={<NoteEditorView />} />
-      </Routes>
-    );
-  }
   // The dev fixture switcher was removed from the top bar, so the app always
   // loads live data. The fixture plumbing below stays in place for the mock
   // states it can still serve if a switcher is reintroduced.
@@ -66,6 +53,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/overview" replace />} />
             <Route path="/overview" element={<OverviewView snapshot={snapshot} />} />
+            <Route path="/backtest" element={<BacktestView />} />
             <Route path="/model" element={<Navigate to="/model/signals" replace />} />
             <Route path="/model/signals" element={<DriversView snapshot={snapshot} />} />
             <Route path="/model/datapoints" element={<DataPointControlCenterView snapshot={snapshot} />} />
@@ -78,6 +66,7 @@ export default function App() {
             <Route path="/reviews/history" element={<HistoryView snapshot={snapshot} section="history" />} />
             <Route path="/reviews/cadence" element={<HistoryView snapshot={snapshot} section="cadence" />} />
             <Route path="/notes" element={<NotesView />} />
+            <Route path="/notes/:id" element={<NoteEditorView />} />
             <Route path="*" element={<Navigate to="/overview" replace />} />
           </Routes>
         )}

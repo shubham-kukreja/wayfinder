@@ -8,13 +8,87 @@ import { ScoreFormulaTrace, hasScoreFormulaTrace } from "../components/ScoreForm
 import { UpstreamSeriesRow } from "../components/UpstreamSeriesRow.js";
 import { formatScore } from "../lib/format.js";
 
-type GroupMode = "model" | "operation" | "attention";
+// The page's tab row can group the same 110 rows three different ways —
+// a dropdown ("Group by") picks the mode, and the tab SET underneath it
+// changes to match. Every mode partitions all 110 rows; none of them
+// hide a row, they just draw the lines between groups differently.
+//
+//   assetClass — Equity/Debt/Metals fold in their matching L1 tilt AND
+//     (for Equity only) the Sector Satellite cells, so "Equity" means
+//     everything that moves the equity sleeve at a glance.
+//   signalGroup — the same asset folding, minus Sector: it gets its own
+//     tab instead of hiding inside Equity. This is the finer-grained
+//     view for someone who specifically wants to review sector cells as
+//     their own set.
+//   status — ignores asset class entirely and groups by trust/freshness
+//     state instead (is this real, is it fresh, does it need a person).
+// Governance and Veto are their own tab in both asset-based modes (they
+// are not an asset class), and simply land wherever their status puts
+// them in status mode (typically "Live").
+type GroupMode = "assetClass" | "signalGroup" | "status";
 
 const GROUP_MODE_OPTIONS: ReadonlyArray<{ id: GroupMode; label: string }> = [
-  { id: "model", label: "By model" },
-  { id: "operation", label: "By operation" },
-  { id: "attention", label: "By attention" },
+  { id: "assetClass", label: "Asset class" },
+  { id: "signalGroup", label: "Signal group" },
+  { id: "status", label: "Status" },
 ];
+
+function groupModeFromSearch(value: string | null): GroupMode {
+  return value === "signalGroup" || value === "status" ? value : "assetClass";
+}
+
+type TabId =
+  | "equity" | "debt" | "metals" | "governance" | "vetoes" // assetClass
+  | "equitySegments" | "debtBuckets" | "sector" // signalGroup-only ids (metals/governance/vetoes reused above)
+  | "live" | "stale" | "mock" | "opt_in" | "constant"; // status
+
+const TAB_OPTIONS_BY_MODE: Record<GroupMode, ReadonlyArray<{ id: TabId; label: string }>> = {
+  assetClass: [
+    { id: "equity", label: "Equity" },
+    { id: "debt", label: "Debt" },
+    { id: "metals", label: "Precious Metals" },
+    { id: "governance", label: "Governance" },
+    { id: "vetoes", label: "Veto" },
+  ],
+  signalGroup: [
+    { id: "equitySegments", label: "Equity Segments" },
+    { id: "debtBuckets", label: "Debt Buckets" },
+    { id: "metals", label: "Precious Metals" },
+    { id: "sector", label: "Sector Satellite" },
+    { id: "governance", label: "Governance" },
+    { id: "vetoes", label: "Veto" },
+  ],
+  status: [
+    { id: "live", label: "Live" },
+    { id: "stale", label: "Stale" },
+    { id: "mock", label: "Mock" },
+    { id: "opt_in", label: "Analyst input" },
+    { id: "constant", label: "Constants" },
+  ],
+};
+
+function tabOf(row: DataPointRow, mode: GroupMode): TabId {
+  if (mode === "status") {
+    // A row can be both stale and mock at once; mock is the louder,
+    // more actionable fact (a placeholder outranks "also overdue"), so
+    // it's checked first. Analyst-input and Constants are update-type
+    // facts that don't compete with freshness the same way, so they're
+    // checked ahead of plain "live" but behind "mock".
+    if (row.mock) return "mock";
+    if (row.updateType === "opt_in") return "opt_in";
+    if (row.updateType === "constant") return "constant";
+    if (row.freshness === "stale") return "stale";
+    return "live";
+  }
+  if (row.modelGroup === "governance") return "governance";
+  if (row.modelGroup === "vetoes") return "vetoes";
+  if (mode === "signalGroup" && row.modelGroup === "sector") return "sector";
+  if (row.id.startsWith("l1.equity::") || row.modelGroup === "equity" || (mode === "assetClass" && row.modelGroup === "sector")) {
+    return mode === "signalGroup" ? "equitySegments" : "equity";
+  }
+  if (row.id.startsWith("l1.debt::") || row.modelGroup === "debt") return mode === "signalGroup" ? "debtBuckets" : "debt";
+  return "metals"; // l1.metals::* or modelGroup === "metals"
+}
 
 const REFRESH_SOURCE_LABELS: Record<string, string> = {
   fred: "FRED",
@@ -38,17 +112,11 @@ const FRESHNESS_STYLE: Record<
     chip: "bg-brand-50 text-brand-800",
     blurb: "Refreshed within its expected cadence.",
   },
-  due: {
-    dot: "bg-warn-200",
-    text: "text-warn-600",
-    chip: "bg-warn-50 text-warn-800",
-    blurb: "Past its refresh window — a new observation is expected.",
-  },
   stale: {
     dot: "bg-warn",
     text: "text-warn-600",
     chip: "bg-warn-50 text-warn-800",
-    blurb: "Well past its refresh window; the stored value may no longer hold.",
+    blurb: "Past its refresh window; the stored value may no longer hold.",
   },
   failed: {
     dot: "bg-danger-500",
@@ -159,9 +227,10 @@ function effectiveSourceIds(row: DataPointRow, scoreState: ScoreState | undefine
   return declaredSourceIds(row.id);
 }
 
-function groupKey(row: DataPointRow, mode: GroupMode): string {
-  if (mode === "operation") return row.updateType;
-  if (mode === "attention") return row.freshness;
+// Sub-grouping inside an asset tab: still by modelGroup, so "Equity"
+// shows Equity Segments, Sector Satellite and L1 as separate sections
+// rather than one flat list.
+function groupKey(row: DataPointRow): string {
   return row.modelGroup;
 }
 
@@ -187,16 +256,10 @@ function isScoreCellId(id: string): boolean {
   return id.includes("::") && !id.startsWith("governance.") && !id.startsWith("veto.");
 }
 
-const FRESHNESS_ORDER = ["current", "due", "stale", "failed", "overridden"] as const;
-
-// "mock" is not a freshness state — it is a separate trust axis that cuts
-// across all of them. It gets a tab because it is the first thing anyone
-// auditing this page needs to find, and because mock rows report freshness
-// "missing", which has no tab of its own.
-type FreshnessTab = "all" | (typeof FRESHNESS_ORDER)[number] | "mock" | "constant";
-
-function groupModeFromSearch(value: string | null): GroupMode {
-  return value === "operation" || value === "attention" ? value : "model";
+function tabFromSearch(mode: GroupMode, value: string | null): TabId {
+  const options = TAB_OPTIONS_BY_MODE[mode];
+  const match = options.find((option) => option.id === value);
+  return (match ?? options[0]!).id;
 }
 
 function CalculationBreakdown({
@@ -393,6 +456,7 @@ function DataPointFormulaModal({
 export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const groupMode = groupModeFromSearch(searchParams.get("group"));
+  const activeTab = tabFromSearch(groupMode, searchParams.get("tab"));
   const query = searchParams.get("q") ?? "";
   const selectedId = searchParams.get("point");
   const inspectingId = searchParams.get("inspect");
@@ -437,38 +501,27 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
     }
   }
 
-  const freshnessFilter = searchParams.get("freshness");
+  const tabRows = useMemo(() => rows.filter((row) => tabOf(row, groupMode) === activeTab), [rows, groupMode, activeTab]);
 
   const filteredRows = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return rows
-      // "mock" rides the same URL param as the freshness tabs but is not a
-      // freshness state — it cuts across all of them, so it filters on its
-      // own field rather than matching row.freshness.
-      .filter((row) =>
-        freshnessFilter === "mock"
-          ? row.mock
-          : freshnessFilter === "constant"
-            ? row.updateType === "constant"
-            : !freshnessFilter || row.freshness === freshnessFilter
-      )
-      .filter(
-        (row) =>
-          !needle ||
-          [row.label, row.technicalKey, row.source, row.dependency, row.updateType, row.freshness, row.mock ? "mock" : "live"].some((value) =>
-            value.toLowerCase().includes(needle)
-          )
-      );
-  }, [rows, query, freshnessFilter]);
+    return tabRows.filter(
+      (row) =>
+        !needle ||
+        [row.label, row.technicalKey, row.source, row.dependency, row.updateType, row.freshness, row.mock ? "mock" : "live"].some((value) =>
+          value.toLowerCase().includes(needle)
+        )
+    );
+  }, [tabRows, query]);
 
   const groupedRows = useMemo(() => {
     const groups = new Map<string, DataPointRow[]>();
     for (const row of filteredRows) {
-      const key = groupKey(row, groupMode);
+      const key = groupKey(row);
       groups.set(key, [...(groups.get(key) ?? []), row]);
     }
     return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [filteredRows, groupMode]);
+  }, [filteredRows]);
 
   const selectedRow = rows.find((row) => row.id === selectedId) ?? filteredRows[0] ?? null;
   const selectedScoreState = selectedRow && isScoreCellId(selectedRow.id) ? snapshot.scores[selectedRow.id] : undefined;
@@ -478,6 +531,17 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
   const inspectingScoreState = inspectingRow && isScoreCellId(inspectingRow.id) ? snapshot.scores[inspectingRow.id] : undefined;
 
   const total = summary.total ?? 0;
+
+  // Tab counts for the CURRENT mode, computed off the full row set —
+  // every mode partitions all 110 rows, so these always sum to `total`.
+  const tabCounts = useMemo(() => {
+    const counts = new Map<TabId, number>();
+    for (const row of rows) {
+      const id = tabOf(row, groupMode);
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    return counts;
+  }, [rows, groupMode]);
 
   function setParam(key: string, value: string | null) {
     const next = new URLSearchParams(searchParams);
@@ -521,7 +585,7 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                     <span aria-hidden="true" className="text-line">·</span>
                     <button
                       type="button"
-                      onClick={() => setParam("freshness", "mock")}
+                      onClick={() => setParam("status", "mock")}
                       className="flex items-center gap-1.5 font-semibold text-danger-500 underline-offset-2 hover:underline"
                     >
                       <span aria-hidden="true" className="h-2 w-2 shrink-0 bg-danger-500" />
@@ -581,38 +645,70 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
           </div>
         </div>
 
-        {/* Freshness tabs double as the page's legend: each carries its state
-            colour as a dot, so the same hue in a registry chip needs no
-            second explanation. */}
-        <div className="flex gap-[22px] border-b border-line text-[13px] font-semibold">
-          {(["all", ...FRESHNESS_ORDER, "constant", "mock"] as FreshnessTab[]).map((id) => {
-            const active = (freshnessFilter ?? "all") === id;
-            const count = id === "all" ? total : summary[id] ?? 0;
-            const style = id === "all" || id === "mock" || id === "constant" ? null : FRESHNESS_STYLE[id];
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setParam("freshness", id === "all" ? null : id)}
-                aria-current={active ? "page" : undefined}
-                className={`-mb-px flex items-center gap-1.5 border-b-2 pb-2.5 transition-colors duration-100 ease-in ${
-                  active ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"
-                }`}
-              >
-                {style && <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 ${style.dot}`} />}
-                {id === "mock" && <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 bg-danger-500" />}
-                {id === "constant" && <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 border border-line" />}
-                <span>{id === "all" ? "All" : id === "mock" ? "Mock" : id === "constant" ? "Constants" : groupLabel(id)}</span>
-                <span
-                  className={`tabular-nums ${
-                    active ? "text-ink" : id === "mock" && count > 0 ? "text-danger-500" : style && count > 0 ? style.text : "text-muted"
+        {/* The dropdown picks which of the three ways to slice the same 110
+            rows is active; the tab row underneath always reflects that
+            mode's own tab set and always partitions every row, so nothing
+            is ever hidden — switching modes just redraws the lines. Both
+            sit on ONE line and share a bottom border, so the dropdown
+            reads as part of the tab row's own control strip rather than
+            a second, disconnected block underneath it. */}
+        <div className="flex items-center justify-between gap-4 border-b border-line">
+          <div className="flex gap-[22px] overflow-x-auto text-[13px] font-semibold">
+            {TAB_OPTIONS_BY_MODE[groupMode].map((option) => {
+              const active = activeTab === option.id;
+              const style = option.id === "stale" ? FRESHNESS_STYLE.stale : null;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setParam("tab", option.id === TAB_OPTIONS_BY_MODE[groupMode][0]!.id ? null : option.id)}
+                  aria-current={active ? "page" : undefined}
+                  className={`-mb-px flex shrink-0 items-center gap-1.5 border-b-2 pb-2.5 transition-colors duration-100 ease-in ${
+                    active ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"
                   }`}
                 >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
+                  {style && <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 ${style.dot}`} />}
+                  {option.id === "mock" && <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 bg-danger-500" />}
+                  {option.id === "constant" && <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 border border-line" />}
+                  <span>{option.label}</span>
+                  <span className={`tabular-nums ${active ? "text-ink" : "text-muted"}`}>{tabCounts.get(option.id) ?? 0}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Same 28px pill language as the Source control above, so the
+              two dropdowns on the page read as one family. */}
+          <div className="relative h-7 shrink-0">
+            <div className="pointer-events-none flex h-7 items-center gap-1.5 whitespace-nowrap rounded-sm border border-line px-2.5">
+              <span className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Group by</span>
+              <span className="text-[12px] font-bold text-ink">
+                {GROUP_MODE_OPTIONS.find((option) => option.id === groupMode)!.label}
+              </span>
+              <svg viewBox="0 0 16 16" aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 6l4 4 4-4" />
+              </svg>
+            </div>
+            <select
+              value={groupMode}
+              onChange={(e) => {
+                const next = new URLSearchParams(searchParams);
+                const mode = e.target.value as GroupMode;
+                if (mode === "assetClass") next.delete("group");
+                else next.set("group", mode);
+                next.delete("tab"); // a tab id from the old mode may not exist in the new one
+                setSearchParams(next);
+              }}
+              className="absolute inset-0 h-7 w-full cursor-pointer opacity-0"
+              aria-label="Group registry by"
+            >
+              {GROUP_MODE_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Indeterminate by design: the refresh is one blocking call that
@@ -648,49 +744,23 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
               <h2 className="text-lg font-semibold text-ink">Registry</h2>
               <p className="mt-0.5 text-[13px] text-muted">
                 {filteredRows.length} row{filteredRows.length === 1 ? "" : "s"}
-                {freshnessFilter ? ` · ${groupLabel(freshnessFilter)}` : ""}
+                {" · "}
+                {TAB_OPTIONS_BY_MODE[groupMode].find((option) => option.id === activeTab)!.label}
               </p>
             </div>
-            {/* Search and grouping sit on one control line, both 28px and both
-                in the header's bordered-pill language — the grouping select
-                replaces the tab row that used to span the card. */}
-            <div className="flex items-center gap-2">
-              <label className="relative flex w-full items-center sm:w-56">
-                <span className="sr-only">Search the registry</span>
-                <svg viewBox="0 0 16 16" aria-hidden="true" className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-                  <circle cx="7" cy="7" r="4.5" />
-                  <path d="M10.5 10.5 14 14" />
-                </svg>
-                <input
-                  value={query}
-                  onChange={(e) => setParam("q", e.target.value || null)}
-                  className="h-7 w-full rounded-sm border border-line bg-paper pl-7 pr-2 text-[12px] text-ink placeholder:text-muted focus:border-ink focus:outline-none"
-                  placeholder="Search name, source or key"
-                />
-              </label>
-              <div className="relative h-7 shrink-0">
-                <div className="pointer-events-none flex h-7 items-center gap-1.5 rounded-sm border border-line px-2.5">
-                  <span className="whitespace-nowrap text-[12px] font-bold text-ink">
-                    {GROUP_MODE_OPTIONS.find((option) => option.id === groupMode)!.label}
-                  </span>
-                  <svg viewBox="0 0 16 16" aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M4 6l4 4 4-4" />
-                  </svg>
-                </div>
-                <select
-                  value={groupMode}
-                  onChange={(e) => setParam("group", e.target.value === "model" ? null : e.target.value)}
-                  className="absolute inset-0 h-7 w-full cursor-pointer opacity-0"
-                  aria-label="Group registry by"
-                >
-                  {GROUP_MODE_OPTIONS.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            <label className="relative flex w-full items-center sm:w-56">
+              <span className="sr-only">Search the registry</span>
+              <svg viewBox="0 0 16 16" aria-hidden="true" className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <circle cx="7" cy="7" r="4.5" />
+                <path d="M10.5 10.5 14 14" />
+              </svg>
+              <input
+                value={query}
+                onChange={(e) => setParam("q", e.target.value || null)}
+                className="h-7 w-full rounded-sm border border-line bg-paper pl-7 pr-2 text-[12px] text-ink placeholder:text-muted focus:border-ink focus:outline-none"
+                placeholder="Search name, source or key"
+              />
+            </label>
           </div>
 
           {/* During a refresh the reload is part of that same operation, so
@@ -709,11 +779,11 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                   <div className="sticky top-0 z-10 border-b border-line bg-paper py-2 text-xs font-bold uppercase tracking-eyebrow text-muted">
                     {groupLabel(key)}{" "}
                     <span className="ml-1 font-normal normal-case tracking-normal tabular-nums">
-                      {/* For the analyst-input group the total is not the
+                      {/* Filtered to "Analyst input", the total is not the
                           actionable number — how many are still unanswered
-                          is. A group reading "8" when 5 are already done
+                          is. A count reading "8" when 5 are already done
                           invites re-reviewing work that is finished. */}
-                      {key === "opt_in" && items.some((row) => row.awaitingInput)
+                      {activeTab === "opt_in" && items.some((row) => row.awaitingInput)
                         ? `${items.filter((row) => row.awaitingInput).length} of ${items.length} unanswered`
                         : items.length}
                     </span>

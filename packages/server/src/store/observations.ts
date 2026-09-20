@@ -117,12 +117,16 @@ export function latestObservation(db: Database.Database, seriesId: string): Obse
 // mock baseline's snapshot.series without needing a hardcoded list of
 // which series exist — a new adapter's series shows up automatically.
 // Excludes the per-scheme NAV feed (series ids shaped "amfi_nav:<code>",
-// source AMFI_NAV). Those are scheme-level tracking rows for the
-// tracked_schemes table, not model series — they are deliberately
-// outside SeriesSource's enum and must never reach snapshot.series.
+// source AMFI_NAV) and the backtest benchmark cache (series ids shaped
+// "bt_index:<benchmarkId>", source BACKTEST_INDEX_DAILY — daily-sampled,
+// unlike nifty50_close's deliberate month-end sampling for the scoring
+// pipeline; mixing the two into one series would corrupt the percentile
+// window's calendar-span assumption). Both are scheme/backtest-level
+// rows, not model series — deliberately outside SeriesSource's enum and
+// must never reach snapshot.series.
 export function storedSeriesIds(db: Database.Database): string[] {
   return db
-    .prepare("SELECT DISTINCT series_id FROM observations WHERE source <> 'AMFI_NAV' ORDER BY series_id")
+    .prepare("SELECT DISTINCT series_id FROM observations WHERE source NOT IN ('AMFI_NAV', 'BACKTEST_INDEX_DAILY') ORDER BY series_id")
     .all()
     .map((r) => (r as { series_id: string }).series_id);
 }

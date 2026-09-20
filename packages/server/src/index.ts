@@ -10,6 +10,7 @@ import { registerParamsRoute } from "./routes/params.js";
 import { registerDatapointsRoute } from "./routes/datapoints.js";
 import { registerSchemesRoute } from "./routes/schemes.js";
 import { registerNotesRoute } from "./routes/notes.js";
+import { registerBacktestRoute } from "./routes/backtest.js";
 import { registerLoginRoute } from "./routes/login.js";
 import { loadConfig } from "./config.js";
 import { verifyToken } from "./auth.js";
@@ -78,6 +79,7 @@ async function main() {
   registerDatapointsRoute(app);
   registerSchemesRoute(app);
   registerNotesRoute(app);
+  registerBacktestRoute(app);
 
   await app.listen({ port: PORT, host: "0.0.0.0" });
 }

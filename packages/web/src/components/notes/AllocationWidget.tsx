@@ -22,7 +22,7 @@ export function AllocationWidget({ size }: { size: NoteWidgetSize }) {
   }, [snapshot]);
 
   if (loading || !snapshot || !allocation) {
-    return <div className="h-7 w-full animate-pulse rounded-md bg-paper-2" />;
+    return <div className="h-7 w-full animate-pulse bg-paper-2" />;
   }
 
   const depth = size === "small" ? "overview" : "detail";

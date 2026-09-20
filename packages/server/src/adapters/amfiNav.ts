@@ -60,6 +60,15 @@ export interface NavRow {
   schemeName: string;
   nav: number;
   date: string; // ISO
+  // Plan/Option, only populated by parseNavAllLatest (the history chunk
+  // parser has the same two columns available but nothing currently reads
+  // them there, so they stay unpopulated on that path rather than adding
+  // an unused field everywhere). Needed to tell "Direct Plan / Growth" —
+  // the sane default for a backtest — apart from Regular/IDCW variants of
+  // the same underlying scheme name, which parseNavAllLatest's name-only
+  // extraction previously discarded entirely.
+  plan?: string;
+  option?: string;
 }
 
 const MONTH_ABBR_TO_NUM: Record<string, string> = {
@@ -110,12 +119,12 @@ function splitDataRows(text: string): string[][] {
 export function parseNavAllLatest(text: string): NavRow[] {
   const out: NavRow[] = [];
   for (const fields of splitDataRows(text)) {
-    const [code, , , name, , , navText, dateText] = fields;
+    const [code, , , name, plan, option, navText, dateText] = fields;
     if (!code || code === "Scheme Code" || !name) continue; // header row: field count coincidentally matches on some AMFI exports
     const nav = parseNavNumber(navText!);
     const date = parseAmfiNavDate(dateText!);
     if (nav === null || date === null) continue; // malformed row: dropped, not guessed
-    out.push({ schemeCode: code.trim(), schemeName: name.trim(), nav, date });
+    out.push({ schemeCode: code.trim(), schemeName: name.trim(), nav, date, plan: plan?.trim(), option: option?.trim() });
   }
   return out;
 }
@@ -172,33 +181,57 @@ export async function fetchTrackedNavLatest(trackedCodes: ReadonlySet<string>): 
   return navRowsToObservations(rows);
 }
 
+// Each chunk is the FULL ~14k-scheme universe for that window (AMFI has no
+// server-side scheme filter — see file header), so it's a real download,
+// not a quick request: confirmed live 2026-09-20, a single 30-day chunk is
+// ~20MB and takes ~17-21s. Chunks are independent requests to the same
+// static-file host, and unlike niftyindices.com (see benchmarkIndex.ts's
+// comment on the Akamai block hit there), AMFI's endpoint tolerated 4
+// concurrent 20MB chunk requests fine in the same live test — so chunks
+// run with bounded concurrency rather than one at a time, which is the
+// difference between a multi-year backfill taking ~15 minutes
+// (sequential) and ~1-2 minutes (parallel). Kept modest, not maximised,
+// since this function also backs the recurring refresh pipeline's
+// fetchHistory — a well-behaved concurrency here benefits both callers.
+const CHUNK_CONCURRENCY = 4;
+
 // Fetches history in fixed-size chunks (see HISTORY_CHUNK_DAYS above),
-// filtering each chunk down to tracked codes before moving to the next —
-// same "a single bad chunk is a gap, not an abort" resilience pattern
-// amfi.ts's month-by-month category-report backfill and niftyindices.ts's
-// day-by-day backfill both use.
+// filtering each chunk down to tracked codes — same "a single bad chunk
+// is a gap, not an abort" resilience pattern amfi.ts's month-by-month
+// category-report backfill and niftyindices.ts's day-by-day backfill
+// both use.
 export async function fetchTrackedNavHistory(trackedCodes: ReadonlySet<string>, from: Date, to: Date): Promise<Observation[]> {
-  const out: Observation[] = [];
+  const chunks: Array<{ from: Date; to: Date }> = [];
   const cursor = new Date(from);
   while (cursor <= to) {
     const chunkEnd = new Date(cursor);
     chunkEnd.setDate(chunkEnd.getDate() + HISTORY_CHUNK_DAYS - 1);
     const effectiveEnd = chunkEnd > to ? to : chunkEnd;
-
-    try {
-      const params = new URLSearchParams({ frmdt: toAmfiDate(cursor), todt: toAmfiDate(effectiveEnd) });
-      const text = await fetchText(`${NAV_HISTORY_URL}?${params.toString()}`);
-      const rows = parseNavHistoryChunk(text).filter((r) => trackedCodes.has(r.schemeCode));
-      out.push(...navRowsToObservations(rows));
-    } catch {
-      // A single failed chunk is a gap in the backfill, not a reason to
-      // abort the whole range (§9 — a failed fetch is a warning, never an
-      // exception, applied here at the per-chunk granularity this
-      // backfill actually operates at).
-    }
-
+    chunks.push({ from: new Date(cursor), to: effectiveEnd });
     cursor.setDate(cursor.getDate() + HISTORY_CHUNK_DAYS);
   }
+
+  const out: Observation[] = [];
+  let nextIndex = 0;
+  async function worker(): Promise<void> {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= chunks.length) return;
+      const chunk = chunks[i]!;
+      try {
+        const params = new URLSearchParams({ frmdt: toAmfiDate(chunk.from), todt: toAmfiDate(chunk.to) });
+        const text = await fetchText(`${NAV_HISTORY_URL}?${params.toString()}`);
+        const rows = parseNavHistoryChunk(text).filter((r) => trackedCodes.has(r.schemeCode));
+        out.push(...navRowsToObservations(rows));
+      } catch {
+        // A single failed chunk is a gap in the backfill, not a reason to
+        // abort the whole range (§9 — a failed fetch is a warning, never
+        // an exception, applied here at the per-chunk granularity this
+        // backfill actually operates at).
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CHUNK_CONCURRENCY, chunks.length) }, () => worker()));
   return out;
 }
 

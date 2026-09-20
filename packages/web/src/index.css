@@ -149,3 +149,99 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+/* ── Notes editor (BlockNote) ─────────────────────────────────────────────
+   BlockNote ships its own theme (Inter, its own radii/spacing, a blue
+   selection/hover accent) via @blocknote/mantine/style.css. This app never
+   lets a third-party surface look like a different product, so every knob
+   BlockNote exposes as a CSS variable is retargeted at this app's own
+   tokens instead of overriding individual rules piecemeal. */
+.wf-blocknote {
+  --bn-font-family: "Plus Jakarta Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --bn-colors-editor-text: #0a0a0a;
+  --bn-colors-editor-background: transparent;
+  --bn-colors-menu-text: #0a0a0a;
+  --bn-colors-menu-background: #ffffff;
+  --bn-colors-tooltip-text: #0a0a0a;
+  --bn-colors-tooltip-background: #f7f7f7;
+  --bn-colors-hovered-text: #0a0a0a;
+  --bn-colors-hovered-background: #f7f7f7;
+  --bn-colors-selected-text: #ffffff;
+  --bn-colors-selected-background: #3ecf5f;
+  --bn-colors-disabled-text: #767676;
+  --bn-colors-disabled-background: #ececee;
+  --bn-colors-shadow: rgba(10, 10, 10, 0.12);
+  --bn-colors-border: #e3e3e3;
+  --bn-colors-side-menu: #767676;
+  --bn-border-radius: 4px;
+  font-size: 16px;
+  line-height: 1.7;
+}
+.wf-blocknote .bn-editor {
+  padding: 0;
+  font-family: var(--bn-font-family);
+}
+.wf-blocknote .bn-inline-content {
+  font-family: var(--bn-font-family);
+}
+/* BlockNote's own heading CSS only scales font-size, not weight — a heading
+   block otherwise renders at the same weight as body text. This app's
+   headings are always bold (see index.css's own h1 rule, NoteEditorView's
+   title input), so a note's in-body headings match. */
+.wf-blocknote [data-content-type="heading"] {
+  font-family: "Inter Tight", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* A checklist item's native <input type="checkbox"> renders with whatever
+   round, OS-themed control the browser ships — nothing like the rest of
+   this app's square, 4px-radius controls (see the tailwind config's global
+   borderRadius override). Squared off and recolored to the brand green on
+   check, matching every other checkbox-shaped control in the product. */
+.wf-blocknote .bn-block-content[data-content-type="checkListItem"] > div > input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0 8px 0 2px;
+  border: 1.5px solid #e3e3e3;
+  border-radius: 4px;
+  background: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background-color 100ms ease-in, border-color 100ms ease-in;
+}
+.wf-blocknote .bn-block-content[data-content-type="checkListItem"] > div > input:hover {
+  border-color: #0a0a0a;
+}
+.wf-blocknote .bn-block-content[data-content-type="checkListItem"] > div > input:checked {
+  background: #3ecf5f;
+  border-color: #3ecf5f;
+}
+.wf-blocknote .bn-block-content[data-content-type="checkListItem"] > div > input:checked::after {
+  content: "";
+  width: 4px;
+  height: 8px;
+  border: solid #ffffff;
+  border-width: 0 1.6px 1.6px 0;
+  transform: rotate(45deg) translate(-1px, -1px);
+}
+.wf-blocknote .bn-block-content[data-content-type="checkListItem"][data-checked="true"] .bn-inline-content {
+  color: #767676;
+}
+
+/* The "/" suggestion menu (mentions grouped with the widget-insert items)
+   can list 30+ data points unfiltered. floating-ui sizes the popup's own
+   wrapper to the remaining viewport space via an inline style (so it can
+   exceed 800px on a tall screen) — !important is the only way to cap that
+   inline max-height from a stylesheet rule. */
+.bn-suggestion-menu {
+  max-height: 320px !important;
+  overflow-y: auto;
+  border: 1px solid #e3e3e3;
+  box-shadow: 0 8px 24px rgba(10, 10, 10, 0.12);
+}

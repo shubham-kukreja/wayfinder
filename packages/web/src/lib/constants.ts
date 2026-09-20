@@ -3,7 +3,10 @@
 // them. Grouping by that means each heading is one sentence — what you act
 // on, what you tune, how tuning becomes acting — rather than a bag labelled
 // "Workspace" holding the answer, the docs and the publish gate at once.
-export const ALLOCATION_ROUTES: Array<{ path: string; label: string }> = [{ path: "/overview", label: "Overview" }];
+export const ALLOCATION_ROUTES: Array<{ path: string; label: string }> = [
+  { path: "/overview", label: "Overview" },
+  { path: "/backtest", label: "Backtest" },
+];
 
 export const MODEL_ROUTES: Array<{ path: string; label: string }> = [
   { path: "/model/signals", label: "Signals" },
@@ -25,11 +28,12 @@ export const GOVERNANCE_ROUTES: Array<{ path: string; label: string }> = [
   { path: "/reviews/cadence", label: "Cadence" },
 ];
 
-// Notes is its own group rather than filed under one of the three above: a
-// note can reference a data point, a sleeve, a signal and a past version all
-// in the same sentence, so it doesn't belong to any single state of the
-// model the way Allocation/Model/Governance each do.
-export const NOTES_ROUTES: Array<{ path: string; label: string }> = [{ path: "/notes", label: "Notes" }];
+// A single flat link, not a collapsible group: there is only one Notes
+// surface today (the list, which opens into a note), so a group header
+// whose only child repeats its own label ("Notes ▾ / Notes") would just be
+// a wrapper around itself. Revisit if a second Notes-area page (e.g. a
+// per-entity notes view) is ever added.
+export const NOTES_ROUTE: { path: string; label: string } = { path: "/notes", label: "Notes" };
 
 // Reference material, deliberately outside the groups: Methodology is the
 // one page that never changes with the data, so it is not a state of the

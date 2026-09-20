@@ -2,7 +2,7 @@ import { API_BASE_URL } from "./constants.js";
 import { apiFetch, apiFetchJson } from "./apiFetch.js";
 
 export type NoteEntityType = "datapoint" | "sleeve" | "signal" | "rubric" | "snapshot";
-export type NoteWidgetSize = "small" | "medium" | "full";
+export type NoteWidgetSize = "small" | "medium" | "large" | "full";
 
 export interface NoteReference {
   entityType: NoteEntityType;
@@ -10,10 +10,13 @@ export interface NoteReference {
   position: number;
 }
 
+// A widget has no row of its own — it's a "widget" block in the note's
+// BlockNote document, same as a mention is an inline node within a text
+// block. This type describes one pulled out of the body (see
+// lib/noteRefs.ts), not a server record.
 export interface NoteWidget {
   id: string;
   widgetType: string;
-  config: unknown;
   size: NoteWidgetSize;
   position: number;
 }
@@ -26,7 +29,6 @@ export interface Note {
   createdAt: string;
   updatedAt: string;
   refs: NoteReference[];
-  widgets: NoteWidget[];
 }
 
 export interface NoteListItem {
@@ -63,8 +65,8 @@ export async function getNote(id: string): Promise<Note> {
 export interface NoteInput {
   title?: string | null;
   body: string;
+  author?: string | null;
   refs?: NoteReference[];
-  widgets?: Array<Omit<NoteWidget, "id"> & { id?: string }>;
 }
 
 export async function createNote(input: NoteInput): Promise<Note> {

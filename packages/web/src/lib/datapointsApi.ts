@@ -1,7 +1,7 @@
 import { API_BASE_URL } from "./constants.js";
 import { apiFetch } from "./apiFetch.js";
 
-export type DataPointFreshness = "current" | "due" | "stale" | "failed" | "missing" | "overridden";
+export type DataPointFreshness = "current" | "stale" | "failed" | "missing" | "overridden";
 export type DataPointUpdateType = "automatic" | "opt_in" | "manual" | "derived" | "governance" | "veto" | "raw_series" | "constant";
 
 export interface DataPointRow {

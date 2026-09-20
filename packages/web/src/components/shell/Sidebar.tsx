@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { ALLOCATION_ROUTES, GOVERNANCE_ROUTES, MODEL_ROUTES, NOTES_ROUTES, REFERENCE_ROUTES } from "../../lib/constants.js";
+import { ALLOCATION_ROUTES, GOVERNANCE_ROUTES, MODEL_ROUTES, NOTES_ROUTE, REFERENCE_ROUTES } from "../../lib/constants.js";
 
 // Persistent left rail: wordmark up top, collapsible route groups beneath,
 // and a collapse affordance that narrows the rail to icons-off/labels-off.
@@ -14,7 +14,6 @@ const GROUPS: Array<{ id: string; label: string; routes: readonly { path: string
   { id: "allocation", label: "Allocation", routes: ALLOCATION_ROUTES },
   { id: "model", label: "Model", routes: MODEL_ROUTES },
   { id: "governance", label: "Governance", routes: GOVERNANCE_ROUTES },
-  { id: "notes", label: "Notes", routes: NOTES_ROUTES },
 ];
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -35,7 +34,7 @@ function ChevronIcon({ open }: { open: boolean }) {
 }
 
 export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ allocation: true, model: true, governance: true, notes: true });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ allocation: true, model: true, governance: true });
 
   // One element across both states rather than two separate returns: React
   // then updates this node's width instead of swapping nodes, which is what
@@ -102,6 +101,20 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
               </div>
             );
           })}
+
+          {/* Flat link, not a group: there is only one Notes surface today,
+              so a chevron that opens to reveal a single child labelled
+              "Notes" again would just be a wrapper around itself. */}
+          <NavLink
+            to={NOTES_ROUTE.path}
+            className={({ isActive }) =>
+              `mb-1 flex w-full items-center rounded-sm px-2 py-2 text-[13px] font-semibold transition-colors duration-100 ease-in ${
+                isActive ? "bg-paper-2 text-ink" : "text-ink hover:bg-paper-2"
+              }`
+            }
+          >
+            {NOTES_ROUTE.label}
+          </NavLink>
 
           {/* Reference sits under a rule with no group heading of its own:
               it is not a state of the model, so giving it a peer heading

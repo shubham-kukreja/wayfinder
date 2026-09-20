@@ -1,17 +1,48 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { BlockNoteView } from "@blocknote/mantine";
+import { useCreateBlockNote, SuggestionMenuController, type DefaultReactSuggestionItem } from "@blocknote/react";
+import "@blocknote/core/fonts/inter.css";
+import "@blocknote/mantine/style.css";
 import type { Snapshot } from "@wayfinder/engine";
-import { MentionMenu } from "./MentionMenu.js";
-import { MentionChip } from "./MentionChip.js";
+import { noteSchema, mentionInlineContent, type NoteBlock } from "./blocknoteSchema.js";
 import { buildSnapshotCandidates, fetchSnapshotVersionCandidates, filterCandidates, type MentionCandidate } from "../../lib/mentionIndex.js";
-import { mentionToken, parseBody } from "../../lib/mentionTokens.js";
+import { legacyBodyToBlocks } from "../../lib/legacyNoteMigration.js";
+import { WIDGET_TITLES } from "./NoteWidgetBlock.js";
 
-// contentEditable is driven from React on every keystroke elsewhere in this
-// app's stack (there's no rich-text surface yet to follow), so this editor
-// treats the DOM as the source of truth while typing and only syncs back
-// into React's `body` string on blur / before save / when a mention is
-// inserted — re-rendering on every keystroke would fight the browser for
-// caret position the same way a controlled <input> would if you replaced
-// its value on every change.
+// BlockNote is the editor now (see MEMORY / commit history for why:
+// dragging a widget or a paragraph anywhere in the note, and undo/redo,
+// both come from BlockNote's own block model and ProseMirror history
+// instead of the hand-rolled contentEditable + DOM-surgery approach this
+// replaced). A note's `body` is stored as this editor's JSON block array,
+// serialized to a string for the same `body: string` column the server has
+// always had — the server treats it as opaque either way (see
+// routes/notes.ts). A note saved by the *old* editor has a body that's
+// still the legacy `{{token}}` string; isBlockNoteBody below tells the two
+// apart, and legacyBodyToBlocks does the one-time conversion on read. The
+// note re-saves in the new format on its very next autosave.
+function isBlockNoteBody(body: string): boolean {
+  const trimmed = body.trim();
+  return trimmed.startsWith("[") || trimmed.length === 0;
+}
+
+export function serializeNoteBody(blocks: NoteBlock[]): string {
+  return JSON.stringify(blocks);
+}
+
+function parseNoteBody(body: string, candidateById: Map<string, MentionCandidate>): unknown[] {
+  if (!body.trim()) return [{ type: "paragraph", content: [] }];
+  if (isBlockNoteBody(body)) {
+    try {
+      const parsed = JSON.parse(body);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch {
+      // Falls through to legacy parsing — a body that merely starts with
+      // "[" by coincidence (it doesn't, in practice) would land here too.
+    }
+  }
+  return legacyBodyToBlocks(body, candidateById);
+}
+
 export function NoteEditor({
   body,
   onChange,
@@ -25,16 +56,11 @@ export function NoteEditor({
   placeholder: string;
   autoFocus?: boolean;
 }) {
-  const editorRef = useRef<HTMLDivElement>(null);
-  const [menu, setMenu] = useState<{ query: string; range: Range; top: number; left: number } | null>(null);
-  const [versionCandidates, setVersionCandidates] = useState<MentionCandidate[]>([]);
-  // Starts out-of-sync with the incoming `body` (rather than initialized to
-  // it) so the sync effect below always does its first DOM render on mount —
-  // a contentEditable div starts genuinely empty regardless of what `body`
-  // already holds when this component appears.
-  const lastSyncedBody = useRef<string | null>(null);
-
   const localCandidates = useMemo(() => (snapshot ? buildSnapshotCandidates(snapshot) : []), [snapshot]);
+  const [versionCandidates, setVersionCandidates] = useState<MentionCandidate[]>([]);
+  useEffect(() => {
+    fetchSnapshotVersionCandidates().then(setVersionCandidates).catch(() => {});
+  }, []);
   const candidates = useMemo(() => [...localCandidates, ...versionCandidates], [localCandidates, versionCandidates]);
   const candidateById = useMemo(() => {
     const map = new Map<string, MentionCandidate>();
@@ -42,190 +68,126 @@ export function NoteEditor({
     return map;
   }, [candidates]);
 
+  // The initial document is built once per note (id change, effectively —
+  // NoteEditor is remounted by NoteEditorView's `key={id}` — see
+  // NoteEditorView.tsx) so typing never fights a re-parse of `body`. A
+  // live mention chip's label/value catches up via the repaint effect
+  // below instead of a full document replace.
+  const initialContent = useMemo(() => parseNoteBody(body, candidateById), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const editor = useCreateBlockNote({
+    schema: noteSchema,
+    initialContent: initialContent as never,
+    placeholders: { emptyDocument: placeholder, default: "" },
+  });
+
+  const lastSerialized = useRef(serializeNoteBody(editor.document as NoteBlock[]));
+
+  // A legacy note's `body` prop is still the old {{token}} string until the
+  // first edit — NoteEditorView's reference rail and refs-on-save both read
+  // that raw prop, so without this they'd see no refs at all for a note
+  // that's only ever been opened, never edited. Reporting the migrated
+  // body once on mount closes that gap and doubles as the note's upgrade
+  // to the new format the moment it's viewed.
   useEffect(() => {
-    fetchSnapshotVersionCandidates().then(setVersionCandidates).catch(() => {});
+    if (!isBlockNoteBody(body)) onChange(lastSerialized.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Renders `body` into DOM nodes once (mount) and whenever it changes from
-  // *outside* this component (loading a different note) — never on every
-  // keystroke, which is tracked via lastSyncedBody instead.
   useEffect(() => {
-    if (!editorRef.current || body === lastSyncedBody.current) return;
-    editorRef.current.innerHTML = "";
-    renderSegments(editorRef.current, body, candidateById);
-    lastSyncedBody.current = body;
-  }, [body, candidateById]);
+    if (autoFocus) editor.focus();
+  }, [autoFocus, editor]);
 
-  // Candidates arrive after mount (the snapshot fetch, the versions fetch),
-  // often after the body has already rendered its chips without a resolved
-  // value. This repaints existing chips in place — swapping label/value/color
-  // — without touching surrounding text nodes or the caret, so a chip picks
-  // up its live value as soon as data shows up instead of only on next edit.
+  // Repaints existing mention chips in place when their live value/label
+  // arrives after mount (the snapshot fetch, the versions fetch) — mirrors
+  // the previous editor's behavior instead of forcing the whole document
+  // to re-render.
   useEffect(() => {
-    if (!editorRef.current || candidateById.size === 0) return;
-    const chips = editorRef.current.querySelectorAll<HTMLElement>("[data-mention-type][data-mention-id]");
-    chips.forEach((node) => {
-      const key = `${node.dataset.mentionType}:${node.dataset.mentionId}`;
-      const candidate = candidateById.get(key);
-      if (candidate) node.replaceWith(buildChipNode(candidate));
-    });
+    if (candidateById.size === 0) return;
+    for (const block of editor.document) {
+      if (!Array.isArray(block.content)) continue;
+      let dirty = false;
+      const nextContent = block.content.map((inline) => {
+        if (inline.type !== "mention") return inline;
+        const props = inline.props as { entityType: string; entityId: string; label: string; value: string; color: string };
+        const candidate = candidateById.get(`${props.entityType}:${props.entityId}`);
+        if (!candidate) return inline;
+        if (candidate.label === props.label && (candidate.value ?? "") === props.value && candidate.color === props.color) return inline;
+        dirty = true;
+        return { ...inline, props: { ...props, label: candidate.label, value: candidate.value ?? "", color: candidate.color } };
+      });
+      if (dirty) editor.updateBlock(block, { content: nextContent as never });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candidateById]);
 
-  useEffect(() => {
-    if (autoFocus) editorRef.current?.focus();
-  }, [autoFocus]);
-
-  const syncBody = useCallback(() => {
-    if (!editorRef.current) return;
-    const next = serializeEditor(editorRef.current);
-    lastSyncedBody.current = next;
+  function handleChange() {
+    const next = serializeNoteBody(editor.document as NoteBlock[]);
+    if (next === lastSerialized.current) return;
+    lastSerialized.current = next;
     onChange(next);
-  }, [onChange]);
-
-  function closeMenu() {
-    setMenu(null);
   }
 
-  function handleInput() {
-    detectSlashTrigger();
-    syncBody();
-  }
+  const mentionItems = useMemo(
+    () =>
+      (query: string): DefaultReactSuggestionItem[] =>
+        filterCandidates(candidates, query).map((c) => ({
+          title: c.label,
+          subtext: c.meta,
+          group: TYPE_GROUP_LABEL[c.entityType],
+          onItemClick: () => editor.insertInlineContent([mentionInlineContent(c), " "]),
+        })),
+    [candidates, editor],
+  );
 
-  function detectSlashTrigger() {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0 || !editorRef.current) return closeMenu();
-    const range = selection.getRangeAt(0);
-    if (!editorRef.current.contains(range.startContainer)) return closeMenu();
-
-    const node = range.startContainer;
-    const text = node.textContent?.slice(0, range.startOffset) ?? "";
-    // Sleeve/version labels are multi-word ("Small Cap", "Q2 2026 review"),
-    // so the query can contain single spaces — but two in a row means the
-    // sentence moved on, and a "/" preceded by a letter (a URL, "and/or")
-    // is never the start of a mention.
-    const match = /(?:^|\s)\/([\w.:-]+(?: [\w.:-]+)*)?$/.exec(text);
-    if (!match) return closeMenu();
-
-    const rect = range.getBoundingClientRect();
-    const editorRect = editorRef.current.getBoundingClientRect();
-    // Anchors to the caret, but positioned relative to the editor container
-    // (not the viewport) so the menu stays put if the page scrolls under it.
-    setMenu({
-      query: match[1] ?? "",
-      range: range.cloneRange(),
-      top: rect.bottom - editorRect.top + 4,
-      left: Math.min(rect.left - editorRect.left, editorRect.width - 340),
-    });
-  }
-
-  function handlePick(candidate: MentionCandidate) {
-    if (!menu || !editorRef.current) return;
-    const { range } = menu;
-    const node = range.startContainer;
-    const text = node.textContent ?? "";
-    const beforeSlash = text.slice(0, range.startOffset).replace(/\/[\w.:-]+(?: [\w.:-]+)*$/, "");
-    const afterCaret = text.slice(range.startOffset);
-
-    const chip = buildChipNode(candidate);
-    const trailingSpace = document.createTextNode(" ");
-
-    if (node.nodeType === Node.TEXT_NODE && node.parentNode) {
-      const beforeNode = document.createTextNode(beforeSlash);
-      const afterNode = document.createTextNode(afterCaret);
-      node.parentNode.replaceChild(afterNode, node);
-      afterNode.parentNode!.insertBefore(trailingSpace, afterNode);
-      afterNode.parentNode!.insertBefore(chip, trailingSpace);
-      afterNode.parentNode!.insertBefore(beforeNode, chip);
-
-      const newRange = document.createRange();
-      newRange.setStart(trailingSpace, 1);
-      newRange.collapse(true);
-      const sel = window.getSelection();
-      sel?.removeAllRanges();
-      sel?.addRange(newRange);
-    }
-
-    closeMenu();
-    editorRef.current.focus();
-    syncBody();
-  }
-
-  const filtered = menu ? filterCandidates(candidates, menu.query) : [];
+  const widgetItems: DefaultReactSuggestionItem[] = useMemo(
+    () =>
+      WIDGET_MENU_ITEMS.map((w) => ({
+        title: WIDGET_TITLES[w.type] ?? w.type,
+        subtext: w.description,
+        group: "Widgets",
+        onItemClick: () => {
+          const widgetId = crypto.randomUUID();
+          const currentBlock = editor.getTextCursorPosition().block;
+          editor.insertBlocks(
+            [{ type: "widget", props: { widgetType: w.type, size: "medium", widgetId } } as never],
+            currentBlock,
+            currentBlock.content && Array.isArray(currentBlock.content) && currentBlock.content.length > 0 ? "after" : "before",
+          );
+        },
+      })),
+    [editor],
+  );
 
   return (
-    <div className="relative">
-      <div
-        ref={editorRef}
-        contentEditable
-        suppressContentEditableWarning
-        onInput={handleInput}
-        onBlur={syncBody}
-        onKeyDown={(e) => {
-          if (menu && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === "Tab" || e.key === "Escape")) {
-            e.preventDefault();
-          }
-        }}
-        data-placeholder={placeholder}
-        className="note-editor min-h-[60vh] w-full text-[16px] leading-[1.7] text-ink outline-none [&:empty]:before:text-muted [&:empty]:before:content-[attr(data-placeholder)]"
-      />
-      {menu && <MentionMenu query={menu.query} candidates={filtered} style={{ top: menu.top, left: menu.left }} onPick={handlePick} onClose={closeMenu} />}
+    <div className="note-editor-shell">
+      <BlockNoteView editor={editor} onChange={handleChange} theme="light" slashMenu={false} className="wf-blocknote">
+        <SuggestionMenuController
+          triggerCharacter="/"
+          getItems={async (query) => [...mentionItems(query), ...filterMenuItems(widgetItems, query)]}
+        />
+      </BlockNoteView>
     </div>
   );
 }
 
-function buildChipNode(candidate: MentionCandidate): HTMLElement {
-  const span = document.createElement("span");
-  span.setAttribute("data-mention-type", candidate.entityType);
-  span.setAttribute("data-mention-id", candidate.entityId);
-  span.contentEditable = "false";
-  span.className = "mx-0.5 inline-flex select-none items-center gap-1.5 rounded-md border px-1.5 py-0.5 align-baseline text-[13px] font-semibold";
-  span.style.background = `${candidate.color}1a`;
-  span.style.borderColor = `${candidate.color}4d`;
-  span.style.color = candidate.color;
+const TYPE_GROUP_LABEL: Record<MentionCandidate["entityType"], string> = {
+  datapoint: "Data points",
+  sleeve: "Sleeves",
+  signal: "Asset classes",
+  rubric: "Rubrics",
+  snapshot: "Versions",
+};
 
-  const dot = document.createElement("span");
-  dot.className = "h-1.5 w-1.5 shrink-0 rounded-full";
-  dot.style.background = candidate.color;
-  span.appendChild(dot);
-  span.appendChild(document.createTextNode(candidate.label));
-  if (candidate.value) {
-    const val = document.createElement("span");
-    val.className = "font-mono text-[12px] opacity-80";
-    val.textContent = candidate.value;
-    span.appendChild(document.createTextNode(" "));
-    span.appendChild(val);
-  }
-  return span;
+const WIDGET_MENU_ITEMS: Array<{ type: string; description: string }> = [
+  { type: "allocation", description: "Asset classes and sleeves, live" },
+  { type: "heatmap", description: "Signal x asset-class grid, live" },
+  { type: "table", description: "Sleeve weights as a plain table, live" },
+  { type: "status", description: "Freshness, vetoes, qualifying sectors — one line" },
+];
+
+function filterMenuItems(items: DefaultReactSuggestionItem[], query: string): DefaultReactSuggestionItem[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return items;
+  return items.filter((i) => i.title.toLowerCase().includes(q) || i.subtext?.toLowerCase().includes(q));
 }
-
-function renderSegments(container: HTMLElement, body: string, candidateById: Map<string, MentionCandidate>): void {
-  const segments = parseBody(body);
-  for (const seg of segments) {
-    if (seg.type === "text") {
-      container.appendChild(document.createTextNode(seg.text ?? ""));
-    } else if (seg.entityType && seg.entityId) {
-      const candidate = candidateById.get(`${seg.entityType}:${seg.entityId}`);
-      container.appendChild(buildChipNode(candidate ?? { entityType: seg.entityType, entityId: seg.entityId, label: seg.entityId, meta: "", value: null, color: "#8A8A90" }));
-    }
-  }
-}
-
-// Walks the live DOM back into the {{type:id}} token string — the inverse
-// of renderSegments — so what gets saved and searched is always plain text.
-function serializeEditor(container: HTMLElement): string {
-  let out = "";
-  for (const node of Array.from(container.childNodes)) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      out += node.textContent ?? "";
-    } else if (node instanceof HTMLElement && node.dataset.mentionType && node.dataset.mentionId) {
-      out += mentionToken(node.dataset.mentionType as never, node.dataset.mentionId);
-    } else if (node instanceof HTMLElement && node.tagName === "BR") {
-      out += "\n";
-    } else if (node instanceof HTMLElement) {
-      out += node.textContent ?? "";
-    }
-  }
-  return out;
-}
-
-export { MentionChip };
