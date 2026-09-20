@@ -12,8 +12,11 @@ import { createYahooAdapter } from "../adapters/yahoo.js";
 import { createYahooMetalsAdapter } from "../adapters/yahooMetals.js";
 import { createTradingEconomicsAdapter } from "../adapters/tradingEconomics.js";
 import { createDbNomicsAdapter } from "../adapters/dbnomics.js";
+import { createBisPolicyRateAdapter } from "../adapters/bisPolicyRate.js";
+import { createMultplAdapter } from "../adapters/multpl.js";
 import { createAaa3yAdapter } from "../adapters/aaa3y.js";
 import { createAmfiNavAdapter } from "../adapters/amfiNav.js";
+import { createGoldEtfHoldingsAdapter } from "../adapters/goldEtfHoldings.js";
 import { runRefresh } from "../pipeline/refresh.js";
 import { buildCurrentSnapshot } from "../pipeline/currentSnapshot.js";
 import { loadConfig } from "../config.js";
@@ -54,8 +57,11 @@ export const AVAILABLE_SOURCES = [
   "yahoo_metals",
   "tradingeconomics",
   "dbnomics",
+  "bis",
+  "multpl",
   "aaa3y",
   "amfi_nav",
+  "gold_etf_holdings",
 ] as const;
 export type SourceName = (typeof AVAILABLE_SOURCES)[number];
 
@@ -86,7 +92,10 @@ export function buildAdapters(names: SourceName[], config: ReturnType<typeof loa
   if (names.includes("yahoo_metals")) out.push(createYahooMetalsAdapter());
   if (names.includes("tradingeconomics")) out.push(createTradingEconomicsAdapter());
   if (names.includes("dbnomics")) out.push(createDbNomicsAdapter());
+  if (names.includes("bis")) out.push(createBisPolicyRateAdapter());
+  if (names.includes("multpl")) out.push(createMultplAdapter());
   if (names.includes("aaa3y")) out.push(createAaa3yAdapter());
+  if (names.includes("gold_etf_holdings")) out.push(createGoldEtfHoldingsAdapter());
   if (names.includes("amfi_nav")) {
     const trackedCodes = listTrackedSchemes(db, { activeOnly: true }).map((s) => s.schemeCode);
     out.push(createAmfiNavAdapter(trackedCodes));

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ScoreState, SeriesState, Snapshot } from "@wayfinder/engine";
-import { SCORE_MAP } from "@wayfinder/engine";
+import { SCORE_MAP, scoreMapEntry, seriesRole } from "@wayfinder/engine";
 import { listDataPoints, refreshDataPoints, type DataPointFreshness, type DataPointRow } from "../lib/datapointsApi.js";
 import { DistributionStrip } from "../components/DistributionStrip.js";
+import { ScoreFormulaTrace, hasScoreFormulaTrace } from "../components/ScoreFormulaTraces.js";
+import { UpstreamSeriesRow } from "../components/UpstreamSeriesRow.js";
 import { formatScore } from "../lib/format.js";
 
 type GroupMode = "model" | "operation" | "attention";
@@ -97,6 +99,21 @@ function statusLabel(status: string): string {
   return status.replace(/_/g, " ");
 }
 
+// A percentile strip answers "where does this reading sit in its own
+// history" — which is only part of the ANSWER when the score is actually
+// computed that way. "percentile"/"inverted"/"average" rank against
+// history; "rubric"/"static"/"none" do not. A rubric cell reads the
+// latest one or two values (l1.equity::macro reads a 6-month DIRECTION,
+// metals.silver::industrial reads latest vs prior), so showing it a
+// distribution strip invites the reader to attribute the score to a
+// percentile that never entered the calculation — and renders a bare
+// "—" for any series below the percentile floor, which reads as missing
+// data even when the input is feeding the score correctly.
+function usesPercentile(scoreState: ScoreState | undefined): boolean {
+  if (!scoreState) return false;
+  return scoreState.transform === "percentile" || scoreState.transform === "inverted" || scoreState.transform === "average";
+}
+
 function transformExplanation(scoreState: ScoreState): string {
   if (scoreState.transform === "percentile") {
     return "The latest reading is ranked against its own stored history. Higher readings score higher.";
@@ -148,8 +165,17 @@ function groupKey(row: DataPointRow, mode: GroupMode): string {
   return row.modelGroup;
 }
 
+// Generic title-casing, with explicit overrides where the raw key is a
+// poor label for a reader. "opt_in" is the live case: it is the
+// updateType for cells that have a real rubric but no feed that can
+// answer it (the 8 sector cycle-position cells), and "Opt In" says
+// nothing about what the row needs from you.
+const GROUP_LABEL_OVERRIDES: Record<string, string> = {
+  opt_in: "Needs analyst input",
+};
+
 function groupLabel(key: string): string {
-  return key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  return GROUP_LABEL_OVERRIDES[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 // Score-cell registry ids are exactly `${nodeId}::${signalId}` (e.g.
@@ -191,9 +217,18 @@ function CalculationBreakdown({
     );
   }
 
+  // Cells whose calculation is more than "percentile one series" have a
+  // step-by-step trace stating the literal formula. Same component the
+  // allocation inspector uses, so both surfaces show identical arithmetic
+  // and there is no second copy to drift from the server.
+  if (hasScoreFormulaTrace(row.id)) {
+    return <ScoreFormulaTrace scoreId={row.id} scoreState={scoreState} series={seriesById} score={scoreState.value} />;
+  }
+
   const sourceIds = effectiveSourceIds(row, scoreState);
   const sources = sourceIds.map((id) => ({ id, series: seriesById[id] }));
   const hasStaleSource = sources.some(({ series }) => isStaleSeries(series));
+  const mapEntry = scoreMapEntry(row.id);
   const oneSeries = sources.length === 1 ? sources[0] : null;
   const rawPercentile =
     oneSeries?.series?.percentile ??
@@ -236,12 +271,20 @@ function CalculationBreakdown({
                   </span>{" "}
                   · {series?.source ?? row.source} · observed {formatDate(series?.latestDate ?? null)}
                 </p>
-                <div className="mt-2">
-                  <DistributionStrip percentile={series?.percentile ?? null} />
-                </div>
+                {seriesRole(mapEntry, id) === "percentile" && (
+                  <div className="mt-2">
+                    <DistributionStrip percentile={series?.percentile ?? null} />
+                  </div>
+                )}
                 <div className="mt-1.5 flex justify-between gap-3 text-[11px] text-muted">
                   <span>{series?.observations ?? 0} observations{series?.windowStart ? ` since ${formatDate(series.windowStart)}` : ""}</span>
-                  <span className="shrink-0">{series?.percentile !== null && series?.percentile !== undefined ? `${series.percentile.toFixed(1)}th pct` : statusLabel(series?.status ?? "missing")}</span>
+                  {seriesRole(mapEntry, id) === "percentile" ? (
+                    <span className="shrink-0">{series?.percentile !== null && series?.percentile !== undefined ? `${series.percentile.toFixed(1)}th pct` : statusLabel(series?.status ?? "missing")}</span>
+                  ) : (
+                    /* Not percentiled here — say what the value IS used as,
+                       rather than showing a rank the score never consulted. */
+                    <span className="shrink-0">raw value used in the derivation</span>
+                  )}
                 </div>
               </div>
             );
@@ -254,7 +297,7 @@ function CalculationBreakdown({
       </div>
 
       <div className="mt-3 border-t border-line pt-3">
-        {oneSeries && rawPercentile !== null && (
+        {oneSeries && seriesRole(mapEntry, oneSeries.id) === "percentile" && rawPercentile !== null && (
           <p className="text-[12px] leading-5 text-ink-2">
             Raw percentile: <span className="font-semibold tabular-nums text-ink">{rawPercentile.toFixed(1)}</span>
           </p>
@@ -430,6 +473,7 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
   const selectedRow = rows.find((row) => row.id === selectedId) ?? filteredRows[0] ?? null;
   const selectedScoreState = selectedRow && isScoreCellId(selectedRow.id) ? snapshot.scores[selectedRow.id] : undefined;
   const selectedUpstreamIds = selectedRow && selectedScoreState ? effectiveSourceIds(selectedRow, selectedScoreState) : selectedRow?.upstreamSeries ?? [];
+  const selectedScoreMapEntry = selectedRow ? scoreMapEntry(selectedRow.id) : undefined;
   const inspectingRow = inspectingId ? rows.find((row) => row.id === inspectingId) ?? null : null;
   const inspectingScoreState = inspectingRow && isScoreCellId(inspectingRow.id) ? snapshot.scores[inspectingRow.id] : undefined;
 
@@ -663,7 +707,16 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
               {groupedRows.map(([key, items]) => (
                 <section key={key}>
                   <div className="sticky top-0 z-10 border-b border-line bg-paper py-2 text-xs font-bold uppercase tracking-eyebrow text-muted">
-                    {groupLabel(key)} <span className="ml-1 font-normal normal-case tracking-normal tabular-nums">{items.length}</span>
+                    {groupLabel(key)}{" "}
+                    <span className="ml-1 font-normal normal-case tracking-normal tabular-nums">
+                      {/* For the analyst-input group the total is not the
+                          actionable number — how many are still unanswered
+                          is. A group reading "8" when 5 are already done
+                          invites re-reviewing work that is finished. */}
+                      {key === "opt_in" && items.some((row) => row.awaitingInput)
+                        ? `${items.filter((row) => row.awaitingInput).length} of ${items.length} unanswered`
+                        : items.length}
+                    </span>
                   </div>
                   {items.map((row) => (
                     <button
@@ -714,6 +767,18 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                           {row.mock && (
                             <span className="rounded-sm bg-danger-500 px-2 py-0.5 text-[11px] font-bold uppercase tracking-eyebrow text-white">
                               Mock
+                            </span>
+                          )}
+                          {/* Live, but never decided. The value is a real
+                              model position (the rubric's neutral case),
+                              so it is not mock — but "live" must not be
+                              read as "somebody looked at this". Amber,
+                              between mock's red and constant's quiet
+                              outline: it needs action, but nothing is
+                              wrong with the number meanwhile. */}
+                          {row.awaitingInput && (
+                            <span className="rounded-sm bg-warn-50 px-2 py-0.5 text-[11px] font-bold uppercase tracking-eyebrow text-warn-800">
+                              Default
                             </span>
                           )}
                           {/* A constant is finished, not pending — a quiet
@@ -817,24 +882,14 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                 <p className="text-[13px] text-muted">Upstream series</p>
                 {selectedUpstreamIds.length > 0 ? (
                   <div className="mt-2 space-y-2.5">
-                    {selectedUpstreamIds.map((id) => {
-                      const series = snapshot.series[id as keyof typeof snapshot.series];
-                      return (
-                        <div key={id}>
-                          <div className="flex items-baseline justify-between gap-3">
-                            <span className="truncate text-[12px] text-ink-2">{id}</span>
-                            <span className="shrink-0 text-[12px] tabular-nums text-muted">
-                              {series?.percentile !== null && series?.percentile !== undefined
-                                ? `${series.percentile.toFixed(0)}th pct`
-                                : "—"}
-                            </span>
-                          </div>
-                          <div className="mt-1">
-                            <DistributionStrip percentile={series?.percentile ?? null} />
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {selectedUpstreamIds.map((id) => (
+                      <UpstreamSeriesRow
+                        key={id}
+                        id={id}
+                        series={snapshot.series[id as keyof typeof snapshot.series]}
+                        role={seriesRole(selectedScoreMapEntry, id)}
+                      />
+                    ))}
                   </div>
                 ) : (
                   <p className="mt-1 text-[13px] text-muted">No upstream series</p>

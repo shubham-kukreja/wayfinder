@@ -43,6 +43,18 @@ describe("niftyindices.com Daily Snapshot adapter — CSV parsing", () => {
     expect(observations.find((o) => o.seriesId === "sector_close_capgoods")?.value).toBe(17105.09);
   });
 
+  it("parses the Nifty Composite G-sec Index close — the bond index feeding l1.debt::momentum", () => {
+    // The spec names a "CRISIL/NIFTY composite bond index". CRISIL's own
+    // indices are paywalled; this one ships in the CSV this adapter
+    // already parses, so the cell needed no new source.
+    const observations = parseDailySnapshotCsv(loadFixture(), "2026-09-11");
+    const bond = observations.find((o) => o.seriesId === "bond_index_close");
+    expect(bond?.value).toBe(3123.56);
+    // It is a bond index: no P/E, P/B or Div Yield columns, so nothing
+    // else may be emitted off this row.
+    expect(observations.filter((o) => o.seriesId.startsWith("bond_index_")).length).toBe(1);
+  });
+
   it("parses Bank/IT sector P/E, matching nse.ts's existing sector_pe_* naming", () => {
     const observations = parseDailySnapshotCsv(loadFixture(), "2026-09-11");
     expect(observations.find((o) => o.seriesId === "sector_pe_banking")?.value).toBe(13.39);

@@ -29,6 +29,16 @@ const TROY_OZ_MILLIONS_TO_TONNES = 31.1034768;
 
 export const CB_GOLD_RESERVES_TONNES_SERIES_ID = "cb_gold_reserves_tonnes";
 
+// NOTE: this adapter briefly also served repo_rate from BIS's WS_CBPOL
+// dataset via the DBnomics mirror. That was MOVED OUT to
+// adapters/bisPolicyRate.ts on 2026-09-19: the mirror is a year stale
+// (its copy ends 2025-06 while BIS itself publishes through 2026-06),
+// which left a gap too wide for rbiStanceFromRepoRate() to measure
+// across and kept l1.equity::macro permanently abstaining. BIS's own
+// SDMX CSV API is equally free and current, so repo_rate now comes
+// straight from the source. This adapter is gold reserves only again.
+
+
 export class DbNomicsFetchError extends Error {
   constructor(message: string) {
     super(message);
@@ -71,8 +81,8 @@ export function parseDbNomicsReserves(json: DbNomicsResponse): Observation[] {
   return out;
 }
 
-async function fetchReservesSeries(): Promise<Observation[]> {
-  const res = await request(`${DBNOMICS_BASE_URL}?observations=1`, {
+async function fetchDbNomicsSeries(url: string): Promise<DbNomicsResponse> {
+  const res = await request(`${url}?observations=1`, {
     method: "GET",
     headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
   });
@@ -80,8 +90,11 @@ async function fetchReservesSeries(): Promise<Observation[]> {
     const body = await res.body.text();
     throw new DbNomicsFetchError(`DBnomics request failed (${res.statusCode}): ${body.slice(0, 300)}`);
   }
-  const json = (await res.body.json()) as DbNomicsResponse;
-  return parseDbNomicsReserves(json);
+  return (await res.body.json()) as DbNomicsResponse;
+}
+
+async function fetchReservesSeries(): Promise<Observation[]> {
+  return parseDbNomicsReserves(await fetchDbNomicsSeries(DBNOMICS_BASE_URL));
 }
 
 export function createDbNomicsAdapter(): SourceAdapter {

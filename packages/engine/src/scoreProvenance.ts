@@ -41,7 +41,7 @@ export const SCORE_PROVENANCE: Record<string, ScoreProvenance> = {
   "equity.large::relvalue": "auto",
   "equity.mid::relvalue": "auto",
   "equity.small::relvalue": "auto",
-  "equity.intl::relvalue": "manual",
+  "equity.intl::relvalue": "auto",
   "equity.large::revisions": "manual",
   "equity.mid::revisions": "manual",
   "equity.small::revisions": "manual",
@@ -83,7 +83,13 @@ export const SCORE_PROVENANCE: Record<string, ScoreProvenance> = {
       [`sector.${sector}::valuation`, "auto" as ScoreProvenance],
       [`sector.${sector}::revisions`, "manual" as ScoreProvenance],
       [`sector.${sector}::rel_momentum`, "auto" as ScoreProvenance],
-      [`sector.${sector}::cycle_position`, "manual" as ScoreProvenance],
+      // "rubric", not "manual": the Calculation Guide gives this cell a
+      // real table (start 50; stage +15/0/-15; overhang -10), so §12.2
+      // applies — the analyst picks the stage and gets a score, rather
+      // than typing a number into a box. It is not "auto" because no
+      // feed answers the qualitative judgement the table is built on
+      // (see sectorCyclePositionScore in rubrics.ts).
+      [`sector.${sector}::cycle_position`, "rubric" as ScoreProvenance],
     ])
   ),
 };

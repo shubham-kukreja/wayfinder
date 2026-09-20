@@ -68,6 +68,14 @@ const INDEX_PE_SERIES_MAP: Record<string, string> = {
 };
 
 const INDEX_PB_SERIES_MAP: Record<string, string> = {
+  // Nifty 100 P/B was present in this CSV's column 11 all along but
+  // unmapped, so equity.large::valuation had no P/B leg while mid and
+  // small did. The Calculation Guide's "Valuation vs own history" row
+  // says "Optionally average with the same on P/B" — applying that
+  // clause to only two of three segments would have scored large on a
+  // different basis than its peers while the UI labelled all three
+  // identically. Confirmed live 2026-09-20 back to 2016.
+  "Nifty 100": "nifty100_pb",
   "Nifty Midcap 150": "midcap150_pb",
   "Nifty Smallcap 250": "smallcap250_pb",
   "Nifty Capital Goods": "sector_pb_capgoods",
@@ -80,6 +88,15 @@ const INDEX_PB_SERIES_MAP: Record<string, string> = {
 // gold_usd_futures/silver_usd_futures history).
 const INDEX_CLOSE_SERIES_MAP: Record<string, string> = {
   "Nifty 50": "nifty50_close",
+  // Nifty 100 / Midcap 150 / Smallcap 250 closes — column 5 was already
+  // being parsed for every index row, just not mapped for these three.
+  // Needed to derive trailing EPS (close ÷ P/E) per segment as the
+  // documented substitute for equity.{large,mid,small}::revisions — see
+  // docs/missing_data_points/equity-segments.md. Same trailing-vs-consensus
+  // caveat already recorded there and on sector.*::revisions applies.
+  "Nifty 100": "nifty100_close",
+  "Nifty Midcap 150": "midcap150_close",
+  "Nifty Smallcap 250": "smallcap250_close",
   "Nifty Bank": "sector_close_banking",
   "Nifty IT": "sector_close_it",
   "Nifty Pharma": "sector_close_pharma",
@@ -88,6 +105,17 @@ const INDEX_CLOSE_SERIES_MAP: Record<string, string> = {
   "Nifty Energy": "sector_close_energy",
   "Nifty Metal": "sector_close_metals",
   "Nifty Capital Goods": "sector_close_capgoods",
+  // §7.1 l1.debt::momentum — the spec's "CRISIL/NIFTY composite bond
+  // index". CRISIL's indices are paywalled, but NSE publishes this one
+  // in the very CSV this adapter already parses (confirmed live
+  // 2026-09-19, present every day tested back to 2021-09). It is a
+  // TOTAL-RETURN index — accrued coupon is in the level, which is what a
+  // 12-month bond-index RETURN requires — so unlike nifty50_close it
+  // needs no dividend-yield approximation. Sanity-checked against real
+  // levels: the trailing-12m changes land at +0.96%/+7.22%/+10.45%/
+  // +7.13%/+3.40% for 2022-2026, the right magnitude for an Indian
+  // sovereign bond index and consistent with the spec's 8.2% example.
+  "Nifty Composite G-sec Index": "bond_index_close",
 };
 
 // Div Yield — only stored for Nifty 50, feeding the TRI-return
@@ -180,6 +208,50 @@ async function fetchSnapshotForDate(date: Date): Promise<Observation[]> {
   const csvText = await res.body.text();
   const isoDate = date.toISOString().slice(0, 10);
   return parseDailySnapshotCsv(csvText, isoDate);
+}
+
+// Month-end sampling, for the 10-15 YEAR windows the Calculation Guide's
+// "vs its own history" rows require.
+//
+// fetchHistory() below issues one request per CALENDAR day, so a decade
+// of range is ~3,650 requests — hours of wall time and a rate-limit risk
+// on a free static-file host, to produce daily granularity the spec never
+// asks for. The spec says "10-15Y MONTHLY history", so month-end sampling
+// is the SPECIFIED granularity, not a compromise: ~12 requests per year
+// covers a full decade in ~120 successful fetches.
+//
+// It also fixes a measurement error that daily data actively causes.
+// percentileMinObservations counts ROWS; the spec constrains TIME. Daily
+// sampling clears a 24-row floor in five weeks while covering a month of
+// calendar history — the exact divergence historySpanYears() exists to
+// catch (see percentile.ts). Monthly rows make row count and calendar
+// span move together.
+//
+// Non-trading month-ends (the CSV 404s as an HTML page) walk backwards up
+// to 6 days to the previous trading day, the same "walk back to the last
+// business day" approach fetchLatest() uses.
+export async function fetchMonthEndHistory(from: Date, to: Date): Promise<Observation[]> {
+  const out: Observation[] = [];
+  const cursor = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
+  while (cursor <= to) {
+    // Last calendar day of this month, then walk back to a trading day.
+    const monthEnd = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0));
+    for (let back = 0; back < 6; back++) {
+      const probe = new Date(monthEnd);
+      probe.setUTCDate(probe.getUTCDate() - back);
+      if (probe > to) continue;
+      try {
+        out.push(...(await fetchSnapshotForDate(probe)));
+        break;
+      } catch {
+        // Weekend/holiday — try the previous day. Exhausting all 6 leaves
+        // this month absent from the backfill, a gap, not a failure
+        // (§9: a failed fetch is a warning, never an exception).
+      }
+    }
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return out;
 }
 
 export function createNiftyIndicesAdapter(): SourceAdapter {

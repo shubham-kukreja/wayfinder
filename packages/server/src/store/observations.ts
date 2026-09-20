@@ -63,6 +63,50 @@ export function latestObservations(
   return rows;
 }
 
+// Latest-per-(date, SOURCE), rather than latest-per-date.
+//
+// latestObservations() collapses each date to one row, so when two
+// adapters both publish a month, the later FETCH wins and the other
+// source's reading for that month becomes invisible. That is the right
+// rule for reading a series, but it hides exactly the information a
+// SPLICE needs: which months the two sources genuinely both cover.
+// cpi_index is the live case — FRED and RBI both publish 2025-01..03,
+// but RBI was fetched later, so the plain read made FRED look like it
+// stopped in 2024-12 and the overlap disappeared.
+export function latestObservationsBySource(
+  db: Database.Database,
+  seriesId: string
+): Map<string, Array<{ date: string; value: number }>> {
+  const rows = db
+    .prepare(
+      `
+      SELECT o.date, o.value, o.source
+      FROM observations o
+      INNER JOIN (
+        SELECT series_id, date, source, MAX(fetched_at) as max_fetched_at
+        FROM observations
+        WHERE series_id = @seriesId
+        GROUP BY series_id, date, source
+      ) latest
+        ON o.series_id = latest.series_id
+        AND o.date = latest.date
+        AND o.source = latest.source
+        AND o.fetched_at = latest.max_fetched_at
+      WHERE o.series_id = @seriesId
+      ORDER BY o.date ASC
+      `
+    )
+    .all({ seriesId }) as Array<{ date: string; value: number; source: string }>;
+
+  const bySource = new Map<string, Array<{ date: string; value: number }>>();
+  for (const r of rows) {
+    const list = bySource.get(r.source) ?? [];
+    list.push({ date: r.date, value: r.value });
+    bySource.set(r.source, list);
+  }
+  return bySource;
+}
+
 export function latestObservation(db: Database.Database, seriesId: string): ObservationRow | undefined {
   const rows = latestObservations(db, seriesId);
   return rows[rows.length - 1];

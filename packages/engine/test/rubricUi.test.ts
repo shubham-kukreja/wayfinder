@@ -64,4 +64,27 @@ describe("RUBRIC_UI_BY_SCORE_ID — evaluation matches the real rubric functions
     const result = spec.evaluate({ pmiLevel: "high_rising", capexNewsflow: "strong" });
     expect(result).toEqual({ "metals.silver::industrial": 75 }); // 70 + 5
   });
+
+  it("debt liquidity: 'Normal' reproduces the frozen baseline (90/65/75), one shared spec across all 3 cells", () => {
+    const spec = RUBRIC_UI_BY_SCORE_ID["debt.gilt::liquidity"]!;
+    expect(spec).toBe(RUBRIC_UI_BY_SCORE_ID["debt.corporate::liquidity"]);
+    expect(spec).toBe(RUBRIC_UI_BY_SCORE_ID["debt.liquid::liquidity"]);
+
+    const result = spec.evaluate({ stress: "normal" });
+    expect(result).toEqual({
+      "debt.gilt::liquidity": 75,
+      "debt.corporate::liquidity": 65,
+      "debt.liquid::liquidity": 90,
+    });
+  });
+
+  it("debt liquidity: 'Credit-fund stress episode underway' drops corporate to 40, liquid/gilt to 50", () => {
+    const spec = RUBRIC_UI_BY_SCORE_ID["debt.gilt::liquidity"]!;
+    const result = spec.evaluate({ stress: "credit_stress" });
+    expect(result).toEqual({
+      "debt.gilt::liquidity": 50,
+      "debt.corporate::liquidity": 40,
+      "debt.liquid::liquidity": 50,
+    });
+  });
 });

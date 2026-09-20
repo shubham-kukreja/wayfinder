@@ -1,5 +1,13 @@
 import type { FastifyInstance } from "fastify";
-import { SCORE_MAP, type ScoreState, type SeriesState, type VetoState } from "@wayfinder/engine";
+import {
+  SCORE_MAP,
+  scoreMapEntry,
+  seriesRole,
+  type ScoreMapEntry,
+  type ScoreState,
+  type SeriesState,
+  type VetoState,
+} from "@wayfinder/engine";
 import { DATA_POINT_REGISTRY, type DataPointRegistryEntry } from "../dataPointRegistry.js";
 import { loadConfig } from "../config.js";
 import { openDb } from "../store/db.js";
@@ -26,26 +34,102 @@ interface DataPointRow extends DataPointRegistryEntry {
   // Center so a placeholder can never be mistaken for a live number.
   mock: boolean;
   mockReason: string | null;
+  // True for a cell that is serving a real default but has never been
+  // ANSWERED by the person who owns it — every rubric input is still
+  // the table's own no-adjustment case. Distinct from `mock` (the value
+  // is defensible, not demo filler) and from freshness (nothing is
+  // stale; it was simply never decided). Without this, "live" quietly
+  // covers both "computed from a feed" and "nobody has looked at it".
+  awaitingInput: boolean;
 }
 
-function scoreFreshness(score: ScoreState | undefined, sourceStates: SeriesState[]): FreshnessState {
+export function scoreFreshness(
+  score: ScoreState | undefined,
+  sourceStates: SeriesState[],
+  mapEntry?: ScoreMapEntry
+): FreshnessState {
   if (!score) return "missing";
-  if (score.provenance === "manual") return "overridden";
-  // A mock value has never been observed or computed, whatever
-  // provenance the demo baseline happens to claim for it. Report it as
-  // "missing" so it cannot sit in the Control Center reading "current".
+  // A mock baseline is NOT an override, whatever provenance it carries.
+  // The sector cycle-position cells surfaced this: they are rubric cells
+  // nobody has answered yet, and reporting them "overridden" claimed a
+  // deliberate human decision that has not happened. Check mock first.
   if (score.mock) return "missing";
+  if (score.provenance === "manual") return "overridden";
   if (sourceStates.some((s) => s.status === "failed")) return "failed";
-  if (sourceStates.some((s) => s.status === "insufficient_history")) return "missing";
+  // `insufficient_history` on a SERIES means it cannot support a
+  // PERCENTILE — that is the only thing SeriesState's floor
+  // (percentileMinObservations, 24) measures. For a percentile cell that
+  // is fatal and the row must read "missing". For a RUBRIC cell it is
+  // irrelevant: a rubric is a bucket lookup over the latest one or two
+  // readings, so it is fully answerable on a series that will never
+  // clear a percentile floor. metals.silver::industrial is the clearest
+  // case — global_mfg_pmi holds exactly 2 observations BY DESIGN
+  // (fetchHistory() throws; the rubric wants latest + prior), so gating
+  // on the percentile floor reported a genuinely computed,
+  // non-mock score as "missing" and hid real work behind a
+  // floor it never needed. Only suppress a rubric cell when it has no
+  // usable upstream reading at all.
+  //
+  // The same reasoning extends past rubrics to any cell that percentiles
+  // a DERIVED quantity rather than a leg. l1.debt::valuation ranks
+  // (gsec_10y - cpi_yoy): the derived real-yield series clears the floor
+  // with 161 observations and the cell scores 70, but cpi_yoy on its own
+  // holds 5 stored rows and reports `insufficient_history`, so this gate
+  // marked a fully computed cell "missing" and the UI announced "No
+  // observation has ever been stored for this point" above a live score
+  // (confirmed live 2026-09-19). A leg's percentile floor is only
+  // load-bearing where that leg's OWN percentile is an input — which is
+  // exactly what seriesRole() records.
+  const isRubric = score.transform === "rubric";
+  // With no map entry the cell's derivation is undeclared, so fall back
+  // to the old conservative rule (treat the leg as percentiled) rather
+  // than silently promoting an unknown cell to "current". Only a
+  // DECLARED "raw" role exempts a leg from the floor.
+  const blocksPercentile = (s: SeriesState): boolean =>
+    s.status === "insufficient_history" && (!mapEntry || seriesRole(mapEntry, s.id) === "percentile");
+  if (!isRubric && sourceStates.some(blocksPercentile)) return "missing";
+  // A non-rubric cell whose legs are all "raw" still needs SOMETHING
+  // behind it: if no leg has any reading at all, there was nothing to
+  // derive from.
+  if (!isRubric && sourceStates.length > 0 && sourceStates.every((s) => s.latestDate === null)) return "missing";
+  if (isRubric && sourceStates.length > 0 && sourceStates.every((s) => s.latestDate === null)) return "missing";
   if (score.staleDays !== null && score.staleDays > 45) return "stale";
   if (score.staleDays !== null && score.staleDays > 7) return "due";
   if (score.provenance === "default") return "missing";
   return "current";
 }
 
+// The date a score cell was actually computed FOR.
+//
+// Deliberately the OLDEST leg date, not the newest. A cell that joins
+// legs by month can only be as current as its slowest leg: the max date
+// claims a freshness the number does not have. l1.debt::valuation
+// reported "observed 1 Aug 2026" off cpi_yoy's August print while the
+// score was computed on July's yield, which is the one month the join
+// could resolve (confirmed live 2026-09-19) — §1 invariant 5, freshness
+// must never be silently overstated.
+// Newest leg date — the right answer for "when did anything here last
+// move", which is what lastUpdated falls back to. Distinct from
+// computedForDate below; do not merge them.
 function latestSeriesDate(states: SeriesState[]): string | null {
   const dates = states.map((s) => s.latestDate).filter((date): date is string => !!date).sort();
   return dates[dates.length - 1] ?? null;
+}
+
+// Prefers the date the PIPELINE says the score was computed from, and
+// only falls back to the oldest leg when the cell doesn't report one
+// (manual cells, the mock baseline).
+//
+// The oldest-leg heuristic is a lower bound, not the answer: a cell
+// whose derived series ends where its legs last OVERLAPPED can be older
+// than every individual leg. l1.metals::valuation reported "observed 31
+// Mar 2026" off CPI's last month while the real-gold join had in fact
+// resolved earlier, and before the gold gap was filled it was computed
+// from January against legs that both ran later still.
+export function observedAtFor(score: ScoreState | undefined, states: SeriesState[]): string | null {
+  if (score?.computedForDate) return score.computedForDate;
+  const dates = states.map((s) => s.latestDate).filter((date): date is string => !!date).sort();
+  return dates[0] ?? null;
 }
 
 function rowFromScore(entry: DataPointRegistryEntry, score: ScoreState | undefined, seriesById: Record<string, SeriesState>): DataPointRow {
@@ -55,7 +139,8 @@ function rowFromScore(entry: DataPointRegistryEntry, score: ScoreState | undefin
   const sourceStates = upstreamSeries.map((id) => seriesById[id]).filter((s): s is SeriesState => !!s);
   // A constant has no feed to be stale against — it is current until the
   // annual review changes it, so it never enters the freshness funnel.
-  const freshness = entry.updateType === "constant" ? "current" : scoreFreshness(score, sourceStates);
+  const freshness =
+    entry.updateType === "constant" ? "current" : scoreFreshness(score, sourceStates, scoreMapEntry(entry.id));
   return {
     ...entry,
     currentValue: score?.value ?? null,
@@ -63,7 +148,7 @@ function rowFromScore(entry: DataPointRegistryEntry, score: ScoreState | undefin
     score: score?.value ?? null,
     freshness,
     lastUpdated: score?.enteredAt ?? score?.computedAt ?? latestSeriesDate(sourceStates),
-    observedAt: latestSeriesDate(sourceStates),
+    observedAt: observedAtFor(score, sourceStates),
     fetchedAt: null,
     state: score?.provenance === "manual" ? "draft_override" : "published",
     provenance: score?.provenance ?? null,
@@ -78,6 +163,13 @@ function rowFromScore(entry: DataPointRegistryEntry, score: ScoreState | undefin
     // buries 7 finished cells among the 40 that genuinely need input.
     mock: entry.updateType === "constant" ? false : score?.mock ?? true,
     mockReason: entry.updateType === "constant" ? null : score?.mockReason ?? null,
+    // Every rubric input still sitting on its assumed default means the
+    // cell is unanswered, however live its value is.
+    awaitingInput:
+      entry.updateType === "opt_in" &&
+      score?.provenance !== "manual" &&
+      (score?.rubricInputs?.length ?? 0) > 0 &&
+      (score?.rubricInputs ?? []).every((input) => input.assumed === true),
   };
 }
 
@@ -99,6 +191,7 @@ function rowFromGovernance(entry: DataPointRegistryEntry): DataPointRow {
     // Governance parameters are real configured values, not demo filler.
     mock: false,
     mockReason: null,
+    awaitingInput: false,
   };
 }
 
@@ -120,6 +213,7 @@ function rowFromVeto(entry: DataPointRegistryEntry, veto: VetoState | undefined)
     // A veto is a real on/off gate; "inactive" is a genuine state.
     mock: false,
     mockReason: null,
+    awaitingInput: false,
   };
 }
 
@@ -146,6 +240,7 @@ function rowFromSeries(entry: DataPointRegistryEntry, seriesState: SeriesState |
       sourceStatuses: [],
       mock: true,
       mockReason: entry.source,
+    awaitingInput: false,
     };
   }
   // No SeriesState key at all is itself the "missing" signal for a series
@@ -168,6 +263,7 @@ function rowFromSeries(entry: DataPointRegistryEntry, seriesState: SeriesState |
             : "current";
   return {
     ...entry,
+    awaitingInput: false,
     currentValue: seriesState?.latest ?? null,
     unit: "%",
     score: null,
@@ -205,6 +301,7 @@ function buildRows(): { rows: DataPointRow[]; summary: Record<string, number> } 
         acc[row.updateType] = (acc[row.updateType] ?? 0) + 1;
         if (row.mock) acc.mock = (acc.mock ?? 0) + 1;
         else acc.live = (acc.live ?? 0) + 1;
+        if (row.awaitingInput) acc.awaitingInput = (acc.awaitingInput ?? 0) + 1;
         // NOTE: no explicit "constant" tally — acc[row.updateType] above
         // already counts it, and the Constants tab reads that key.
         return acc;

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { ALLOCATION_ROUTES, GOVERNANCE_ROUTES, MODEL_ROUTES, REFERENCE_ROUTES } from "../../lib/constants.js";
+import { ALLOCATION_ROUTES, GOVERNANCE_ROUTES, MODEL_ROUTES, NOTES_ROUTES, REFERENCE_ROUTES } from "../../lib/constants.js";
 
 // Persistent left rail: wordmark up top, collapsible route groups beneath,
 // and a collapse affordance that narrows the rail to icons-off/labels-off.
@@ -14,6 +14,7 @@ const GROUPS: Array<{ id: string; label: string; routes: readonly { path: string
   { id: "allocation", label: "Allocation", routes: ALLOCATION_ROUTES },
   { id: "model", label: "Model", routes: MODEL_ROUTES },
   { id: "governance", label: "Governance", routes: GOVERNANCE_ROUTES },
+  { id: "notes", label: "Notes", routes: NOTES_ROUTES },
 ];
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -34,7 +35,7 @@ function ChevronIcon({ open }: { open: boolean }) {
 }
 
 export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ allocation: true, model: true, governance: true });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ allocation: true, model: true, governance: true, notes: true });
 
   // One element across both states rather than two separate returns: React
   // then updates this node's width instead of swapping nodes, which is what

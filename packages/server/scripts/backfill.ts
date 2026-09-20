@@ -11,9 +11,12 @@ import { insertFetchLog } from "../src/store/fetchLog.js";
 import { createFredAdapter, FRED_SERIES } from "../src/adapters/fred.js";
 import { createAmfiAdapter } from "../src/adapters/amfi.js";
 import { createRbiAdapter } from "../src/adapters/rbi.js";
-import { createNiftyIndicesAdapter } from "../src/adapters/niftyindices.js";
+import { createNiftyIndicesAdapter, fetchMonthEndHistory } from "../src/adapters/niftyindices.js";
+import { createMultplAdapter } from "../src/adapters/multpl.js";
 import { createYahooMetalsAdapter, GOLD_USD_FUTURES_SERIES_ID, SILVER_USD_FUTURES_SERIES_ID } from "../src/adapters/yahooMetals.js";
 import { createDbNomicsAdapter } from "../src/adapters/dbnomics.js";
+import { createGoldEtfHoldingsAdapter, GOLD_ETF_TONNES_SERIES_ID } from "../src/adapters/goldEtfHoldings.js";
+import { createBisPolicyRateAdapter } from "../src/adapters/bisPolicyRate.js";
 import { fetchTrackedNavHistory, amfiNavSeriesId } from "../src/adapters/amfiNav.js";
 import { listTrackedSchemes } from "../src/store/trackedSchemes.js";
 import { loadConfig } from "../src/config.js";
@@ -187,11 +190,44 @@ async function backfillRanged(
 // derivations fed by this source include 12M lookbacks, so the default
 // window needs room for both the lookback and the 24-observation
 // percentile floor.
-async function backfillNiftyIndices(db: ReturnType<typeof openDb>, days = 760): Promise<CoverageReport[]> {
+//
+// TWO PASSES, deliberately, because two different cells need two
+// different shapes of history from the same source:
+//
+//   DAILY (last ~2y) — the 6M/12M return lookbacks in
+//   sector.*::rel_momentum and the TRI approximation need dense recent
+//   closes.
+//
+//   MONTH-END (last ~11y) — every "percentile vs its own 10-15Y history"
+//   cell needs calendar DEPTH, which the daily pass cannot afford: a
+//   decade of daily fetches is ~4,000 requests. Month-end sampling is the
+//   spec's own stated granularity ("10-15Y MONTHLY history"), so ~12
+//   requests per year covers the full window. Without this pass the P/E
+//   cells ranked today against a 2.1-year window and scored large/mid at
+//   ~98 (see the header comment on equity.*::valuation in scoreCells.ts).
+async function backfillNiftyIndices(db: ReturnType<typeof openDb>, days = 760, monthEndYears = 11): Promise<CoverageReport[]> {
   const adapter = createNiftyIndicesAdapter();
+
+  const monthEndFrom = new Date();
+  monthEndFrom.setFullYear(monthEndFrom.getFullYear() - monthEndYears);
+  await backfillRanged(db, "NIFTYINDICES", adapter.series, fetchMonthEndHistory, monthEndFrom);
+
   const from = new Date();
   from.setDate(from.getDate() - days);
   return backfillRanged(db, "NIFTYINDICES", adapter.series, adapter.fetchHistory, from);
+}
+
+// multpl.com's S&P 500 trailing P/E — one request returns the whole
+// monthly series back to 1871, so there is no per-period cost here and
+// the only reason to bound the range is storage. 30y comfortably covers
+// the 10-15Y window equity.intl::valuation ranks against.
+// NOTE: this is TRAILING P/E standing in for the spec's FORWARD P/E; the
+// deviation is documented in adapters/multpl.ts.
+async function backfillMultpl(db: ReturnType<typeof openDb>, years = 30): Promise<CoverageReport[]> {
+  const adapter = createMultplAdapter();
+  const from = new Date();
+  from.setFullYear(from.getFullYear() - years);
+  return backfillRanged(db, "MULTPL", adapter.series, adapter.fetchHistory, from);
 }
 
 // yahooMetals.ts's fetchHistory() hits Yahoo Finance's real chart-history
@@ -205,6 +241,18 @@ async function backfillYahooMetals(db: ReturnType<typeof openDb>, years = 10): P
   const from = new Date();
   from.setFullYear(from.getFullYear() - years);
   return backfillRanged(db, "YAHOO_METALS", [GOLD_USD_FUTURES_SERIES_ID, SILVER_USD_FUTURES_SERIES_ID], adapter.fetchHistory, from);
+}
+
+// SPDR's own GLD historical archive (adapters/goldEtfHoldings.ts) — a
+// genuine daily series back to 2004, unlike the Yahoo-sourced
+// gold_etf_shares_outstanding it replaced (latest-only, no history
+// endpoint). One request returns the full archive regardless of range,
+// so `years` only bounds what's written, not what's fetched.
+async function backfillGoldEtfHoldings(db: ReturnType<typeof openDb>, years = 20): Promise<CoverageReport[]> {
+  const adapter = createGoldEtfHoldingsAdapter();
+  const from = new Date();
+  from.setFullYear(from.getFullYear() - years);
+  return backfillRanged(db, "GOLD_ETF_HOLDINGS", [GOLD_ETF_TONNES_SERIES_ID], adapter.fetchHistory, from);
 }
 
 // RBI's DBIE mirror. Headless-browser scrape, so it is slower than the
@@ -227,6 +275,19 @@ async function backfillDbNomics(db: ReturnType<typeof openDb>, years = 10): Prom
   const from = new Date();
   from.setFullYear(from.getFullYear() - years);
   return backfillRanged(db, "DBNOMICS", adapter.series, adapter.fetchHistory, from);
+}
+
+// bisPolicyRate.ts serves repo_rate straight from BIS's SDMX API. This
+// backfill is what makes l1.equity::macro's rbiStance input meaningful:
+// rbi.org.in's homepage widget is current-value only, so without real
+// history the "6 months ago" comparison has nothing to compare against
+// and the cell abstains. 20 years covers every MPC cycle that matters
+// for a 6-month stance read, with room to spare.
+async function backfillBis(db: ReturnType<typeof openDb>, years = 20): Promise<CoverageReport[]> {
+  const adapter = createBisPolicyRateAdapter();
+  const from = new Date();
+  from.setFullYear(from.getFullYear() - years);
+  return backfillRanged(db, "BIS", adapter.series, adapter.fetchHistory, from);
 }
 
 // Backfills only currently-tracked schemes (store/trackedSchemes.ts) — an
@@ -309,12 +370,18 @@ async function main() {
   console.log("-- NiftyIndices --");
   reports.push(...(await backfillNiftyIndices(db)));
 
+  console.log("-- multpl.com (S&P 500 trailing P/E) --");
+  reports.push(...(await backfillMultpl(db)));
+
   console.log("-- Yahoo Metals --");
   reports.push(...(await backfillYahooMetals(db)));
-  console.log("  NOTE: gold_etf_shares_outstanding is latest-only; it accumulates via refresh, not historical backfill.");
+
+  console.log("-- Gold ETF holdings (SPDR GLD archive) --");
+  reports.push(...(await backfillGoldEtfHoldings(db)));
 
   console.log("-- DB.NOMICS --");
   reports.push(...(await backfillDbNomics(db)));
+  reports.push(...(await backfillBis(db)));
 
   console.log("-- AMFI NAV (tracked schemes only) --");
   reports.push(...(await backfillAmfiNav(db)));

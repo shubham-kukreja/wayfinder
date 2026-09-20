@@ -32,6 +32,9 @@ export interface DataPointRow {
   // history / no source exists).
   mock: boolean;
   mockReason: string | null;
+  // Serving a real default, but nobody has answered the rubric yet —
+  // every input is still the table's own no-adjustment case.
+  awaitingInput: boolean;
 }
 
 export interface DataPointsResponse {

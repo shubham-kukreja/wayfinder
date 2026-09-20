@@ -51,9 +51,38 @@ const ROW_SERIES_MAP: Record<string, { flow?: string; aum?: string }> = {
 // ("I Income/Debt Oriented Schemes", "II Growth/Equity Oriented Schemes"),
 // not by row text alone, since "Sub Total" repeats for every group.
 const SUBTOTAL_GROUP_MAP: Record<string, { flow: string; aum: string }> = {
-  "income/debt oriented schemes": { flow: "flow_duration_3m", aum: "aum_duration" },
-  "growth/equity oriented schemes": { flow: "flow_equity_3m", aum: "aum_equity" },
+  debt: { flow: "flow_duration_3m", aum: "aum_duration" },
+  equity: { flow: "flow_equity_3m", aum: "aum_equity" },
 };
+
+// A MAIN-table group heading, anchored to the line start on the roman
+// numeral that numbers the section ("I Debt Schemes", "II Growth/Equity
+// Oriented Schemes"). Both namings are live: AMFI renamed the headings
+// from "I Income/Debt Oriented Schemes" / "II Growth/Equity Oriented
+// Schemes" to "I Debt Schemes" / "II Equity Schemes" in the AUGUST 2026
+// report (verified live 2026-09-19 against am{may,jun,jul,aug}2026repo.pdf
+// — Jul is the old form, Aug the new), so both must parse.
+//
+// The anchoring is the load-bearing part, NOT the added spelling. The
+// previous code substring-matched "income/debt oriented schemes" anywhere
+// in a line, and the August report still contains that exact text further
+// down as the heading of a SMALL SUPPLEMENTARY table (FoF/overseas, 35
+// schemes). So the matcher latched onto that second table and silently
+// read ITS subtotal: aum_duration came back 11,492.54 against a true
+// 19,91,304.74 — a 168x understatement that put a 3M flow ratio at 224%
+// of AUM and pinned l1.debt::flows to 0 (inverted) on garbage. Same
+// defect hit aum_equity (4,039.73 vs a true 39,03,935.91).
+//
+// Anchoring on "^<roman> <name>" excludes the supplementary tables, whose
+// headings are either un-numbered or lower-case-numbered ("i Income/Debt
+// Oriented Schemes", "A. Income/Debt Oriented Schemes").
+const GROUP_HEADING_RE = /^(i|ii)\s+(debt schemes|income\/debt oriented schemes|equity schemes|growth\/equity oriented schemes)\b/;
+
+function groupKeyFromHeading(line: string): string | null {
+  const m = GROUP_HEADING_RE.exec(line.toLowerCase());
+  if (!m) return null;
+  return m[2]!.includes("debt") ? "debt" : "equity";
+}
 
 const MONTH_NAME_TO_NUM: Record<string, string> = {
   jan: "01",
@@ -158,15 +187,11 @@ export function parseAmfiCategoryReport(pdfText: string, reportDate: string): Ob
     const line = lines[i]!;
     const lower = line.toLowerCase();
 
-    // Group heading lines look like "I Income/Debt Oriented Schemes" or
-    // "II Growth/Equity Oriented Schemes" — track which group we're in so
-    // the next "Sub Total" row maps to the right series.
-    for (const groupKey of Object.keys(SUBTOTAL_GROUP_MAP)) {
-      if (lower.includes(groupKey)) {
-        currentGroup = groupKey;
-        break;
-      }
-    }
+    // Track which MAIN-table group we're in so the next "Sub Total" row
+    // maps to the right series. See GROUP_HEADING_RE for why this is
+    // anchored rather than a substring test.
+    const heading = groupKeyFromHeading(line);
+    if (heading) currentGroup = heading;
 
     if (lower.startsWith("sub total") && currentGroup && !capturedGroups.has(currentGroup)) {
       // The PDF's text extraction wraps "Sub Total - I (i+ii+...)" across

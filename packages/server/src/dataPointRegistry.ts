@@ -64,9 +64,6 @@ const SIGNAL_LABELS: Record<string, string> = {
 // value below is cross-checked against the engine's own rubric constants
 // (rubrics.ts), not taken on faith from the demo baseline:
 //
-//   debt.{liquid,gilt,corporate}::liquidity  90 / 75 / 65 — exactly
-//     DEBT_LIQUIDITY_BASELINE in rubrics.ts. Liquid funds are near-cash,
-//     G-secs trade in a deep sovereign market, corporate paper is thinner.
 //   debt.{liquid,gilt}::spread_cushion  50 — neutral BY DEFINITION: neither
 //     sleeve carries meaningful credit spread, so there is no cushion to
 //     score. (debt.corporate::spread_cushion is deliberately NOT here — it
@@ -81,13 +78,45 @@ const SIGNAL_LABELS: Record<string, string> = {
 //     always 50"; the demo baseline's 45 contradicted that and is
 //     corrected in mock/snapshot.json.
 const STRUCTURAL_CONSTANT_SCORE_IDS = new Set([
-  "debt.liquid::liquidity",
-  "debt.gilt::liquidity",
-  "debt.corporate::liquidity",
   "debt.liquid::spread_cushion",
   "debt.gilt::spread_cushion",
   "metals.gold::industrial",
   "equity.large::growth_diff",
+]);
+
+// Cells with a real rubric picker but no automatic derivation: the
+// analyst answers the rubric and the engine does the arithmetic. They
+// are neither "derived" (no feed) nor bare "manual" (not a free-form
+// number box), and the Control Center should say so.
+//
+// debt.{gilt,corporate,liquid}::rate_cycle share one picker
+// (rateCycleUi / rateCycleScores() in the engine) over the expected 12M
+// RBI path. No free source answers "expected" rate moves in principle —
+// rbiPathFromRepoRate() only reads REALISED repo_rate direction (a
+// 3-bucket, backward-looking proxy already used for l1.debt::macro's
+// rbiPath), but this rubric needs a 5-bucket FORWARD magnitude read
+// (>50bp vs 25-50bp expected cuts/hikes) that only OIS-implied pricing
+// or an analyst's own MPC-guidance read can answer.
+//
+// debt.{gilt,corporate,liquid}::liquidity share the debtLiquidityUi
+// picker ("Normal" / "Credit-fund stress episode underway") over
+// debtLiquidityScore(). Not a pure structural constant any more: the
+// spec is "set-and-forget EXCEPT IN STRESS", and stress detection has
+// no free source (same unsourced class as debtFundamentalsUi's
+// creditCycle field — CRISIL/ICRA rating actions, AMC gating events).
+// "Normal" reproduces the exact baseline the constant used to freeze
+// (90/65/75, DEBT_LIQUIDITY_BASELINE in rubrics.ts); the analyst picks
+// it once and the trio behaves exactly as before, but a real stress
+// episode is now one click away instead of requiring a manual number
+// override someone has to remember the right values for.
+const RUBRIC_PICKER_SCORE_IDS = new Set([
+  ...SECTOR_NODES.map((nodeId) => `${nodeId}::cycle_position`),
+  "debt.gilt::rate_cycle",
+  "debt.corporate::rate_cycle",
+  "debt.liquid::rate_cycle",
+  "debt.gilt::liquidity",
+  "debt.corporate::liquidity",
+  "debt.liquid::liquidity",
 ]);
 
 const AUTO_WIRED_SCORE_IDS = new Set([
@@ -97,22 +126,34 @@ const AUTO_WIRED_SCORE_IDS = new Set([
   "l1.equity::valuation",
   "l1.equity::momentum",
   "l1.debt::valuation",
+  "l1.debt::momentum",
   "l1.metals::valuation",
   "l1.metals::fundamentals",
   "l1.metals::momentum",
   "l1.metals::macro",
+  "l1.equity::macro",
+  "l1.debt::macro",
   "equity.large::valuation",
   "equity.mid::valuation",
   "equity.small::valuation",
+  "equity.intl::valuation",
   "equity.large::relvalue",
   "equity.mid::relvalue",
   "equity.small::relvalue",
+  "equity.intl::relvalue",
+  "equity.large::revisions",
+  "equity.mid::revisions",
+  "equity.small::revisions",
+  "equity.mid::growth_diff",
+  "equity.small::growth_diff",
+  "equity.intl::growth_diff",
   "debt.gilt::carry",
   "debt.liquid::carry",
   "metals.gold::ratio_position",
   "metals.silver::ratio_position",
   "metals.gold::real_rates",
   "metals.silver::real_rates",
+  "metals.silver::industrial",
   ...SECTOR_NODES.map((nodeId) => `${nodeId}::valuation`),
   ...SECTOR_NODES.map((nodeId) => `${nodeId}::rel_momentum`),
 ]);
@@ -121,6 +162,7 @@ function scoreEntry(nodeId: NodeId, signalId: string, modelGroup: GroupId): Data
   const id = `${nodeId}::${signalId}`;
   const isAuto = AUTO_WIRED_SCORE_IDS.has(id);
   const isConstant = STRUCTURAL_CONSTANT_SCORE_IDS.has(id);
+  const isRubricPicker = RUBRIC_PICKER_SCORE_IDS.has(id);
   const nodeLabel = NODE_LABELS[nodeId] ?? nodeId;
   const signalLabel = SIGNAL_LABELS[signalId] ?? signalId;
   return {
@@ -128,13 +170,17 @@ function scoreEntry(nodeId: NodeId, signalId: string, modelGroup: GroupId): Data
     label: `${nodeLabel} - ${signalLabel}`,
     technicalKey: id,
     modelGroup,
-    updateType: isConstant ? "constant" : isAuto ? "derived" : "manual",
-    source: isConstant ? "Model constant" : isAuto ? "Model pipeline" : "Manual or rubric input",
+    updateType: isConstant ? "constant" : isAuto ? "derived" : isRubricPicker ? "opt_in" : "manual",
+    source: isConstant ? "Model constant" : isAuto ? "Model pipeline" : isRubricPicker ? "Analyst rubric (no feed answers it)" : "Manual or rubric input",
     frequency: isConstant ? "annual" : isAuto ? "daily" : "quarterly",
+    // (rubric-picker cells keep the quarterly cadence — a sector's cycle
+    //  stage is a quarterly review question, not a daily feed)
     owner: isConstant ? "model_admin" : isAuto ? "system" : "investment_team",
     description: isConstant
       ? `${signalLabel} for ${nodeLabel} — a structural property of the instrument class, not a market view. Reviewed annually.`
-      : `${signalLabel} score feeding ${nodeLabel}.`,
+      : isRubricPicker
+        ? `${signalLabel} for ${nodeLabel} — answered from a fixed rubric by the investment team. No data feed can settle it; the rubric keeps the judgement consistent.`
+        : `${signalLabel} score feeding ${nodeLabel}.`,
     dependency: `${nodeLabel} -> ${signalLabel}`,
   };
 }

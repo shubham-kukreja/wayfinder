@@ -106,4 +106,15 @@ describe("§8.4 realRatesScore (regression — already covered but re-asserted h
     expect(realRatesScore(0, "gold")).toBe(50);
     expect(realRatesScore(0, "silver")).toBe(50);
   });
+
+  it("matches all five gold bands and their exact boundaries", () => {
+    expect(realRatesScore(-51, "gold")).toBe(75);
+    expect(realRatesScore(-50, "gold")).toBe(60);
+    expect(realRatesScore(-30, "gold")).toBe(60); // worked example
+    expect(realRatesScore(-10, "gold")).toBe(50);
+    expect(realRatesScore(10, "gold")).toBe(50);
+    expect(realRatesScore(11, "gold")).toBe(40);
+    expect(realRatesScore(50, "gold")).toBe(40);
+    expect(realRatesScore(51, "gold")).toBe(25);
+  });
 });

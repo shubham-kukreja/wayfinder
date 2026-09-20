@@ -8,6 +8,11 @@ export const ALLOCATION_ROUTES: Array<{ path: string; label: string }> = [{ path
 export const MODEL_ROUTES: Array<{ path: string; label: string }> = [
   { path: "/model/signals", label: "Signals" },
   { path: "/model/datapoints", label: "Data Points" },
+  // The one surface where a human ENTERS a score rather than reading one.
+  // Data Points is a read-only registry by design, so the rubric cells it
+  // lists as "Needs analyst input" had nowhere to be answered — this view
+  // was fully built (pickers, live preview, save) but never routed.
+  { path: "/model/inputs", label: "Analyst Inputs" },
   { path: "/model/parameters", label: "Parameters" },
 ];
 
@@ -19,6 +24,12 @@ export const GOVERNANCE_ROUTES: Array<{ path: string; label: string }> = [
   { path: "/reviews/history", label: "History" },
   { path: "/reviews/cadence", label: "Cadence" },
 ];
+
+// Notes is its own group rather than filed under one of the three above: a
+// note can reference a data point, a sleeve, a signal and a past version all
+// in the same sentence, so it doesn't belong to any single state of the
+// model the way Allocation/Model/Governance each do.
+export const NOTES_ROUTES: Array<{ path: string; label: string }> = [{ path: "/notes", label: "Notes" }];
 
 // Reference material, deliberately outside the groups: Methodology is the
 // one page that never changes with the data, so it is not a state of the

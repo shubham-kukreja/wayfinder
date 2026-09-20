@@ -20,6 +20,7 @@
     "pdf-parse": "^2.4.5",
     "playwright-core": "^1.48.0",
     "undici": "^7.1.0",
+    "xlsx": "0.18.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {

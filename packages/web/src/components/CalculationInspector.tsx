@@ -3,6 +3,7 @@ import type { Allocation, ScoreState, SeriesState, Snapshot, TiltGroupId } from 
 import { GROUP_LABELS, NODE_LABELS } from "@wayfinder/engine";
 import { DistributionStrip } from "./DistributionStrip.js";
 import { segmentSwatchStyle } from "./AllocationBar.js";
+import { ScoreFormulaTrace, hasScoreFormulaTrace } from "./ScoreFormulaTraces.js";
 import { formatPct, formatScore, formatSignedPct } from "../lib/format.js";
 
 const SIGNAL_LABELS: Record<string, string> = {
@@ -167,65 +168,37 @@ function SignalDerivationTrace({
   );
 }
 
-// l1.equity::momentum is a 3-series derivation (nifty50_close,
-// nifty50_div_yield, gsec_10y), not a single-series percentile, so it gets
-// its own trace matching server/src/pipeline/derive.ts.
-function EquityMomentumTrace({ series, score }: { series: Record<string, SeriesState>; score: number }) {
-  const close = series["nifty50_close"];
-  const divYield = series["nifty50_div_yield"];
-  const gsec = series["gsec_10y"];
-  if (!close || !divYield || !gsec || close.latest === null || divYield.latest === null || gsec.latest === null) return null;
-
-  const inputs = [
-    { id: "nifty50_close", label: "Nifty 50 close", value: close.latest.toLocaleString("en-IN"), state: close },
-    { id: "nifty50_div_yield", label: "Trailing dividend yield", value: `${divYield.latest}%`, state: divYield },
-    { id: "gsec_10y", label: "10Y G-sec yield", value: `${gsec.latest.toFixed(2)}%`, state: gsec },
-  ];
+// Picks the right derivation trace for a score cell. Cells whose
+// calculation is more than "percentile one series" each have their own
+// component; the generic trace handles the rest. Kept as one function so
+// the dispatch order is visible in a single place rather than spread
+// across nested ternaries in the JSX.
+function renderTrace({
+  selectedId,
+  selectedSignal,
+  scoreState,
+  focusedSeries,
+  series,
+  score,
+}: {
+  selectedId: string;
+  selectedSignal: string;
+  scoreState: ScoreState;
+  focusedSeries: SeriesState | undefined;
+  series: Record<string, SeriesState>;
+  score: number;
+}) {
+  if (hasScoreFormulaTrace(selectedId)) {
+    return <ScoreFormulaTrace scoreId={selectedId} scoreState={scoreState} series={series} score={score} />;
+  }
 
   return (
-    <section>
-      <h3 className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Where Momentum came from</h3>
-      <p className="mt-2 text-[13px] leading-5 text-muted">
-        Equity's total return over the trailing year, less the risk-free rate, ranked against its own history. Three inputs feed it.
-      </p>
-
-      <div className="mt-3 border-y border-line">
-        {inputs.map((input) => (
-          <div key={input.id} className="border-b border-line py-2.5 last:border-0">
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="truncate text-[13px] text-ink-2">{input.label}</span>
-              <span className="shrink-0 text-[15px] font-semibold tabular-nums text-ink">{input.value}</span>
-            </div>
-            <p className="mt-0.5 text-[12px] text-muted">
-              {input.id} · {input.state.source} · observed {formatDate(input.state.latestDate)}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-3 space-y-1.5 text-[12px] leading-5 text-ink-2">
-        <p>
-          <span className="font-semibold text-ink">1.</span> TRI return ≈ (12M price return) × (1 + dividend yield) − 1
-        </p>
-        <p>
-          <span className="font-semibold text-ink">2.</span> Excess return = TRI return × 100 − 10Y G-sec yield
-        </p>
-        <p>
-          <span className="font-semibold text-ink">3.</span> That excess-return history is percentiled as-is — persistent strength
-          scores positively, so it is not inverted.
-        </p>
-      </div>
-
-      <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-line pt-3">
-        <span className="text-[13px] text-muted">Momentum score</span>
-        <span className="text-[15px] font-semibold tabular-nums text-ink">{formatScore(score)}</span>
-      </div>
-
-      <p className="mt-3 text-[12px] leading-5 text-muted">
-        An approximation, not an exact TRI reconstruction: it applies one point-in-time dividend yield across the whole trailing
-        year, so it diverges from AMFI's published Nifty 50 TRI whenever yield itself moved materially.
-      </p>
-    </section>
+    <SignalDerivationTrace
+      scoreState={scoreState}
+      series={focusedSeries}
+      signalLabel={SIGNAL_LABELS[selectedSignal] ?? selectedSignal}
+      score={score}
+    />
   );
 }
 
@@ -436,16 +409,17 @@ export function CalculationInspector({
 
             {(focusedContribution && focusedScoreState) && (
               <div className="mt-6 border-t border-line pt-5">
-                {selectedId === "l1.equity::momentum" ? (
-                  <EquityMomentumTrace series={snapshot.series} score={focusedContribution.score} />
-                ) : (
-                  <SignalDerivationTrace
-                    scoreState={focusedScoreState}
-                    series={focusedSeries}
-                    signalLabel={SIGNAL_LABELS[selectedSignal!] ?? selectedSignal!}
-                    score={focusedContribution.score}
-                  />
-                )}
+                {/* Cells with a bespoke derivation get a bespoke trace;
+                    everything else falls through to the generic
+                    single-series percentile trace. */}
+                {renderTrace({
+                  selectedId,
+                  selectedSignal: selectedSignal!,
+                  scoreState: focusedScoreState,
+                  focusedSeries,
+                  series: snapshot.series,
+                  score: focusedContribution.score,
+                })}
               </div>
             )}
           </>

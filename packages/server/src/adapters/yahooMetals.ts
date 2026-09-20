@@ -202,12 +202,47 @@ export function createYahooMetalsAdapter(): SourceAdapter {
     // from the returned set, not fabricated.
     async fetchHistory(from: Date, to: Date): Promise<Observation[]> {
       const yearsSpan = (to.getTime() - from.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
-      const range = yearsSpan <= 6 ? "5y" : "10y";
+      // Beyond 10y, ask for "max" rather than clamping to "10y".
+      // l1.metals::valuation percentiles the real gold price against
+      // "15-20Y history" per its spec, and a 10y cap silently gave it
+      // ~8y (the series started 2016-10). Confirmed live 2026-09-19:
+      // GC=F at range=max&interval=1mo returns 268 monthly points back
+      // to 2000-09, so the deep history genuinely exists on the same
+      // endpoint and needed no new source.
+      const range = yearsSpan <= 6 ? "5y" : yearsSpan <= 10 ? "10y" : "max";
       const interval = yearsSpan <= 6 ? "1d" : "1mo";
       const [gold, silver] = await Promise.all([
         fetchChartHistory("GC=F", GOLD_USD_FUTURES_SERIES_ID, range, interval),
         fetchChartHistory("SI=F", SILVER_USD_FUTURES_SERIES_ID, range, interval),
       ]);
+
+      // The "1mo" presets have GAPS: confirmed live 2026-09-19, GC=F at
+      // range=max&interval=1mo returns no February or March 2026 point
+      // at all, while the same symbol at interval=1d returns 19 and 22
+      // trading days for those months. The monthly feed is not a
+      // reliable month-by-month series, so a deep backfill is topped up
+      // with a recent DAILY pass and the union is returned.
+      //
+      // This is not cosmetic. l1.metals::valuation joins gold to CPI by
+      // month, and those two missing months were exactly where the join
+      // died: the real-gold series stopped at 2026-01 and froze the cell
+      // on what looked like an all-time high. February actually closed
+      // at $5,247.90 — ABOVE January — so the gap was also hiding the
+      // true peak, not just the recent decline.
+      if (interval === "1mo") {
+        try {
+          const [goldDaily, silverDaily] = await Promise.all([
+            fetchChartHistory("GC=F", GOLD_USD_FUTURES_SERIES_ID, "5y", "1d"),
+            fetchChartHistory("SI=F", SILVER_USD_FUTURES_SERIES_ID, "5y", "1d"),
+          ]);
+          gold.push(...goldDaily);
+          silver.push(...silverDaily);
+        } catch {
+          // A failed top-up leaves the monthly backfill intact rather
+          // than aborting the whole range (§9: a failed fetch is a
+          // warning, never an exception).
+        }
+      }
       const inRange = (o: Observation) => {
         const d = new Date(o.date);
         return d >= from && d <= to;

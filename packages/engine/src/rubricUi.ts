@@ -13,6 +13,9 @@ import {
   growthDiffScore,
   rateCycleScores,
   silverIndustrialScore,
+  sectorCyclePositionScore,
+  type SectorCycleStage,
+  type SectorOverhang,
   type RbiStance,
   type GrowthVsExpect,
   type InflationDir,
@@ -24,6 +27,8 @@ import {
   type CbBuying,
   type EtfHoldings,
   type RbiPath12m,
+  debtLiquidityScore,
+  type DebtLiquidityNode,
 } from "./rubrics.js";
 
 export interface RubricFieldOption {
@@ -235,6 +240,36 @@ const rateCycleUi: RubricUiSpec = {
   },
 };
 
+// §7.3 debt liquidity/redemption safety — "set-and-forget except in
+// stress". Normal times is the frozen baseline (90/65/75, matches
+// DEBT_LIQUIDITY_BASELINE and the structural-constant values already
+// shipped in mock/snapshot.json). "Credit stress active" is the one
+// override debtLiquidityScore() already implements (corporate -> 40,
+// liquid/gilt -> 50) but nothing in the pipeline previously triggered —
+// no free source exists for "is a credit-fund stress episode
+// underway" (same unsourced class as debtFundamentalsUi's creditCycle
+// field: CRISIL/ICRA rating-action summaries, AMC gating events, no
+// programmatic feed), so this is an explicit analyst call, not
+// something scored 50 by default.
+const DEBT_LIQUIDITY_OPTIONS: RubricFieldOption[] = [
+  { value: "normal", label: "Normal" },
+  { value: "credit_stress", label: "Credit-fund stress episode underway" },
+];
+const debtLiquidityUi: RubricUiSpec = {
+  scoreIds: ["debt.gilt::liquidity", "debt.corporate::liquidity", "debt.liquid::liquidity"],
+  fields: [{ key: "stress", label: "Market condition", options: DEBT_LIQUIDITY_OPTIONS }],
+  evaluate: (s) => {
+    if (!s.stress) return null;
+    const stressActive = s.stress === "credit_stress";
+    const nodes: DebtLiquidityNode[] = ["gilt", "corporate", "liquid"];
+    const out: Record<string, number> = {};
+    for (const node of nodes) {
+      out[`debt.${node}::liquidity`] = debtLiquidityScore(node, stressActive);
+    }
+    return out;
+  },
+};
+
 // §8.8 silver industrial demand
 const silverIndustrialUi: RubricUiSpec = {
   scoreIds: ["metals.silver::industrial"],
@@ -268,6 +303,56 @@ const silverIndustrialUi: RubricUiSpec = {
   },
 };
 
+// SECTOR SATELLITE "Cycle position" — one spec per sector, since each
+// sector's cycle is judged on its own evidence (the workbook names a
+// different indicator per sector). The FIELDS are identical because the
+// rubric's arithmetic is; only the guidance text changes, so the analyst
+// is reminded what evidence this particular sector's stage rests on.
+const SECTOR_CYCLE_EVIDENCE: Record<string, string> = {
+  banking: "credit growth, asset quality",
+  it: "deal wins, pricing",
+  pharma: "approvals, US pricing",
+  auto: "volume growth",
+  capgoods: "capex announcements, order books",
+  fmcg: "volume growth, rural demand",
+  energy: "refining/marketing margins",
+  metals: "global prices, capacity additions",
+};
+
+function sectorCycleUi(sector: string, scoreId: string): RubricUiSpec {
+  const evidence = SECTOR_CYCLE_EVIDENCE[sector] ?? "the sector's own demand cycle";
+  return {
+    scoreIds: [scoreId],
+    fields: [
+      {
+        key: "stage",
+        label: `Cycle stage (${evidence})`,
+        options: [
+          { value: "turning_up", label: "Turning up, discipline intact (+15)" },
+          { value: "mid_cycle", label: "Mid-cycle (0)" },
+          { value: "late_cycle", label: "Late-cycle, capacity racing in (−15)" },
+        ],
+      },
+      {
+        key: "overhang",
+        label: "Regulatory / disruption overhang",
+        options: [
+          { value: "none", label: "None" },
+          { value: "regulatory_or_disruption", label: "Yes (−10)" },
+        ],
+      },
+    ],
+    evaluate: (s) => {
+      if (!s.stage || !s.overhang) return null;
+      const value = sectorCyclePositionScore({
+        stage: s.stage as SectorCycleStage,
+        overhang: s.overhang as SectorOverhang,
+      });
+      return { [scoreId]: value };
+    },
+  };
+}
+
 // Keyed by the score ID it drives, so the Inputs UI can look up "does
 // this score have a rubric picker" in O(1). Multi-score rubrics (rate
 // cycle) are registered under each of their score IDs, pointing at the
@@ -284,4 +369,8 @@ register(growthDiffUi("mid", "equity.mid::growth_diff"));
 register(growthDiffUi("small", "equity.small::growth_diff"));
 register(growthDiffUi("intl", "equity.intl::growth_diff"));
 register(rateCycleUi);
+register(debtLiquidityUi);
 register(silverIndustrialUi);
+for (const sector of ["banking", "it", "pharma", "auto", "capgoods", "fmcg", "energy", "metals"]) {
+  register(sectorCycleUi(sector, `sector.${sector}::cycle_position`));
+}

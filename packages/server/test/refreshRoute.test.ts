@@ -74,11 +74,14 @@ describe("parseRequestedSources — POST /api/refresh?sources=... (§13.1, §11.
   it("every available source name is buildable", () => {
     const config = loadConfig();
     const adapters = buildAdapters([...AVAILABLE_SOURCES], config, db);
-    // 14 source names -> 14 adapter instances, though "rbi" and
+    // 15 source names -> 15 adapter instances, though "rbi" and
     // "rbi_homepage" both report id "RBI" (two different mechanisms
     // fetching different RBI-sourced series — the dbie.rbihub.in mirror
-    // vs. rbi.org.in's own homepage), so the id list has only 13 unique
-    // values. "ccil" reports id "CCIL" — a distinct source writing to
+    // vs. rbi.org.in's own homepage), so the id list has only 14 unique
+    // values. "bis" reports id "BIS" — a third source writing to the
+    // same repo_rate series, going to BIS's SDMX API directly for the
+    // policy-rate history DBnomics' mirror of that dataset lags on (see
+    // adapters/bisPolicyRate.ts). "ccil" reports id "CCIL" — a distinct source writing to
     // the same tbill_1y series "rbi" (dbie.rbihub.in) already populates.
     // "aaa3y" reports id "AAA3Y_MOCK" — an intentional always-fails
     // adapter (see adapters/aaa3y.ts) so aaa_3y surfaces honestly as
@@ -87,15 +90,18 @@ describe("parseRequestedSources — POST /api/refresh?sources=... (§13.1, §11.
     // schemes are tracked in this in-memory test DB (see
     // adapters/amfiNav.ts's file-level comment on why its series list is
     // read from the DB at construction time rather than fixed).
-    expect(adapters).toHaveLength(14);
+    expect(adapters).toHaveLength(17);
     expect(adapters.map((a) => a.id).sort()).toEqual([
       "AAA3Y_MOCK",
       "AMFI",
       "AMFI_NAV",
+      "BIS",
       "CCIL",
       "DBNOMICS",
       "FRED",
+      "GOLD_ETF_HOLDINGS",
       "IBJA",
+      "MULTPL",
       "NIFTYINDICES",
       "NSE",
       "RBI",

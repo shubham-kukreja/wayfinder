@@ -37,6 +37,33 @@ describe("AMFI adapter — parses real category-wise monthly reports", () => {
     expect(debtAum?.value).toBe(1651502.37);
   });
 
+  it("parses August 2026 report after AMFI renamed the group headings", async () => {
+    // AMFI renamed "I Income/Debt Oriented Schemes" -> "I Debt Schemes"
+    // and "II Growth/Equity Oriented Schemes" -> "II Equity Schemes" in
+    // the August 2026 report (July is still the old form).
+    //
+    // The regression this locks is NOT just the rename. The August PDF
+    // STILL contains the old heading text further down, as a small
+    // supplementary FoF/overseas table (35 schemes). The old substring
+    // matcher latched onto that table and read its subtotal instead:
+    // aum_duration came back 11,492.54 against a true 19,33,475.56, and
+    // aum_equity 4,039.73 against 39,21,147.36. The bogus AUM put the 3M
+    // flow ratio at 224% of AUM and pinned l1.debt::flows to 0.
+    const text = await extractText("amfi_category_aug2026.pdf");
+    const observations = parseAmfiCategoryReport(text, "2026-08-01");
+    const value = (id: string) => observations.find((o) => o.seriesId === id)?.value;
+
+    expect(value("aum_duration")).toBe(1933475.56);
+    expect(value("flow_duration_3m")).toBe(-8127.32);
+    expect(value("aum_equity")).toBe(3921147.36);
+    expect(value("flow_equity_3m")).toBe(29328.62);
+
+    // The supplementary table's figures must appear nowhere.
+    expect(value("aum_duration")).not.toBe(11492.54);
+    expect(value("flow_duration_3m")).not.toBe(-1098.03);
+    expect(value("aum_equity")).not.toBe(4039.73);
+  });
+
   it("parses individual category rows (large/mid/small-cap, sectoral, gold ETF)", async () => {
     const text = await extractText("amfi_category_mar2026.pdf");
     const observations = parseAmfiCategoryReport(text, "2026-03-01");

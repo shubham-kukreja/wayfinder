@@ -2,15 +2,44 @@ import type Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { computeAllocation, snapshotSchema, type Snapshot } from "@wayfinder/engine";
+import {
+  computeAllocation,
+  snapshotSchema,
+  SECTOR_NODES,
+  rateCycleScores,
+  debtLiquidityScore,
+  type DebtLiquidityNode,
+  type SeriesSource,
+  type Snapshot,
+} from "@wayfinder/engine";
 import { computeAutoScoreCells } from "./scoreCells.js";
 import { buildSeriesState } from "./buildSeriesState.js";
 import { storedSeriesIds } from "../store/observations.js";
+import {
+  deriveIndiaUsValuationGapSeries,
+  deriveRealGsec10ySeries,
+  deriveFlowRatio3mSeries,
+  deriveBondIndexReturn12mSeries,
+  deriveRealGoldPriceSeries,
+  cpiIndexSpliced,
+  deriveFlowMean3mSeries,
+  deriveGoldReturn12mSeries,
+  deriveGoldReturn6mSeries,
+  deriveUsReal10y6mChangeSeries,
+  goldParabolic6mReturn,
+  deriveGoldSilverRatio20ySeries,
+} from "./derive.js";
+import { computePercentile } from "./percentile.js";
 import { allManualScores, allManualVetoes } from "../store/manual.js";
 import { loadCurrentParams } from "../store/params.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MOCK_SNAPSHOT_PATH = join(__dirname, "../../../../mock/snapshot.json");
+
+// §9 veto.parabolic: a >40% six-month move in gold. Spec-fixed, not a
+// tunable - it lives here rather than in Params because no governance
+// parameter row exists for it.
+const PARABOLIC_6M_THRESHOLD = 0.4;
 
 export interface CurrentSnapshotResult {
   snapshot: Snapshot;
@@ -74,7 +103,10 @@ export function buildCurrentSnapshot(db: Database.Database, asOf: string = new D
       raw.scores[cell.scoreId] = {
         ...raw.scores[cell.scoreId],
         mock: true,
-        mockReason: `Wired, but insufficient history to compute — needs ${raw.params.percentileMinObservations} observations from ${cell.derivedFrom.join(" x ")}.`,
+        mockReason:
+          cell.historySpanYears !== undefined
+            ? `Wired, but only ${cell.historySpanYears.toFixed(2)} years of ${cell.derivedFrom.join(" x ")} history is stored — too short to rank "vs its own history" meaningfully.`
+            : `Wired, but insufficient history to compute — needs ${raw.params.percentileMinObservations} observations from ${cell.derivedFrom.join(" x ")}.`,
         derivedFrom: cell.derivedFrom,
       };
       continue;
@@ -94,8 +126,16 @@ export function buildCurrentSnapshot(db: Database.Database, asOf: string = new D
       derivedFrom: cell.derivedFrom,
       computedAt: asOf,
       staleDays,
+      computedForDate: cell.latestDate,
       mock: false,
       mockReason: null,
+      // Rubric cells only — the per-field choices behind the score, so
+      // the UI can show the arithmetic instead of just the total.
+      rubricInputs: cell.rubricInputs ?? null,
+      // Windowed percentile cells — the real depth behind the ranking,
+      // so a 2-year percentile cannot present as a 10-year one.
+      historySpanYears: cell.historySpanYears ?? null,
+      historyShortfall: cell.historyShortfall ?? false,
     };
     recomputedIds.push(cell.scoreId);
 
@@ -119,6 +159,196 @@ export function buildCurrentSnapshot(db: Database.Database, asOf: string = new D
     if (state) raw.series[seriesId] = { ...state, mock: false };
   }
 
+  // Publish the DERIVED series that score cells actually percentile.
+  // They are computed in-pipeline and live in no table, so the loop above
+  // (which walks stored series only) cannot reach them — leaving the UI
+  // with nothing to show but each raw leg's own percentile, which is not
+  // what was ranked and openly contradicts the score (gsec_10y at 28.6
+  // against a cell scoring 70, live 2026-09-19). Same reasoning as the
+  // overlay comment above: a trace must never display a number that
+  // disagrees with the score it claims to explain.
+  //
+  // Publishing the ranked quantity also makes the percentile STEP of each
+  // formula showable. Without it a flows trace could say "rank the ratio
+  // against its own history" and then jump straight to the final score
+  // with nothing in between — the reader has no way to check 18.5.
+  const publishDerived = (
+    id: string,
+    rows: Array<{ date: string; value: number }>,
+    sourceLegId: string,
+    fallbackSource: SeriesSource
+  ) => {
+    if (rows.length === 0) return;
+    const last = rows[rows.length - 1]!;
+    const pct = computePercentile(
+      rows.map((o) => o.value),
+      last.value,
+      raw.params.percentileMinObservations
+    );
+    raw.series[id] = {
+      id,
+      latest: last.value,
+      latestDate: last.date,
+      percentile: pct.status === "ok" ? pct.percentile : null,
+      observations: rows.length,
+      windowStart: rows[0]!.date,
+      // Derived, not fetched: it inherits a leg's provenance rather than
+      // claiming a source of its own.
+      source: raw.series[sourceLegId]?.source ?? fallbackSource,
+      status: pct.status === "ok" ? "ok" : "insufficient_history",
+      staleDays: Math.max(0, Math.round((new Date(asOfDate).getTime() - new Date(last.date).getTime()) / 86_400_000)),
+      error: null,
+      mock: false,
+    };
+  };
+
+  publishDerived("real_gsec_10y", deriveRealGsec10ySeries(db), "gsec_10y", "FRED");
+  publishDerived("flow_ratio_equity_3m", deriveFlowRatio3mSeries(db, "flow_equity_3m", "aum_equity"), "flow_equity_3m", "AMFI");
+  publishDerived("flow_ratio_duration_3m", deriveFlowRatio3mSeries(db, "flow_duration_3m", "aum_duration"), "flow_duration_3m", "AMFI");
+  publishDerived("bond_index_return_12m", deriveBondIndexReturn12mSeries(db), "bond_index_close", "NIFTYINDICES");
+  publishDerived("real_gold_inr", deriveRealGoldPriceSeries(db), "gold_inr", "IBJA");
+  publishDerived("flow_goldetf_3m", deriveFlowMean3mSeries(db, "flow_goldetf"), "flow_goldetf", "AMFI");
+  publishDerived("gold_return_12m_inr", deriveGoldReturn12mSeries(db), "gold_usd_futures", "YAHOO_METALS");
+  publishDerived("gold_return_6m_inr", deriveGoldReturn6mSeries(db), "gold_usd_futures", "YAHOO_METALS");
+  publishDerived("us_real_10y_6m_change_bp", deriveUsReal10y6mChangeSeries(db), "us_real_10y", "FRED");
+  publishDerived("gold_silver_ratio_20y", deriveGoldSilverRatio20ySeries(db, raw.params.percentileMinObservations), "gold_usd_futures", "YAHOO_METALS");
+  // The SPLICED CPI, i.e. the deflator actually used. snapshot.series
+  // carries cpi_index as stored, whose latest row is RBI's ~104.84 on
+  // the post-rebase base — showing that beside a deflation performed on
+  // the FRED-scale spliced series would restate the arithmetic wrong by
+  // the splice factor itself.
+  // equity.intl::valuation's gap adjustment. Without publishing it the
+  // trace could only show each leg's own P/E, neither of which is the
+  // quantity whose percentile selects the +/-5-10 band.
+  publishDerived("india_us_valuation_gap", deriveIndiaUsValuationGapSeries(db), "nifty100_pe", "NIFTYINDICES");
+  publishDerived("cpi_index_spliced", cpiIndexSpliced(db).rows, "cpi_index", "FRED");
+
+  // Gold industrial demand is explicitly neutral in the workbook; it has
+  // no external input and must not inherit the demo baseline's fake lineage.
+  raw.scores["metals.gold::industrial"] = {
+    ...raw.scores["metals.gold::industrial"], value: 50, provenance: "static", transform: "static",
+    derivedFrom: [], computedAt: null, staleDays: 0, mock: false, mockReason: null,
+  };
+
+  // Sector cycle-position cells carry a real rubric (start 50; stage
+  // +15/0/-15; overhang -10 — sectorCyclePositionScore in rubrics.ts)
+  // but no feed that can answer it, so the pipeline never emits them and
+  // they keep the mock baseline's "manual" provenance. That matters
+  // beyond labelling: the Analyst Inputs view only renders a rubric
+  // PICKER for cells whose provenance is "rubric", so leaving them
+  // "manual" gave the one set of cells that most needs the picker a bare
+  // number instead. Marked here rather than in the baseline file so the
+  // rubric stays the single source of truth for which cells have one.
+  //
+  // Still mock: nobody has answered the rubric yet. A manual entry below
+  // overrides this, exactly as it does for every other cell.
+  for (const nodeId of SECTOR_NODES) {
+    const scoreId = `${nodeId}::cycle_position`;
+    // Default to the rubric's OWN neutral case (mid-cycle, no overhang
+    // = 50) rather than keeping the demo baseline's spread of
+    // 55/45/55/60/70/50/40/35. Those numbers were demo filler, not
+    // anyone's judgement, and they were doing real work: capgoods' 70
+    // was propping up its sleeve qualification while three of its four
+    // signals were also mock. 50 is the honest unanswered value — §1
+    // invariant 4, "a missing signal scores 50, never a guess" — and it
+    // is what sectorCyclePositionScore returns for the no-adjustment
+    // case, so the default and the rubric can never disagree.
+    //
+    // NOT flagged mock: the value is a real, defensible model position
+    // (deliberately neutral), so it counts as live. But it is marked
+    // with rubricInputs carrying assumed: true, so "live" can never be
+    // read as "somebody looked at this" — the UI shows the default as a
+    // default. An analyst's saved answer overrides it below.
+    raw.scores[scoreId] = {
+      ...raw.scores[scoreId],
+      value: 50,
+      provenance: "rubric",
+      transform: "rubric",
+      mock: false,
+      mockReason: null,
+      rubricInputs: [
+        {
+          field: "Cycle stage",
+          selected: "Mid-cycle",
+          delta: 0,
+          basis: "No data feed can answer this — the rubric's own neutral case is used until an analyst picks a stage.",
+          assumed: true,
+        },
+        {
+          field: "Regulatory / disruption overhang",
+          selected: "None",
+          delta: 0,
+          basis: "No data feed can answer this — the rubric's own no-adjustment case is used until an analyst answers.",
+          assumed: true,
+        },
+      ],
+    };
+  }
+
+  // Debt rate-cycle — one picker drives 3 score cells (§8.7). No free
+  // source answers "expected 12m RBI path" (only realised repo-rate
+  // direction exists, a backward-looking proxy already spent on
+  // l1.debt::macro), so default to "On hold" — rateCycleScores' own
+  // neutral case (50/50/55) — until an analyst picks a path. Same
+  // "assumed: true" treatment as sector cycle-position: live, not mock,
+  // but visibly unanswered.
+  {
+    const defaultPath = "on_hold" as const;
+    const scores = rateCycleScores(defaultPath);
+    const rateCycleNodes: Record<"gilt" | "corporate" | "liquid", string> = {
+      gilt: "debt.gilt::rate_cycle",
+      corporate: "debt.corporate::rate_cycle",
+      liquid: "debt.liquid::rate_cycle",
+    };
+    for (const [node, scoreId] of Object.entries(rateCycleNodes) as [keyof typeof scores, string][]) {
+      raw.scores[scoreId] = {
+        ...raw.scores[scoreId],
+        value: scores[node],
+        provenance: "rubric",
+        transform: "rubric",
+        mock: false,
+        mockReason: null,
+        rubricInputs: [
+          {
+            field: "Expected 12m rate path",
+            selected: "On hold",
+            delta: 0,
+            basis: "No free source prices the forward 12m RBI path — the rubric's own on-hold case is used until an analyst picks a path.",
+            assumed: true,
+          },
+        ],
+      };
+    }
+  }
+
+  // Debt liquidity/redemption safety — "set-and-forget except in
+  // stress" (§7.3). No free source detects a credit-fund stress episode,
+  // so default to "Normal", which reproduces the exact frozen baseline
+  // (90/65/75) until an analyst flags stress.
+  {
+    const debtLiquidityNodes: DebtLiquidityNode[] = ["gilt", "corporate", "liquid"];
+    for (const node of debtLiquidityNodes) {
+      const scoreId = `debt.${node}::liquidity`;
+      raw.scores[scoreId] = {
+        ...raw.scores[scoreId],
+        value: debtLiquidityScore(node, false),
+        provenance: "rubric",
+        transform: "rubric",
+        mock: false,
+        mockReason: null,
+        rubricInputs: [
+          {
+            field: "Market condition",
+            selected: "Normal",
+            delta: 0,
+            basis: "No free source detects a credit-fund stress episode — the rubric's own normal-conditions baseline is used until an analyst flags stress.",
+            assumed: true,
+          },
+        ],
+      };
+    }
+  }
+
   const manualScores = allManualScores(db);
   for (const m of manualScores) {
     raw.scores[m.scoreId] = {
@@ -138,6 +368,36 @@ export function buildCurrentSnapshot(db: Database.Database, asOf: string = new D
       mock: false,
       mockReason: null,
     };
+  }
+
+  // §9 veto.parabolic - "if return >40% in 6M the parabolic veto fires
+  // regardless of this score."
+  //
+  // The metals momentum spec names this veto explicitly as the companion
+  // to its own score ("score 92, but check veto"), and veto.parabolic
+  // existed only as a VetoId in the type union - nothing ever set it, so
+  // the spec's "regardless of this score" clause could not fire at all.
+  //
+  // Applied BEFORE the manual overlay below, so a human's deliberate
+  // veto decision still wins on the same node. Fires on the same INR
+  // gold series the momentum cell ranks, so the two can never disagree
+  // about what gold did. A null 6-month return (not enough history)
+  // leaves the veto untouched rather than reading as "not triggered."
+  {
+    const sixMonth = goldParabolic6mReturn(db, asOfDate);
+    if (sixMonth !== null && sixMonth > PARABOLIC_6M_THRESHOLD) {
+      for (const nodeId of ["l1.metals", "metals.gold"] as const) {
+        raw.vetoes[nodeId] = {
+          active: true,
+          triggeredBy: ["veto.parabolic"],
+          provenance: "auto",
+          detail: `Gold (INR) returned ${(sixMonth * 100).toFixed(1)}% over 6 months, above the ${(
+            PARABOLIC_6M_THRESHOLD * 100
+          ).toFixed(0)}% parabolic threshold.`,
+          hadEffect: true, // recomputed below via computeAllocation's per-node vetoActive
+        };
+      }
+    }
   }
 
   const manualVetoes = allManualVetoes(db);

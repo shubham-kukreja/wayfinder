@@ -140,6 +140,15 @@ export type SeriesSource =
   | "YAHOO_METALS"
   | "TRADINGECONOMICS"
   | "DBNOMICS"
+  // BIS and AMFI_NAV write observations but were never added here, so
+  // publishing either to a snapshot threw a Zod validation error rather
+  // than serving the series (caught 2026-09-20 when MULTPL hit the same
+  // wall). MULTPL is multpl.com's S&P 500 trailing P/E — see
+  // adapters/multpl.ts.
+  | "BIS"
+  | "AMFI_NAV"
+  | "MULTPL"
+  | "GOLD_ETF_HOLDINGS"
   | "MANUAL";
 export type SeriesStatus = "ok" | "stale" | "failed" | "insufficient_history" | "manual";
 
@@ -171,12 +180,49 @@ export interface ScoreState {
   computedAt: string | null;
   enteredAt: string | null;
   staleDays: number | null;
+  // The date of the observation this score was ACTUALLY computed from.
+  // Not derivable from the upstream legs: a cell that joins by month
+  // ends wherever the join last resolved, which can be EARLIER than
+  // every leg's own latest date. l1.metals::valuation is the live case —
+  // gold ran to September and CPI to March, but they last overlapped in
+  // March, so reporting either leg's date overstated the number's age.
+  computedForDate?: string | null;
   note: string | null;
   confidence: Confidence | null;
   // See schema.ts — true when the value is still the static mock
   // baseline (never wired, or wired but insufficient_history).
   mock?: boolean;
   mockReason?: string | null;
+  // PERCENTILE cells whose spec names a history window ("percentile vs
+  // its own 10Y history"): the calendar span actually ranked against,
+  // and whether it is short of params.percentileWindowYears. A score
+  // computed on 2 years of a 10-year window is not wrong, but it is
+  // provisional, and observation count cannot express that — daily data
+  // clears a row floor in weeks. Optional so existing fixtures parse.
+  historySpanYears?: number | null;
+  historyShortfall?: boolean;
+  // For a RUBRIC cell, which option each field resolved to and the
+  // evidence behind it. A rubric's score is a sum of discrete choices,
+  // so the final number alone is unauditable: "45" cannot be checked
+  // without knowing that the stance read on_hold and inflation read
+  // rising. Percentile cells don't need this — their input series and
+  // percentile are already on SeriesState.
+  rubricInputs?: RubricInput[] | null;
+}
+
+export interface RubricInput {
+  // The rubric field, matching the spec's own wording ("RBI stance").
+  field: string;
+  // The option selected ("On hold"), or null when nothing could be derived.
+  selected: string | null;
+  // Points this choice contributed, already signed.
+  delta: number;
+  // Why it resolved this way, in the reader's terms — e.g.
+  // "repo_rate 5.25% unchanged vs 5.25% six months ago (2026-03-01)".
+  basis: string | null;
+  // True when no source answers this field and the rubric's own
+  // no-adjustment case was used, rather than a derived reading.
+  assumed?: boolean;
 }
 
 export interface VetoState {

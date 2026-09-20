@@ -488,15 +488,15 @@
       "confidence": null
     },
     "equity.large::margin_cycle": {
-      "value": 55,
+      "value": 50,
       "provenance": "manual",
       "derivedFrom": [],
       "transform": "none",
       "computedAt": "2026-09-03T06:00:00Z",
       "enteredAt": "2026-08-15T00:00:00Z",
       "staleDays": 12,
-      "note": null,
-      "confidence": "medium"
+      "note": "No free source for segment EBITDA margin, credit growth, or OBICUS capacity utilization (checked live 2026-09-20, all dead ends). Held at neutral 50 pending analyst entry, not a computed result.",
+      "confidence": null
     },
     "equity.mid::valuation": {
       "value": 35,
@@ -549,15 +549,15 @@
       "confidence": null
     },
     "equity.mid::margin_cycle": {
-      "value": 40,
+      "value": 50,
       "provenance": "manual",
       "derivedFrom": [],
       "transform": "none",
       "computedAt": "2026-09-03T06:00:00Z",
       "enteredAt": "2026-08-15T00:00:00Z",
       "staleDays": 12,
-      "note": null,
-      "confidence": "medium"
+      "note": "No free source for segment EBITDA margin, credit growth, or OBICUS capacity utilization (checked live 2026-09-20, all dead ends). Held at neutral 50 pending analyst entry, not a computed result.",
+      "confidence": null
     },
     "equity.small::valuation": {
       "value": 25,
@@ -610,15 +610,15 @@
       "confidence": null
     },
     "equity.small::margin_cycle": {
-      "value": 30,
+      "value": 50,
       "provenance": "manual",
       "derivedFrom": [],
       "transform": "none",
       "computedAt": "2026-09-03T06:00:00Z",
       "enteredAt": "2026-08-15T00:00:00Z",
       "staleDays": 12,
-      "note": null,
-      "confidence": "medium"
+      "note": "No free source for segment EBITDA margin, credit growth, or OBICUS capacity utilization (checked live 2026-09-20, all dead ends). Held at neutral 50 pending analyst entry, not a computed result.",
+      "confidence": null
     },
     "equity.intl::valuation": {
       "value": 40,
@@ -674,8 +674,8 @@
       "computedAt": "2026-09-03T06:00:00Z",
       "enteredAt": "2026-08-15T00:00:00Z",
       "staleDays": 12,
-      "note": null,
-      "confidence": "medium"
+      "note": "No free source for US aggregate margin percentile, credit growth, or OBICUS capacity utilization (checked live 2026-09-20, all dead ends). Held at neutral 50 pending analyst entry, not a computed result.",
+      "confidence": null
     },
     "debt.liquid::carry": {
       "value": 55,
@@ -718,11 +718,11 @@
     },
     "debt.liquid::liquidity": {
       "value": 90,
-      "provenance": "static",
+      "provenance": "rubric",
       "derivedFrom": [
         "series:example"
       ],
-      "transform": "static",
+      "transform": "rubric",
       "computedAt": "2026-09-03T06:00:00Z",
       "enteredAt": null,
       "staleDays": 0,
@@ -770,11 +770,11 @@
     },
     "debt.corporate::liquidity": {
       "value": 65,
-      "provenance": "static",
+      "provenance": "rubric",
       "derivedFrom": [
         "series:example"
       ],
-      "transform": "static",
+      "transform": "rubric",
       "computedAt": "2026-09-03T06:00:00Z",
       "enteredAt": null,
       "staleDays": 0,
@@ -822,11 +822,11 @@
     },
     "debt.gilt::liquidity": {
       "value": 75,
-      "provenance": "static",
+      "provenance": "rubric",
       "derivedFrom": [
         "series:example"
       ],
-      "transform": "static",
+      "transform": "rubric",
       "computedAt": "2026-09-03T06:00:00Z",
       "enteredAt": null,
       "staleDays": 0,

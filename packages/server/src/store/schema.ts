@@ -96,6 +96,45 @@ export function migrate(db: Database.Database): void {
       added_at    TEXT NOT NULL,
       active      INTEGER NOT NULL DEFAULT 1
     );
+
+    -- A note is freestanding text; it doesn't live "under" any one entity.
+    -- Any data point, sleeve, signal, rubric or snapshot it discusses is
+    -- recorded in note_refs instead, so a note can mention several things
+    -- (or none) and any entity can ask "which notes mention me".
+    CREATE TABLE IF NOT EXISTS notes (
+      id         TEXT PRIMARY KEY,
+      title      TEXT,
+      body       TEXT NOT NULL,
+      author     TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS note_refs (
+      note_id     TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id   TEXT NOT NULL,
+      position    INTEGER NOT NULL,
+      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_note_refs_note ON note_refs (note_id);
+    CREATE INDEX IF NOT EXISTS idx_note_refs_entity ON note_refs (entity_type, entity_id);
+
+    -- Embedded widgets (e.g. the allocation bar) dropped into a note while
+    -- writing it. One row per widget instance; position orders them within
+    -- the note the same way note_refs orders mentions.
+    CREATE TABLE IF NOT EXISTS note_widgets (
+      id          TEXT PRIMARY KEY,
+      note_id     TEXT NOT NULL,
+      widget_type TEXT NOT NULL,
+      config_json TEXT NOT NULL DEFAULT '{}',
+      size        TEXT NOT NULL DEFAULT 'medium',
+      position    INTEGER NOT NULL,
+      FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_note_widgets_note ON note_widgets (note_id);
   `);
 
   ensureColumn(db, "manual_scores", "reason", "TEXT");

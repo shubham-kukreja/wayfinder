@@ -104,6 +104,51 @@ describe("buildCurrentSnapshot — single source of truth for 'current state'", 
     expect(snapshot.allocation.groups.debt.nodes["debt.corporate"]!.vetoActive).toBe(true);
   });
 
+  it("automatically fires the parabolic metals veto above a 40% six-month INR gold return, while a manual decision still wins", () => {
+    const goldValues = [...Array(12).fill(1000), 1100, 1200, 1300, 1400, 1450, 1500];
+    const goldRows = goldValues.map((value, i) => ({
+      seriesId: "gold_usd_futures",
+      date: `${2025 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}-01`,
+      value,
+      basis: null,
+      source: "YAHOO_METALS",
+      fetchedAt: "2026-06-30T00:00:00Z",
+    }));
+    const fxRows = goldRows.map((row) => ({ ...row, seriesId: "usd_inr", value: 80 }));
+    insertObservations(db, [...goldRows, ...fxRows]);
+
+    const automatic = buildCurrentSnapshot(db, "2026-06-30T00:00:00Z").snapshot;
+    expect(automatic.vetoes["l1.metals"]!.active).toBe(true);
+    expect(automatic.vetoes["l1.metals"]!.provenance).toBe("auto");
+    expect(automatic.vetoes["l1.metals"]!.triggeredBy).toContain("veto.parabolic");
+    expect(automatic.vetoes["metals.gold"]!.active).toBe(true);
+
+    upsertManualVeto(db, {
+      nodeId: "l1.metals",
+      active: false,
+      detail: "Reviewed and cleared",
+      enteredAt: "2026-06-30T00:00:00Z",
+    });
+    const overridden = buildCurrentSnapshot(db, "2026-06-30T00:00:00Z").snapshot;
+    expect(overridden.vetoes["l1.metals"]!.active).toBe(false);
+    expect(overridden.vetoes["l1.metals"]!.provenance).toBe("manual");
+    expect(overridden.vetoes["metals.gold"]!.active).toBe(true);
+  });
+
+  it("publishes the exact DFII10 six-month change used by l1.metals::macro", () => {
+    insertObservations(db, [
+      { seriesId: "us_real_10y", date: "2026-03-17", value: 1.8, basis: null, source: "FRED", fetchedAt: "2026-09-19T00:00:00Z" },
+      { seriesId: "us_real_10y", date: "2026-03-18", value: 2.2, basis: null, source: "FRED", fetchedAt: "2026-09-19T00:00:00Z" },
+      { seriesId: "us_real_10y", date: "2026-09-17", value: 1.5, basis: null, source: "FRED", fetchedAt: "2026-09-19T00:00:00Z" },
+    ]);
+
+    const { snapshot } = buildCurrentSnapshot(db, "2026-09-19T00:00:00Z");
+    expect(snapshot.series["us_real_10y_6m_change_bp"]!.latest).toBeCloseTo(-30, 10);
+    expect(snapshot.series["us_real_10y_6m_change_bp"]!.latestDate).toBe("2026-09-17");
+    expect(snapshot.scores["l1.metals::macro"]!.value).toBe(60);
+    expect(snapshot.scores["l1.metals::macro"]!.computedForDate).toBe("2026-09-17");
+  });
+
   // Regression test for a real bug found via a browser smoke test:
   // debt.gilt::carry (and every other auto cell) was hardcoded to
   // staleDays: 0 regardless of how old the observation it was actually

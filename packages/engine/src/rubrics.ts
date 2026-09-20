@@ -35,8 +35,9 @@ export function realRatesScore(changeBp: number, metal: "gold" | "silver"): numb
   if (changeBp < -50) return 65;
   if (changeBp < -10) return 57;
   if (changeBp <= 10) return 50;
-  if (changeBp <= 50) return 45;
-  return 35;
+  // The workbook gives Silver one rising band (45); it does not define a
+  // separate >50bp Silver penalty. Do not invent a 35-point bucket.
+  return 45;
 }
 
 // §8.1 Equity macro — start 50, clamp 0-100.
@@ -183,5 +184,46 @@ export function silverIndustrialScore(pmi: number, priorPmi: number, strongSolar
   else if (pmi >= 50) score = 55;
   else score = 35;
   if (strongSolarEvCapex) score += 5;
+  return Math.max(0, Math.min(100, score));
+}
+
+// Calculation Guide, SECTOR SATELLITE — "Cycle position": sector-specific
+// rubric, start 50. The sector's own demand cycle turning up with
+// capacity/pricing discipline intact: +15. Mid-cycle: 0. Late-cycle
+// (peak margins, capacity racing in): -15. Regulatory or disruption
+// overhang: -10.
+//
+// Deliberately NOT auto-derived, and it is the only sector signal where
+// that is a property of the SPEC rather than of a missing feed. The
+// workbook's own source column names a DIFFERENT indicator per sector
+// ("credit growth (banks), deal wins (IT), capex announcements
+// (industrials), volume growth (auto/FMCG)"), and the four states it
+// asks to distinguish are qualitative judgements: "pricing discipline
+// intact", "capacity racing in", "regulatory or disruption overhang".
+// Credit growth is published fortnightly by RBI and OBICUS capacity
+// utilisation quarterly, but neither ANSWERS the rubric — a high credit
+// growth number does not say whether discipline is intact or whether
+// capacity is racing in, and mapping one to the other would be inventing
+// the judgement the analyst is supposed to make.
+//
+// So this follows §12.2 ("rubric scores get the rubric, not a number
+// box"): the analyst picks the stage and the overhang, and the score
+// follows deterministically from the workbook's own arithmetic. Two
+// INDEPENDENT fields, because the overhang is additive to the stage in
+// the spec's wording — a late-cycle sector under a regulatory cloud is
+// 50 - 15 - 10 = 25, not one or the other.
+export type SectorCycleStage = "turning_up" | "mid_cycle" | "late_cycle";
+export type SectorOverhang = "none" | "regulatory_or_disruption";
+
+export interface SectorCyclePositionInput {
+  stage: SectorCycleStage;
+  overhang: SectorOverhang;
+}
+
+export function sectorCyclePositionScore(input: SectorCyclePositionInput): number {
+  let score = 50;
+  if (input.stage === "turning_up") score += 15;
+  else if (input.stage === "late_cycle") score -= 15;
+  if (input.overhang === "regulatory_or_disruption") score -= 10;
   return Math.max(0, Math.min(100, score));
 }

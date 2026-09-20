@@ -6,7 +6,10 @@ import { DriversView } from "./views/DriversView.js";
 import { DataPointControlCenterView } from "./views/DataPointControlCenterView.js";
 import { MethodologyView } from "./views/MethodologyView.js";
 import { ParametersView } from "./views/ParametersView.js";
+import { InputsView } from "./views/InputsView.js";
 import { HistoryView } from "./views/HistoryView.js";
+import { NotesView } from "./views/NotesView.js";
+import { NoteEditorView } from "./views/NoteEditorView.js";
 import { Sidebar } from "./components/shell/Sidebar.js";
 import { TopBar } from "./components/shell/TopBar.js";
 import { MobileNav } from "./components/shell/MobileNav.js";
@@ -15,6 +18,21 @@ import { CURRENT_SNAPSHOT_URL, FIXTURES, PUBLISHED_SNAPSHOT_URL } from "./lib/co
 
 export default function App() {
   const location = useLocation();
+
+  // The note editor is deliberately not inside the app shell below: opening
+  // a note means seeing only that note, full width and full height, with no
+  // sidebar or top bar competing for the screen — so it renders as an
+  // entirely separate tree rather than one more <Route> inside the shell.
+  if (/^\/notes\/[^/]+$/.test(location.pathname)) {
+    // Still needs a <Route> (not a bare component render) so useParams
+    // inside NoteEditorView can read the :id segment — react-router only
+    // populates route params for elements rendered through matching.
+    return (
+      <Routes>
+        <Route path="/notes/:id" element={<NoteEditorView />} />
+      </Routes>
+    );
+  }
   // The dev fixture switcher was removed from the top bar, so the app always
   // loads live data. The fixture plumbing below stays in place for the mock
   // states it can still serve if a switcher is reintroduced.
@@ -54,10 +72,12 @@ export default function App() {
             <Route path="/methodology" element={<MethodologyView snapshot={snapshot} />} />
             <Route path="/model/methodology" element={<Navigate to="/methodology" replace />} />
             <Route path="/model/parameters" element={<ParametersView snapshot={snapshot} />} />
+            <Route path="/model/inputs" element={<InputsView snapshot={snapshot} />} />
             <Route path="/reviews" element={<Navigate to="/reviews/decide" replace />} />
             <Route path="/reviews/decide" element={<HistoryView snapshot={snapshot} section="decide" />} />
             <Route path="/reviews/history" element={<HistoryView snapshot={snapshot} section="history" />} />
             <Route path="/reviews/cadence" element={<HistoryView snapshot={snapshot} section="cadence" />} />
+            <Route path="/notes" element={<NotesView />} />
             <Route path="*" element={<Navigate to="/overview" replace />} />
           </Routes>
         )}

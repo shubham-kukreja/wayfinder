@@ -11,7 +11,7 @@ const seriesStateSchema = z.object({
   percentile: z.number().min(0).max(100).nullable(),
   observations: z.number().int().nonnegative(),
   windowStart: z.string().nullable(),
-  source: z.enum(["FRED", "NSE", "NIFTYINDICES", "AMFI", "RBI", "CCIL", "IBJA", "YAHOO", "YAHOO_METALS", "TRADINGECONOMICS", "DBNOMICS", "MANUAL"]),
+  source: z.enum(["FRED", "NSE", "NIFTYINDICES", "AMFI", "RBI", "CCIL", "IBJA", "YAHOO", "YAHOO_METALS", "TRADINGECONOMICS", "DBNOMICS", "BIS", "AMFI_NAV", "MULTPL", "GOLD_ETF_HOLDINGS", "MANUAL"]),
   status: z.enum(["ok", "stale", "failed", "insufficient_history", "manual"]),
   staleDays: z.number().nullable(),
   error: z.string().nullable(),
@@ -31,6 +31,9 @@ const scoreStateSchema = z.object({
   computedAt: z.string().nullable(),
   enteredAt: z.string().nullable(),
   staleDays: z.number().nullable(),
+  // The observation date the score was actually computed from — see
+  // types.ts. Optional so the mock baseline stays valid without it.
+  computedForDate: z.string().nullable().optional(),
   note: z.string().nullable(),
   confidence: confidenceSchema.nullable(),
   // True when this cell's value is still the static mock/demo baseline:
@@ -42,6 +45,26 @@ const scoreStateSchema = z.object({
   // Why the value is mock, when it is — e.g. the series that fell short
   // of the percentile floor. Null for genuinely computed cells.
   mockReason: z.string().nullable().optional(),
+  // See types.ts — the calendar span a windowed percentile actually
+  // ranked against, and whether it falls short of the spec'd window.
+  historySpanYears: z.number().nullable().optional(),
+  historyShortfall: z.boolean().optional(),
+  // RUBRIC cells only — the per-field option each input resolved to and
+  // the reading behind it, so a score that is a SUM OF DISCRETE CHOICES
+  // can be audited. Without this only the total crosses the wire, and
+  // "45" cannot be checked against the rubric that produced it.
+  rubricInputs: z
+    .array(
+      z.object({
+        field: z.string(),
+        selected: z.string().nullable(),
+        delta: z.number(),
+        basis: z.string().nullable(),
+        assumed: z.boolean().optional(),
+      })
+    )
+    .nullable()
+    .optional(),
 });
 
 const vetoStateSchema = z.object({
