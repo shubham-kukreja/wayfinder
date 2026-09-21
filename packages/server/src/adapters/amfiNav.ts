@@ -105,11 +105,25 @@ function parseNavNumber(text: string): number | null {
 
 // Shared "is this a real 8-field data row, not a header/AMC-name/blank
 // line" split, since both formats use the same delimiter and field count.
-function splitDataRows(text: string): string[][] {
-  return text
-    .split("\n")
-    .map((line) => line.split(";"))
-    .filter((fields) => fields.length === 8);
+//
+// A generator, not `text.split("\n").map(...).filter(...)": that chain
+// built three full-length arrays over the entire ~14k-row universe at
+// once (the split lines, the split fields, and the filtered result) for
+// EVERY chunk, with up to 4 chunks in flight concurrently in
+// fetchTrackedNavHistory — confirmed live 2026-09-21 as the direct cause
+// of a JS heap OOM crash on Railway's smaller container during a 5-year
+// backtest (~60 sequential chunks). Yielding one row at a time means only
+// the current line's field array is ever live, so the retained memory per
+// chunk stops scaling with the full untracked universe.
+function* splitDataRows(text: string): Generator<string[]> {
+  let start = 0;
+  for (let i = 0; i <= text.length; i++) {
+    if (i === text.length || text[i] === "\n") {
+      const fields = text.slice(start, i).split(";");
+      if (fields.length === 8) yield fields;
+      start = i + 1;
+    }
+  }
 }
 
 // Pure parse step for the latest-snapshot endpoint (Code;ISIN;ISIN2;Name;
@@ -141,6 +155,29 @@ export function parseNavHistoryChunk(text: string): NavRow[] {
     const date = parseAmfiNavDate(dateText!);
     if (nav === null || date === null) continue;
     out.push({ schemeCode: code.trim(), schemeName: name.trim(), nav, date });
+  }
+  return out;
+}
+
+// Same parse as parseNavHistoryChunk, but discards untracked rows as it
+// goes rather than building the full ~14k-row universe array first. Used
+// only by fetchTrackedNavHistory's per-chunk loop, where that full array —
+// times up to 4 chunks in flight concurrently — was the direct cause of
+// the OOM crash documented on splitDataRows above. parseNavHistoryChunk
+// itself is kept as the untracked, "every row" version since
+// fetchSchemeCodesExistingOn needs exactly that (which codes exist at
+// all, not a preset allowlist) and existing tests exercise it directly.
+function parseTrackedNavHistoryChunk(text: string, trackedCodes: ReadonlySet<string>): NavRow[] {
+  const out: NavRow[] = [];
+  for (const fields of splitDataRows(text)) {
+    const [code, name, , , , , navText, dateText] = fields;
+    if (!code || code === "Scheme Code" || !name) continue;
+    const trimmedCode = code.trim();
+    if (!trackedCodes.has(trimmedCode)) continue;
+    const nav = parseNavNumber(navText!);
+    const date = parseAmfiNavDate(dateText!);
+    if (nav === null || date === null) continue;
+    out.push({ schemeCode: trimmedCode, schemeName: name.trim(), nav, date });
   }
   return out;
 }
@@ -240,7 +277,7 @@ export async function fetchTrackedNavHistory(trackedCodes: ReadonlySet<string>, 
       try {
         const params = new URLSearchParams({ frmdt: toAmfiDate(chunk.from), todt: toAmfiDate(chunk.to) });
         const text = await fetchText(`${NAV_HISTORY_URL}?${params.toString()}`);
-        const rows = parseNavHistoryChunk(text).filter((r) => trackedCodes.has(r.schemeCode));
+        const rows = parseTrackedNavHistoryChunk(text, trackedCodes);
         out.push(...navRowsToObservations(rows));
       } catch {
         // A single failed chunk is a gap in the backfill, not a reason to
