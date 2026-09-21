@@ -37,7 +37,14 @@ const PROVENANCE_LABELS: Record<ScoreProvenance, string> = {
   manual: "Manual",
   default: "Default (never set)",
 };
-const PROVENANCE_ORDER: ScoreProvenance[] = ["manual", "rubric", "auto", "static", "default"];
+// Manual and static scores are set through their own surfaces already (a
+// manual score is by definition someone's direct override, and static
+// scores don't move) and default-provenance scores contribute nothing to
+// the allocation — none of the three belong on a tab whose job is
+// overriding what's live. Rubric and auto are the two provenances that
+// actually feed the allocation from an external source, so those are the
+// only ones worth reviewing and overriding here.
+const PROVENANCE_ORDER: ScoreProvenance[] = ["rubric", "auto"];
 
 function staleBadge(staleDays: number | null): { label: string; className: string } | null {
   if (staleDays === null) return null;
@@ -66,7 +73,10 @@ export function OverridesView({ snapshot }: { snapshot: Snapshot }) {
   // layers on top of the snapshot once a save succeeds.
   const [scoreOverrides, setScoreOverrides] = useState<Record<string, number>>({});
   const [persistedScores, setPersistedScores] = useState<Record<string, number>>({});
-  const [expandedProvenance, setExpandedProvenance] = useState<ScoreProvenance | null>("manual");
+  // Both provenance groups open by default and toggle independently — unlike
+  // an accordion, there's no reason picking one should close the other when
+  // there are only two of them.
+  const [openProvenances, setOpenProvenances] = useState<Set<ScoreProvenance>>(() => new Set(["rubric", "auto"]));
   const [expandedRubricKey, setExpandedRubricKey] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
@@ -102,7 +112,7 @@ export function OverridesView({ snapshot }: { snapshot: Snapshot }) {
     for (const [key, state] of Object.entries(snapshot.scores)) {
       out[state.provenance].push({ key, state, impact: sensitivityByKey.get(key) ?? 0 });
     }
-    for (const p of PROVENANCE_ORDER) out[p].sort((a, b) => b.impact - a.impact);
+    for (const p of PROVENANCE_ORDER) out[p]!.sort((a, b) => b.impact - a.impact);
     return out;
   }, [snapshot.scores, sensitivityByKey]);
 
@@ -359,7 +369,8 @@ export function OverridesView({ snapshot }: { snapshot: Snapshot }) {
         <section>
           <h2 className="mb-1 font-display text-base font-bold tracking-display text-ink">Scores</h2>
           <p className="mb-4 text-xs text-muted">
-            All 85 scores, split by provenance and sorted by how much they can move the allocation — not sheet order.
+            Rubric and auto-fetched scores, sorted by how much each can move the allocation — not sheet order. Manual
+            and static scores are set on their own surfaces and don&rsquo;t belong on an overrides review.
           </p>
 
           {dirtyScoreEntries.length > 0 && (
@@ -372,12 +383,19 @@ export function OverridesView({ snapshot }: { snapshot: Snapshot }) {
           {PROVENANCE_ORDER.map((provenance) => {
             const items = groupedScores[provenance];
             if (items.length === 0) return null;
-            const isOpen = expandedProvenance === provenance;
+            const isOpen = openProvenances.has(provenance);
             return (
               <section key={provenance} className="mb-4 rounded-lg border border-line bg-paper">
                 <button
                   type="button"
-                  onClick={() => setExpandedProvenance(isOpen ? null : provenance)}
+                  onClick={() =>
+                    setOpenProvenances((current) => {
+                      const next = new Set(current);
+                      if (next.has(provenance)) next.delete(provenance);
+                      else next.add(provenance);
+                      return next;
+                    })
+                  }
                   className="flex w-full items-center justify-between px-4 py-3 text-left"
                 >
                   <span className="text-sm font-semibold text-ink-2">
@@ -405,9 +423,6 @@ export function OverridesView({ snapshot }: { snapshot: Snapshot }) {
                                 {rubricSpec && <span className="ml-1 text-muted">{isRubricExpanded ? "▾" : "▸"}</span>}
                               </div>
                               {state.note && <div className="truncate text-xs text-muted">{state.note}</div>}
-                              {provenance === "default" && (
-                                <div className="text-xs text-muted">No fetched or manual input — contributing nothing to the allocation</div>
-                              )}
                               {rubricSpec && !isRubricExpanded && <div className="text-xs text-muted">Click to pick conditions</div>}
                             </div>
                             <div className="flex shrink-0 items-center gap-3">
