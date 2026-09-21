@@ -14,13 +14,25 @@
 # (series_id, date, fetched_at), so INSERT OR IGNORE is idempotent and
 # re-running only fills gaps.
 #
-# Usage: scripts/shipObservationsToProduction.sh ['series_id LIKE pattern']
-#   default pattern ships NAV + benchmark series only, not the whole table.
+# Usage: scripts/shipObservationsToProduction.sh [series_id_prefix ...]
+#   Defaults to the backtest series (fund NAVs + benchmark indices)
+#   rather than the whole observations table, which also holds the
+#   scoring pipeline's series.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-PATTERN="${1:-amfi_nav:%' OR series_id LIKE 'bt_index:%}"
+PREFIXES=("${@:-amfi_nav: bt_index:}")
+# shellcheck disable=SC2206
+PREFIXES=(${PREFIXES[*]})
+
+# Build "series_id LIKE 'a:%' OR series_id LIKE 'b:%'" from the prefixes.
+WHERE=""
+for p in "${PREFIXES[@]}"; do
+  [ -n "$WHERE" ] && WHERE="$WHERE OR "
+  WHERE="${WHERE}series_id LIKE '${p}%'"
+done
+
 LOCAL_DB="${DB_PATH:-./data/wayfinder.db}"
 DUMP=/tmp/wayfinder-observations.sql.gz
 
@@ -31,7 +43,7 @@ fi
 
 echo "=== Shipping observations to production ==="
 echo "Source: $LOCAL_DB"
-echo "Filter: series_id LIKE '$PATTERN'"
+echo "Filter: $WHERE"
 echo
 
 # Values are quoted by SQLite itself (quote()), so a scheme name with an
@@ -47,7 +59,7 @@ echo
         || quote(series_id) || ',' || quote(date) || ',' || value || ','
         || quote(basis) || ',' || quote(source) || ',' || quote(fetched_at) || ');'
     FROM observations
-    WHERE series_id LIKE '$PATTERN';
+    WHERE $WHERE;
   "
   sqlite3 "$LOCAL_DB" "
     SELECT 'INSERT INTO tracked_schemes (scheme_code,scheme_name,isin_growth,category,added_at,active) VALUES ('
