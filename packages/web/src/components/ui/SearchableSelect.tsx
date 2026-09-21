@@ -105,6 +105,11 @@ export function SearchableSelect({
             onQueryChange(e.target.value);
           }}
           onKeyDown={handleKeyDown}
+          // A selected label longer than the control is clipped mid-word
+          // with no way to read the rest, since an <input> neither wraps
+          // nor ellipsises. title= exposes the full value on hover; the
+          // panel below always shows it in full.
+          title={!open && query ? query : undefined}
           className="h-9 w-full rounded-sm border border-line bg-paper px-3 pr-8 text-[13px] font-semibold text-ink placeholder:font-normal placeholder:text-muted focus:border-ink focus:outline-none"
         />
         <svg

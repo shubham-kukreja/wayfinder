@@ -266,7 +266,17 @@ export function registerSnapshotsRoute(app: FastifyInstance): void {
       // the caller supplies new ones: the justification written at review
       // time is the one that belongs on the published version.
       const source = sourceId ? listSnapshots(db).find((row) => row.id === sourceId) ?? null : null;
-      const label = req.body?.label ?? source?.label ?? `Published ${new Date(snapshot.asOf).toLocaleString("en-IN")}`;
+      // "Published 21/09/26, 8:12 am" — 27 chars, which is what fits the
+      // fixed w-56 Model allocation picker on the New Run form. The bare
+      // toLocaleString("en-IN") default appended seconds
+      // ("Published 21/9/2026, 8:12:57 am", 31 chars) and clipped
+      // mid-timestamp there. dateStyle "medium" is more readable but
+      // trades the seconds for a longer month name and still overflows,
+      // so this uses "short" for both parts.
+      const label =
+        req.body?.label ??
+        source?.label ??
+        `Published ${new Date(snapshot.asOf).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}`;
       const reason = req.body?.reason ?? source?.reason ?? null;
       const id = saveSnapshot(db, snapshot, label, {
         isReview: true,

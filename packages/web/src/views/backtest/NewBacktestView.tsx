@@ -80,7 +80,9 @@ export function NewBacktestView() {
         setPublishedVersions(
           published.map((r) => ({
             id: r.id,
-            label: r.label ?? new Date(r.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }),
+            // "short" both parts: this renders inside a fixed w-56
+            // control, where a "medium" date overflows and clips.
+            label: r.label ?? new Date(r.createdAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }),
             sublabel: new Date(r.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium" }),
           }))
         );
@@ -272,7 +274,13 @@ export function NewBacktestView() {
               </div>
             </label>
 
-            <div className="flex flex-col gap-1">
+            {/* The reset link and loading note hang below the field
+                absolutely rather than sitting in the column's flow. The
+                row is items-end, so laying them out normally grew this
+                column the moment a version was picked and shunted its
+                input upward, breaking the baseline it shares with
+                Benchmark and Run name. */}
+            <div className="relative flex flex-col gap-1">
               <SearchableSelect
                 label="Model allocation"
                 placeholder="Live allocation (current)"
@@ -280,18 +288,25 @@ export function NewBacktestView() {
                 options={publishedVersions}
                 onQueryChange={() => {}}
                 onSelect={(option) => selectVersion(option.id)}
-                className="w-56"
+                // Wider than the w-56 siblings: this is the only control
+                // in the row holding a variable-length value (a published
+                // version's label, which defaults to a timestamp and can
+                // be anything a user typed), so a width matched to the
+                // fixed-content fields clipped it mid-timestamp.
+                className="w-72"
               />
-              {selectedVersionId && (
+              {selectedVersionId && !loadingVersion && (
                 <button
                   type="button"
                   onClick={() => selectVersion(null)}
-                  className="text-left text-[11px] font-semibold text-ink-2 transition-colors duration-100 ease-in hover:text-ink"
+                  className="absolute left-0 top-full mt-1 whitespace-nowrap text-left text-[11px] font-semibold text-ink-2 transition-colors duration-100 ease-in hover:text-ink"
                 >
                   Use live allocation instead
                 </button>
               )}
-              {loadingVersion && <span className="text-[11px] text-muted">Loading version…</span>}
+              {loadingVersion && (
+                <span className="absolute left-0 top-full mt-1 whitespace-nowrap text-[11px] text-muted">Loading version…</span>
+              )}
             </div>
 
             <label className="flex flex-col gap-1">
