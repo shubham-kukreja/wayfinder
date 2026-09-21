@@ -59,6 +59,48 @@ const LOOKBACK_BUFFER_DAYS = 7;
 // live fetch (AMFI in 30-day chunks, the benchmark's monthly div-yield
 // sample plus one bulk price call), which is the unavoidable cost of
 // genuinely new data.
+// Whether a scheme's cached NAV rows are too thin to run against, so the
+// range must be re-fetched from AMFI.
+//
+// Two ways a cache can be inadequate, and one way it can merely LOOK
+// inadequate:
+//
+//   1. Too few rows outright.
+//   2. Rows exist but start well after the requested window — a cache
+//      built by an earlier, NARROWER backtest is a subset of this wider
+//      one's window and covers none of its earlier years.
+//   3. Rows start after the window because THE FUND DID NOT EXIST YET.
+//      Indistinguishable from (2) by date alone, but not a cache problem:
+//      no fetch can ever produce history from before a fund's inception.
+//
+// Treating (3) as (2) re-fetched the entire multi-year range on EVERY run
+// for any leg holding a young fund — and since each AMFI chunk is the
+// full ~14k-scheme universe, that is the whole fetch, not one fund's
+// slice. Confirmed live 2026-09-21: a 5-year backtest whose silver sleeve
+// resolved to a 2025-launched ETF re-fetched all 147 chunks each time,
+// ~30 minutes against Railway's throttled AMFI egress, to rediscover that
+// pre-inception history does not exist.
+//
+// fetched_at separates them. A row fetched after the window's start came
+// from a fetch that asked for this whole range; if that fetch still
+// returned nothing earlier, the fund's history genuinely starts there.
+export function needsHistoryFetch(
+  cached: Array<{ date: string; fetchedAt: string }>,
+  fromIso: string,
+  toIso: string
+): boolean {
+  const spanDays = (new Date(toIso).getTime() - new Date(fromIso).getTime()) / (24 * 3600 * 1000);
+  if (cached.length < Math.min(5, spanDays)) return true;
+
+  const earliestCachedDate = cached[0]?.date;
+  const coversStart =
+    earliestCachedDate !== undefined &&
+    new Date(earliestCachedDate).getTime() - new Date(fromIso).getTime() <= 10 * 24 * 3600 * 1000;
+  if (coversStart) return false;
+
+  return !cached.some((row) => row.fetchedAt >= fromIso);
+}
+
 export async function resolveAndRunBacktest(db: Database.Database, legs: BacktestLegInput[], benchmarkId: string): Promise<BacktestResult> {
   const dates = legs.map((l) => l.date);
   const earliest = dates.reduce((min, d) => (d < min ? d : min));
@@ -86,10 +128,7 @@ export async function resolveAndRunBacktest(db: Database.Database, legs: Backtes
     // of the requested `from`, not just "some row exists somewhere in
     // range" — see the fix history in routes/backtest.ts's git log for
     // the live bug this heuristic previously had.
-    const spanDays = (to.getTime() - from.getTime()) / (24 * 3600 * 1000);
-    const earliestCachedDate = cached[0]?.date;
-    const coversStart = earliestCachedDate !== undefined && new Date(earliestCachedDate).getTime() - from.getTime() <= 10 * 24 * 3600 * 1000;
-    if (cached.length < Math.min(5, spanDays) || !coversStart) missingCodes.push(code);
+    if (needsHistoryFetch(cached, fromIso, toIso)) missingCodes.push(code);
   }
 
   // NAV (AMFI, 30-day chunks) and the benchmark (Yahoo bulk price + monthly
@@ -133,12 +172,12 @@ export function estimateEtaSeconds(db: Database.Database, legs: BacktestLegInput
   const spanDays = (to.getTime() - from.getTime()) / (24 * 3600 * 1000);
 
   const schemeCodes = [...new Set(legs.map((l) => l.schemeCode))];
+  // Shares needsHistoryFetch with the run itself — this estimate is only
+  // honest if it counts the same schemes the run will actually fetch.
   let missingCount = 0;
   for (const code of schemeCodes) {
     const cached = latestObservations(db, amfiNavSeriesId(code), { from: fromIso, to: toIso });
-    const earliestCachedDate = cached[0]?.date;
-    const coversStart = earliestCachedDate !== undefined && new Date(earliestCachedDate).getTime() - from.getTime() <= 10 * 24 * 3600 * 1000;
-    if (cached.length < Math.min(5, spanDays) || !coversStart) missingCount++;
+    if (needsHistoryFetch(cached, fromIso, toIso)) missingCount++;
   }
 
   // Every missing scheme is covered by the SAME chunk fetch (AMFI returns
