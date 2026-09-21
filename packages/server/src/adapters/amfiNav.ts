@@ -112,9 +112,24 @@ function parseNavNumber(text: string): number | null {
 // EVERY chunk, with up to 4 chunks in flight concurrently in
 // fetchTrackedNavHistory — confirmed live 2026-09-21 as the direct cause
 // of a JS heap OOM crash on Railway's smaller container during a 5-year
-// backtest (~60 sequential chunks). Yielding one row at a time means only
-// the current line's field array is ever live, so the retained memory per
-// chunk stops scaling with the full untracked universe.
+// backtest.
+//
+// Switching to a generator alone did NOT fix it (confirmed live
+// 2026-09-21, second crash on a 10-year prefetch, same
+// Runtime_StringSplit frame): V8 represents a long `.slice()` as a
+// SlicedString that points back into the ORIGINAL string rather than
+// copying, and `.split(";")` on that sliced string can itself yield more
+// slices of the same underlying buffer. Any single field surviving past
+// the row (e.g. a scheme name callers keep) pins the entire ~20MB chunk
+// text in memory — so retained memory kept scaling with the whole
+// universe even though only one row's fields existed at a time.
+// forceFlatString below breaks that chain for exactly the two fields
+// (code, name) that make it into an accepted NavRow, which is what
+// actually detaches the parse from the source buffer's lifetime.
+function forceFlatString(s: string): string {
+  return (" " + s).slice(1);
+}
+
 function* splitDataRows(text: string): Generator<string[]> {
   let start = 0;
   for (let i = 0; i <= text.length; i++) {
@@ -138,7 +153,14 @@ export function parseNavAllLatest(text: string): NavRow[] {
     const nav = parseNavNumber(navText!);
     const date = parseAmfiNavDate(dateText!);
     if (nav === null || date === null) continue; // malformed row: dropped, not guessed
-    out.push({ schemeCode: code.trim(), schemeName: name.trim(), nav, date, plan: plan?.trim(), option: option?.trim() });
+    out.push({
+      schemeCode: forceFlatString(code.trim()),
+      schemeName: forceFlatString(name.trim()),
+      nav,
+      date,
+      plan: plan ? forceFlatString(plan.trim()) : plan,
+      option: option ? forceFlatString(option.trim()) : option,
+    });
   }
   return out;
 }
@@ -154,7 +176,7 @@ export function parseNavHistoryChunk(text: string): NavRow[] {
     const nav = parseNavNumber(navText!);
     const date = parseAmfiNavDate(dateText!);
     if (nav === null || date === null) continue;
-    out.push({ schemeCode: code.trim(), schemeName: name.trim(), nav, date });
+    out.push({ schemeCode: forceFlatString(code.trim()), schemeName: forceFlatString(name.trim()), nav, date });
   }
   return out;
 }
@@ -177,7 +199,7 @@ function parseTrackedNavHistoryChunk(text: string, trackedCodes: ReadonlySet<str
     const nav = parseNavNumber(navText!);
     const date = parseAmfiNavDate(dateText!);
     if (nav === null || date === null) continue;
-    out.push({ schemeCode: trimmedCode, schemeName: name.trim(), nav, date });
+    out.push({ schemeCode: forceFlatString(trimmedCode), schemeName: forceFlatString(name.trim()), nav, date });
   }
   return out;
 }
@@ -191,8 +213,19 @@ function navRowsToObservations(rows: NavRow[]): Observation[] {
   }));
 }
 
+// A ~30MB chunk takes ~20-35s live (see HISTORY_CHUNK_DAYS's comment), so
+// 90s comfortably covers a slow-but-healthy request. Without an explicit
+// timeout, `request()` has none — confirmed live 2026-09-21: after this
+// adapter had already made dozens of chunk requests in the same session, a
+// later request simply hung forever with no error, which left
+// fetchTrackedNavHistory's Promise.all (and so the whole backtest job)
+// stuck in 'running' indefinitely rather than failing the way every other
+// bad-chunk path here already does (§9's "a failed fetch is a warning,
+// never an exception" only works if a slow fetch eventually FAILS).
+const CHUNK_TIMEOUT_MS = 90_000;
+
 async function fetchText(url: string): Promise<string> {
-  const res = await request(url, { method: "GET" });
+  const res = await request(url, { method: "GET", signal: AbortSignal.timeout(CHUNK_TIMEOUT_MS) });
   if (res.statusCode !== 200) {
     const body = await res.body.text();
     throw new AmfiNavFetchError(`${url} failed (${res.statusCode}): ${body.slice(0, 300)}`);
