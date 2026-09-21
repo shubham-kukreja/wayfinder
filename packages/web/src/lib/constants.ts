@@ -11,12 +11,11 @@ export const ALLOCATION_ROUTES: Array<{ path: string; label: string }> = [
 export const MODEL_ROUTES: Array<{ path: string; label: string }> = [
   { path: "/model/signals", label: "Signals" },
   { path: "/model/datapoints", label: "Data Points" },
-  // The one surface where a human ENTERS a score rather than reading one.
-  // Data Points is a read-only registry by design, so the rubric cells it
-  // lists as "Needs analyst input" had nowhere to be answered — this view
-  // was fully built (pickers, live preview, save) but never routed.
-  { path: "/model/inputs", label: "Analyst Inputs" },
-  { path: "/model/parameters", label: "Parameters" },
+  // Parameters and Analyst Inputs merged into one "Overrides" surface: both
+  // were "edit a draft, preview it live, save explicitly" pages against the
+  // same allocation engine, just split by input type (weights/caps vs.
+  // scores) — that split is now a tab inside the page, not a separate route.
+  { path: "/model/overrides", label: "Overrides" },
 ];
 
 // The three governance surfaces are separate routes rather than tabs: they

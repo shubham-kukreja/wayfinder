@@ -5,7 +5,7 @@ import { formatPct } from "../lib/format.js";
 // explanatory, philosophy-first content — the model's real configured weights
 // and tilt caps, plus the governance rules that apply between reviews. This is
 // deliberately READ-ONLY; the editable weights/caps UI lives at
-// /model/parameters (ParametersView) — this page explains WHY those numbers
+// /model/overrides (OverridesView) — this page explains WHY those numbers
 // exist, not how to change them ("explain philosophy, not expose spreadsheet
 // plumbing by default," per the spec).
 const SIGNAL_LABELS: Record<string, string> = {
@@ -259,8 +259,8 @@ export function MethodologyView({ snapshot }: { snapshot: Snapshot }) {
           <h2 className="font-display text-xl text-ink">Current configuration</h2>
           <p className="mt-2 text-[15px] leading-[1.6] text-muted">
             The live values behind the rules above. To change them, use{" "}
-            <a href="/model/parameters" className="font-medium text-ink underline underline-offset-2">
-              Parameters
+            <a href="/model/overrides" className="font-medium text-ink underline underline-offset-2">
+              Overrides
             </a>
             .
           </p>

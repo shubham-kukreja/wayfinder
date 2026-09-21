@@ -6,8 +6,7 @@ import { BacktestView } from "./views/BacktestView.js";
 import { DriversView } from "./views/DriversView.js";
 import { DataPointControlCenterView } from "./views/DataPointControlCenterView.js";
 import { MethodologyView } from "./views/MethodologyView.js";
-import { ParametersView } from "./views/ParametersView.js";
-import { InputsView } from "./views/InputsView.js";
+import { OverridesView } from "./views/OverridesView.js";
 import { HistoryView } from "./views/HistoryView.js";
 import { NotesView } from "./views/NotesView.js";
 import { NoteEditorView } from "./views/NoteEditorView.js";
@@ -59,8 +58,9 @@ export default function App() {
             <Route path="/model/datapoints" element={<DataPointControlCenterView snapshot={snapshot} />} />
             <Route path="/methodology" element={<MethodologyView snapshot={snapshot} />} />
             <Route path="/model/methodology" element={<Navigate to="/methodology" replace />} />
-            <Route path="/model/parameters" element={<ParametersView snapshot={snapshot} />} />
-            <Route path="/model/inputs" element={<InputsView snapshot={snapshot} />} />
+            <Route path="/model/overrides" element={<OverridesView snapshot={snapshot} />} />
+            <Route path="/model/parameters" element={<Navigate to="/model/overrides" replace />} />
+            <Route path="/model/inputs" element={<Navigate to="/model/overrides" replace />} />
             <Route path="/reviews" element={<Navigate to="/reviews/decide" replace />} />
             <Route path="/reviews/decide" element={<HistoryView snapshot={snapshot} section="decide" />} />
             <Route path="/reviews/history" element={<HistoryView snapshot={snapshot} section="history" />} />

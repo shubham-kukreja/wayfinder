@@ -304,7 +304,7 @@ export function OverviewView({ snapshot }: { snapshot: Snapshot }) {
               </p>
             </div>
             <Link
-              to="/model/parameters"
+              to="/model/overrides"
               className="inline-flex shrink-0 items-center gap-2 rounded-sm border border-line px-3 py-2 text-[13px] font-semibold text-ink transition-colors duration-100 ease-in hover:bg-paper-2"
             >
               Manage weights

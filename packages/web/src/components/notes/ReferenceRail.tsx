@@ -5,7 +5,7 @@ const ENTITY_ROUTE: Record<MentionCandidate["entityType"], (id: string) => strin
   datapoint: () => "/model/datapoints",
   sleeve: () => "/overview",
   signal: () => "/overview",
-  rubric: () => "/model/inputs",
+  rubric: () => "/model/overrides",
   snapshot: (id) => `/reviews/history?open=${encodeURIComponent(id)}`,
 };
 
