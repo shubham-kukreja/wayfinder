@@ -13,6 +13,8 @@ export interface BacktestPoint {
   date: string;
   portfolioValue: number;
   benchmarkValue: number;
+  portfolioReturnPct: number;
+  benchmarkReturnPct: number;
 }
 
 export interface BacktestLegResult extends BacktestLeg {
@@ -29,6 +31,9 @@ export interface BacktestSummary {
   benchmarkCurrentValue: number;
   portfolioXirr: number | null;
   benchmarkXirr: number | null;
+  // Optional so reports saved before CAGR was introduced remain readable.
+  portfolioCagr?: number | null;
+  benchmarkCagr?: number | null;
   absoluteReturnPct: number;
   benchmarkReturnPct: number;
   maxDrawdownPct: number;
@@ -54,6 +59,17 @@ export async function listBenchmarks(): Promise<string[]> {
   if (!res.ok) throw new Error(`Failed to load benchmarks: ${res.status}`);
   const data = (await res.json()) as { benchmarks: string[] };
   return data.benchmarks;
+}
+
+export interface InflationRate {
+  ratePct: number;
+  asOf: string;
+}
+
+export async function getInflationRate(): Promise<InflationRate | null> {
+  const res = await fetch(`${API_BASE_URL}/api/backtest/inflation`);
+  if (!res.ok) return null;
+  return res.json();
 }
 
 export interface DefaultFundPick {
@@ -113,4 +129,65 @@ export async function searchSchemes(q: string): Promise<SchemeSearchResult[]> {
   if (!res.ok) throw new Error(`Scheme search failed: ${res.status}`);
   const data = (await res.json()) as { results: SchemeSearchResult[] };
   return data.results;
+}
+
+export type BacktestJobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+
+interface BacktestJobBase {
+  id: string;
+  label: string;
+  legs: BacktestLeg[];
+  benchmarkId: string;
+  status: BacktestJobStatus;
+  etaSeconds: number | null;
+  error: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface BacktestJob extends BacktestJobBase {
+  result: BacktestResult | null;
+}
+
+// GET /api/backtest/jobs (the list/Runs-page endpoint) never includes each
+// job's full result — a completed job's result.series can hold ~1,800
+// points for a 5-year backtest, and the Runs page polls every few seconds
+// while anything is in flight, so returning full results there caused a
+// real server OOM (confirmed live 2026-09-20). Only GET
+// /api/backtest/jobs/:id (a single job's own detail/report page) returns
+// the full BacktestJob with `result` populated. `summary` is the one
+// exception — the server extracts just that small object (via SQLite's
+// json_extract, never the full result_json) so the list can show XIRR/
+// return without re-adding the series array that caused the OOM.
+export type BacktestJobSummary = BacktestJobBase & { summary: BacktestSummary | null };
+
+export async function listBacktestJobs(): Promise<BacktestJobSummary[]> {
+  const res = await fetch(`${API_BASE_URL}/api/backtest/jobs`);
+  if (!res.ok) throw new Error(`Failed to load backtest jobs: ${res.status}`);
+  const data = (await res.json()) as { jobs: BacktestJobSummary[] };
+  return data.jobs;
+}
+
+export async function getBacktestJob(id: string): Promise<BacktestJob> {
+  const res = await fetch(`${API_BASE_URL}/api/backtest/jobs/${encodeURIComponent(id)}`);
+  if (!res.ok) throw new Error(`Failed to load backtest job: ${res.status}`);
+  return res.json();
+}
+
+export async function enqueueBacktestJob(input: { label: string; legs: BacktestLeg[]; benchmarkId: string }): Promise<BacktestJob> {
+  const res = await apiFetchJson("/api/backtest/jobs", "POST", input);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Failed to queue backtest: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function cancelBacktestJob(id: string): Promise<void> {
+  const res = await apiFetch(`/api/backtest/jobs/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Failed to cancel job: ${res.status}`);
+  }
 }

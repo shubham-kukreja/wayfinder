@@ -94,8 +94,22 @@ export function NoteEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // editor.focus() alone places a NodeSelection when the first block is an
+  // atom node (a widget) — ProseMirror has no other way to "focus" a
+  // selectable node with no text inside it — and that NodeSelection is what
+  // draws the ProseMirror-selectednode ring (index.css) around the widget
+  // the instant the page loads, before the user has clicked anything.
+  // setTextCursorPosition on the widget itself hits the same problem (it
+  // has content: "none" in the schema, so there's no text position inside
+  // it to place a caret — BlockNote falls back to selecting the node,
+  // which is the green ring again). The actual fix is to target the first
+  // block that can hold a real text cursor, skipping any leading widgets;
+  // if the whole note is nothing but widgets, there's no safe block to
+  // focus at all, so this leaves the selection alone rather than forcing one.
   useEffect(() => {
-    if (autoFocus) editor.focus();
+    if (!autoFocus) return;
+    const firstTextBlock = editor.document.find((b) => b.content !== undefined);
+    if (firstTextBlock) editor.setTextCursorPosition(firstTextBlock, "start");
   }, [autoFocus, editor]);
 
   // Repaints existing mention chips in place when their live value/label

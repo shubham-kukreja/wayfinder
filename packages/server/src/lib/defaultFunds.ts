@@ -66,12 +66,28 @@ export interface DefaultFundPick {
 
 // Picks one default fund per sleeve from the full AMFI universe. Where
 // several schemes match a sleeve's pattern (the common case — dozens of
-// AMCs each run a "Large Cap Fund"), picks the Direct+Growth variant with
-// the highest NAV as a (weak but free) proxy for the longest-running,
-// most-established fund — a newly launched Direct plan starts at NAV 10
-// and climbs, so a long-established fund's NAV is reliably higher absent
-// unusual splits, which AMFI's mutual fund NAVs don't do.
-export function pickDefaultFunds(rows: NavRow[]): DefaultFundPick[] {
+// AMCs each run a "Large Cap Fund"), ranks by:
+//
+//   1. Existed as of `establishedSince` (an old-universe scheme-code set
+//      from fetchSchemeCodesExistingOn) — established funds first.
+//   2. Direct plan + Growth option (lowest cost, NAV = total return).
+//   3. Highest NAV among the remaining ties, as a weak same-cohort proxy
+//      for "longer-running" — NAV alone is NOT used across the
+//      established/new boundary any more: it broke for commodity-tracking
+//      ETFs (a gold/silver ETF's NAV tracks the metal price, not fund
+//      age, so a brand-new gold ETF can out-NAV a decade-old one purely
+//      because gold got more expensive). Confirmed live 2026-09-20: the
+//      old NAV-only ranking picked "Choice Gold ETF" (launched
+//      2025-11-07) and "360 ONE Silver ETF" (launched 2025-04-03) as
+//      metals.gold/metals.silver defaults — both too young for this app's
+//      5-year default backtest window, silently producing "no NAV
+//      history found for this date" on every leg using them.
+//
+// If NO candidate for a sleeve existed as of `establishedSince` (every
+// match is a genuinely new category), falls back to the same-cohort
+// ranking among all candidates rather than picking nothing — a young
+// default is still better than an empty picker.
+export function pickDefaultFunds(rows: NavRow[], establishedCodes: ReadonlySet<string> = new Set()): DefaultFundPick[] {
   const picks: DefaultFundPick[] = [];
 
   for (const [sleeveId, pattern] of Object.entries(SLEEVE_NAME_PATTERNS)) {
@@ -79,6 +95,8 @@ export function pickDefaultFunds(rows: NavRow[]): DefaultFundPick[] {
     if (candidates.length === 0) continue;
 
     candidates.sort((a, b) => {
+      const establishedDiff = Number(establishedCodes.has(b.schemeCode)) - Number(establishedCodes.has(a.schemeCode));
+      if (establishedDiff !== 0) return establishedDiff;
       const scoreDiff = planScore(b) - planScore(a);
       if (scoreDiff !== 0) return scoreDiff;
       return b.nav - a.nav;

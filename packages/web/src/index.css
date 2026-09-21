@@ -71,9 +71,13 @@
     line-height: theme("lineHeight.display");
   }
 
+  /* A translucent tint (not a solid fill) so selected text stays readable
+     in its own color instead of flipping to black-on-green — closer to
+     how text selection reads in most editors, and matches the request for
+     a much lighter default highlight than the previous solid brand-500. */
   ::selection {
-    background: theme("colors.brand.500");
-    color: #000;
+    background: rgb(62 207 95 / 0.25);
+    color: inherit;
   }
 }
 
@@ -166,8 +170,14 @@
   --bn-colors-tooltip-background: #f7f7f7;
   --bn-colors-hovered-text: #0a0a0a;
   --bn-colors-hovered-background: #f7f7f7;
+  /* "Selected" here is a UI toggle state (the active alignment/heading
+     button in the formatting toolbar), not a data signal — this app never
+     uses the brand green for a neutral toggle, it uses solid ink/paper
+     (see ParametersView's segmented controls: bg-ink text-paper on the
+     active option). Brand green stays reserved for what it means
+     elsewhere: a positive value, a checked/saved state. */
   --bn-colors-selected-text: #ffffff;
-  --bn-colors-selected-background: #3ecf5f;
+  --bn-colors-selected-background: #0a0a0a;
   --bn-colors-disabled-text: #767676;
   --bn-colors-disabled-background: #ececee;
   --bn-colors-shadow: rgba(10, 10, 10, 0.12);
@@ -177,7 +187,26 @@
   font-size: 16px;
   line-height: 1.7;
 }
+/* BlockNote/Mantine's own buttons (formatting toolbar, side menu, table
+   handles) don't declare a hover transition at all by default — the
+   background just snaps on :hover. Every other interactive control in this
+   app transitions over 100ms ease-in (see Pill, NoteWidgetBlock's own
+   buttons, ParametersView's toggles); applying that here is what makes the
+   drag handle, the "+" button and the toolbar buttons all feel like the
+   same control family instead of three different hover behaviors. */
+.wf-blocknote button,
+.wf-blocknote .mantine-UnstyledButton-root,
+.wf-blocknote .mantine-ActionIcon-root {
+  transition: background-color 100ms ease-in, color 100ms ease-in, border-color 100ms ease-in;
+}
 .wf-blocknote .bn-editor {
+  /* No left padding here — the side menu (the +/drag-handle pair) is a
+     floating overlay anchored to the block's own left edge, not part of
+     document flow, so padding here would shift block text right without
+     moving the side menu the same amount, breaking alignment with the
+     title above it. The page's own margin (NoteEditorView's `main`
+     padding) is what gives the side menu room to sit inside the column
+     instead of flush against the sidebar. */
   padding: 0;
   font-family: var(--bn-font-family);
 }
@@ -196,9 +225,9 @@
 
 /* A checklist item's native <input type="checkbox"> renders with whatever
    round, OS-themed control the browser ships — nothing like the rest of
-   this app's square, 4px-radius controls (see the tailwind config's global
-   borderRadius override). Squared off and recolored to the brand green on
-   check, matching every other checkbox-shaped control in the product. */
+   this app's square controls. Square corners (not even the app's usual 4px
+   — a checkbox this small reads as fully square either way, and a flat
+   corner is what actually reads as "sharp" next to Notion's own). */
 .wf-blocknote .bn-block-content[data-content-type="checkListItem"] > div > input {
   appearance: none;
   -webkit-appearance: none;
@@ -206,7 +235,7 @@
   height: 16px;
   margin: 0 8px 0 2px;
   border: 1.5px solid #e3e3e3;
-  border-radius: 4px;
+  border-radius: 0;
   background: #ffffff;
   cursor: pointer;
   display: inline-flex;
@@ -233,15 +262,46 @@
 .wf-blocknote .bn-block-content[data-content-type="checkListItem"][data-checked="true"] .bn-inline-content {
   color: #767676;
 }
+/* .bn-block-content is `display: flex` with no align-items, so it defaults
+   to `stretch` — the checkbox and the text row both stretch across the
+   full block height instead of centering on each other, which is the
+   vertical misalignment between the checkbox and a mention chip sitting in
+   the same line. */
+.wf-blocknote .bn-block-content[data-content-type="checkListItem"] {
+  align-items: center;
+}
+.wf-blocknote .bn-block-content[data-content-type="checkListItem"] > div:has(> input) {
+  display: flex;
+  align-items: center;
+}
 
 /* The "/" suggestion menu (mentions grouped with the widget-insert items)
    can list 30+ data points unfiltered. floating-ui sizes the popup's own
    wrapper to the remaining viewport space via an inline style (so it can
    exceed 800px on a tall screen) — !important is the only way to cap that
    inline max-height from a stylesheet rule. */
+/* Block/node selection (drag-select across blocks, or a widget block
+   clicked as a node) draws a hardcoded blue ring — rgba(100,160,255,...) —
+   that isn't wired to any --bn-colors-* variable, so none of this theme's
+   overrides above ever touched it. Retargeted to the same translucent
+   brand green used for ::selection in the base layer, so a block
+   selection and a text selection read as the same "selected" state
+   instead of two different accent colors. */
+.wf-blocknote .bn-block-content.ProseMirror-selectednode > *::after,
+.wf-blocknote .ProseMirror-selectednode > .bn-block-content > *::after,
+.wf-blocknote .bn-block-content .ProseMirror-selectednode::after,
+.wf-blocknote .bn-inline-content .ProseMirror-selectednode::after {
+  border-radius: 4px;
+  background-color: rgb(62 207 95 / 0.08);
+  box-shadow: inset 0 0 0 2px rgb(62 207 95 / 0.4);
+}
+
 .bn-suggestion-menu {
   max-height: 320px !important;
   overflow-y: auto;
   border: 1px solid #e3e3e3;
-  box-shadow: 0 8px 24px rgba(10, 10, 10, 0.12);
+  /* Tailwind's shadow-xl value, verbatim — every other floating surface in
+     this app (AllocationBar's tooltip, InfoPopover, modals) uses shadow-xl;
+     this menu is the same kind of surface and should cast the same shadow. */
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
 }

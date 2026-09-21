@@ -118,11 +118,84 @@ const PRINCIPLES = [
   },
 ];
 
+const BACKTEST_STAGES = [
+  { number: "01", label: "Source", detail: "Start from the live allocation or a published version." },
+  { number: "02", label: "Size", detail: "Set capital, sleeve weights and purchase dates." },
+  { number: "03", label: "Map", detail: "Assign an AMFI-tracked fund to every sleeve." },
+  { number: "04", label: "Run", detail: "Apply the same dated cash flows to the chosen benchmark." },
+  { number: "05", label: "Read", detail: "Compare the difference, then inspect sleeves and funds." },
+];
+
+const BACKTEST_RULES = [
+  {
+    title: "Like-for-like cash flows",
+    body: "Every allocation contribution is invested into the benchmark on the same date and for the same amount. The comparison changes the instrument, not the timing or capital.",
+  },
+  {
+    title: "Point-in-time values",
+    body: "A fund or index uses the latest available observation on or before each chart date. Missing pre-purchase history is surfaced instead of silently fabricated.",
+  },
+  {
+    title: "Capital-aware return line",
+    body: "Each chart point divides gain by capital invested by that date. Later purchases do not depress earlier return history by appearing in the denominator too soon.",
+  },
+  {
+    title: "Money-weighted XIRR",
+    body: "XIRR uses every dated contribution as an outflow and the ending value as the final inflow, so staggered purchases are represented in the headline result.",
+  },
+];
+
 function StatRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4 border-b border-line py-2.5 last:border-0">
       <span className="text-[13px] text-ink-2">{label}</span>
       <span className="text-[13px] font-semibold tabular-nums text-ink">{value}</span>
+    </div>
+  );
+}
+
+function BacktestMethodVisual() {
+  return (
+    <div className="overflow-hidden rounded-lg border border-line bg-paper">
+      <div className="grid grid-cols-1 divide-y divide-line sm:grid-cols-5 sm:divide-x sm:divide-y-0">
+        {BACKTEST_STAGES.map((stage, index) => (
+          <div key={stage.label} className="relative min-h-[168px] p-4 sm:p-5">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[11px] font-semibold tabular-nums text-muted">{stage.number}</span>
+              {index < BACKTEST_STAGES.length - 1 && <span className="hidden text-sm text-muted sm:block" aria-hidden="true">→</span>}
+            </div>
+            <h3 className="mt-6 text-[14px] font-semibold text-ink">{stage.label}</h3>
+            <p className="mt-2 text-[13px] leading-[1.55] text-ink-2">{stage.detail}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="border-t border-line bg-paper-2 p-5 sm:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">One controlled comparison</p>
+            <p className="mt-1 max-w-[54ch] text-[14px] leading-[1.6] text-ink-2">
+              Allocation and benchmark share the same capital and dates. The report leads with the gap between them, then preserves both underlying values for auditability.
+            </p>
+          </div>
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-3 lg:max-w-[430px]">
+            <div className="min-w-0 flex-1 border-l-[5px] border-[#0FAE62] bg-paper px-4 py-3">
+              <div className="text-[10px] font-bold uppercase tracking-eyebrow text-muted">Allocation</div>
+              <div className="mt-1 font-mono text-[17px] font-semibold text-ink">Fund NAVs</div>
+            </div>
+            <div className="font-mono text-lg text-muted">−</div>
+            <div className="min-w-0 flex-1 border-l-[5px] border-[#D2B640] bg-paper px-4 py-3">
+              <div className="text-[10px] font-bold uppercase tracking-eyebrow text-muted">Benchmark</div>
+              <div className="mt-1 font-mono text-[17px] font-semibold text-ink">Index value</div>
+            </div>
+            <div className="font-mono text-lg text-muted">=</div>
+            <div className="shrink-0 bg-ink px-4 py-3 text-paper">
+              <div className="text-[10px] font-bold uppercase tracking-eyebrow text-paper/70">Headline</div>
+              <div className="mt-1 font-mono text-[17px] font-semibold">Difference</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -173,6 +246,43 @@ export function MethodologyView({ snapshot }: { snapshot: Snapshot }) {
             </li>
           ))}
         </ol>
+      </section>
+
+      <section className="mb-16 grid grid-cols-1 gap-x-16 gap-y-6 lg:grid-cols-[minmax(220px,300px)_minmax(0,1fr)]">
+        <div className="lg:sticky lg:top-24 lg:self-start">
+          <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Backtesting</p>
+          <h2 className="mt-2 font-display text-xl text-ink">From allocation to evidence</h2>
+          <p className="mt-2 text-[15px] leading-[1.6] text-muted">
+            A backtest freezes one allocation, maps it to investable funds and compares it with a benchmark under identical cash-flow timing.
+          </p>
+        </div>
+        <div>
+          <BacktestMethodVisual />
+
+          <div className="mt-8 grid grid-cols-1 gap-x-10 gap-y-7 sm:grid-cols-2">
+            {BACKTEST_RULES.map((rule) => (
+              <div key={rule.title} className="border-t-2 border-ink pt-3">
+                <h3 className="text-[15px] font-semibold text-ink">{rule.title}</h3>
+                <p className="mt-2 text-[14px] leading-[1.7] text-ink-2">{rule.body}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-8 grid grid-cols-1 border-y border-line sm:grid-cols-3 sm:divide-x sm:divide-line">
+            <div className="py-4 sm:pr-5">
+              <div className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Execution</div>
+              <p className="mt-1 text-[13px] leading-[1.6] text-ink-2">Runs execute one at a time so data retrieval remains predictable, with up to three queued or running.</p>
+            </div>
+            <div className="border-t border-line py-4 sm:border-t-0 sm:px-5">
+              <div className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Persistence</div>
+              <p className="mt-1 text-[13px] leading-[1.6] text-ink-2">Completed reports remain in Run History with their inputs, result series and per-fund detail.</p>
+            </div>
+            <div className="border-t border-line py-4 sm:border-t-0 sm:pl-5">
+              <div className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Headline metrics</div>
+              <p className="mt-1 text-[13px] leading-[1.6] text-ink-2">Current value, absolute return and XIRR are shown as allocation-minus-benchmark differences.</p>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="mb-16 grid grid-cols-1 gap-x-16 gap-y-6 lg:grid-cols-[minmax(220px,300px)_minmax(0,1fr)]">

@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useSnapshot } from "./hooks/useSnapshot.js";
 import { OverviewView } from "./views/OverviewView.js";
-import { BacktestView } from "./views/BacktestView.js";
+import { NewBacktestView } from "./views/backtest/NewBacktestView.js";
+import { BacktestRunsView } from "./views/backtest/BacktestRunsView.js";
+import { BacktestReportView } from "./views/backtest/BacktestReportView.js";
 import { DriversView } from "./views/DriversView.js";
 import { DataPointControlCenterView } from "./views/DataPointControlCenterView.js";
 import { MethodologyView } from "./views/MethodologyView.js";
@@ -52,7 +54,10 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/overview" replace />} />
             <Route path="/overview" element={<OverviewView snapshot={snapshot} />} />
-            <Route path="/backtest" element={<BacktestView />} />
+            <Route path="/backtest" element={<Navigate to="/backtest/runs" replace />} />
+            <Route path="/backtest/new" element={<NewBacktestView />} />
+            <Route path="/backtest/runs" element={<BacktestRunsView />} />
+            <Route path="/backtest/runs/:id" element={<BacktestReportView />} />
             <Route path="/model" element={<Navigate to="/model/signals" replace />} />
             <Route path="/model/signals" element={<DriversView snapshot={snapshot} />} />
             <Route path="/model/datapoints" element={<DataPointControlCenterView snapshot={snapshot} />} />

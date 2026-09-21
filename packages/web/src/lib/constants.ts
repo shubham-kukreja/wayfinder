@@ -3,9 +3,15 @@
 // them. Grouping by that means each heading is one sentence — what you act
 // on, what you tune, how tuning becomes acting — rather than a bag labelled
 // "Workspace" holding the answer, the docs and the publish gate at once.
-export const ALLOCATION_ROUTES: Array<{ path: string; label: string }> = [
-  { path: "/overview", label: "Overview" },
-  { path: "/backtest", label: "Backtest" },
+export const ALLOCATION_ROUTES: Array<{ path: string; label: string }> = [{ path: "/overview", label: "Overview" }];
+
+// Its own group, not folded into Allocation: this isn't a state of the
+// published/draft model, it's a separate workspace with its own queue of
+// runs — a "what you're testing" surface, distinct from "what you hold"
+// (Allocation) or "what you're tuning" (Model).
+export const BACKTESTING_ROUTES: Array<{ path: string; label: string }> = [
+  { path: "/backtest/new", label: "New Run" },
+  { path: "/backtest/runs", label: "Run History" },
 ];
 
 export const MODEL_ROUTES: Array<{ path: string; label: string }> = [

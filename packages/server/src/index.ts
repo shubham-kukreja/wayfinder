@@ -11,9 +11,11 @@ import { registerDatapointsRoute } from "./routes/datapoints.js";
 import { registerSchemesRoute } from "./routes/schemes.js";
 import { registerNotesRoute } from "./routes/notes.js";
 import { registerBacktestRoute } from "./routes/backtest.js";
+import { registerBacktestJobsRoute } from "./routes/backtestJobs.js";
 import { registerLoginRoute } from "./routes/login.js";
 import { loadConfig } from "./config.js";
 import { verifyToken } from "./auth.js";
+import { startBacktestQueueWorker } from "./pipeline/backtestQueue.js";
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -80,6 +82,9 @@ async function main() {
   registerSchemesRoute(app);
   registerNotesRoute(app);
   registerBacktestRoute(app);
+  registerBacktestJobsRoute(app);
+
+  startBacktestQueueWorker(config.dbPath);
 
   await app.listen({ port: PORT, host: "0.0.0.0" });
 }

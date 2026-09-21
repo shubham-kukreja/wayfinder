@@ -208,27 +208,45 @@ async function fetchMonthlyDivYield(benchmarkId: string, from: Date, to: Date): 
 // Builds a TRI-approximation series from a daily (TRADING-day, so with
 // weekend/holiday gaps) price series and sparse (month-end) yield samples.
 //
-// BUG FIXED 2026-09-20, found by comparing a live backtest against
-// AdvisorKhoj's published NIFTY 50 TRI benchmark calculator for the exact
-// same window (2021-09-20 to 2026-09-18, ₹10L lumpsum): AdvisorKhoj's real
-// TRI grew 42.37% while this approximation only produced ~40.18% — a
-// ~2.2pp gap. Root cause: the loop compounds `yield/365` once per PRICE-
-// SERIES ITERATION, but that series only has ~1,236 trading-day entries
-// over those 5 years, not the ~1,826 calendar days /365 implies — so each
-// gap (every weekend, every holiday) silently DROPPED the yield accrual
-// for the calendar days it spanned, applying only 1236/1826 ≈ 68% of the
-// intended yield. Confirmed numerically: with the real ~1.29% average
-// yield sampled from niftyindices.com for this exact window, compounding
-// once per trading day understates the cumulative yield contribution by
-// ~2.2pp versus compounding once per ELAPSED CALENDAR DAY — which lines
-// up almost exactly with the AdvisorKhoj discrepancy.
+// BUG FIXED 2026-09-20 (yield-accrual gap), found by comparing a live
+// backtest against AdvisorKhoj's published NIFTY 50 TRI benchmark
+// calculator for the exact same window (2021-09-20 to 2026-09-18, ₹10L
+// lumpsum): AdvisorKhoj's real TRI grew 42.37% while this approximation
+// only produced ~40.18% — a ~2.2pp gap. Root cause: the loop compounded
+// `yield/365` once per PRICE-SERIES ITERATION, but that series only has
+// ~1,236 trading-day entries over those 5 years, not the ~1,826 calendar
+// days /365 implies — so each gap (every weekend, every holiday) silently
+// DROPPED the yield accrual for the calendar days it spanned. Fixed by
+// raising the daily yield factor to the power of the number of CALENDAR
+// days actually elapsed since the previous trading day, not always 1.
 //
-// Fix: raise the daily yield factor to the power of the number of
-// CALENDAR days actually elapsed since the previous trading day (5 over a
-// Fri->Mon gap, 3-4 over a long weekend/holiday), not always 1 — so a
-// closed market still accrues the dividend yield it would have accrued in
-// real life, exactly like a real TRI index does (accrued yield doesn't
-// pause just because NSE is shut).
+// BUG FIXED 2026-09-21 (anchor-date instability), found by comparing two
+// backtests that both used the SAME benchmark, SAME purchase date
+// (2021-09-20), but were queued at different times: their reported
+// benchmark values for that identical date differed by ~4.8% (17400 vs
+// 18233 for Nifty 50's TRI-approx level on 2021-09-20). Root cause: this
+// function always set `out[dates[0]] = priceByDate[dates[0]]` — i.e. "TRI
+// equals raw price on day 1 of WHATEVER RANGE THE CALLER HAPPENED TO
+// REQUEST." Two jobs with different `from` (routes/backtest.ts's
+// LOOKBACK_BUFFER_DAYS is relative to each job's own earliest leg date,
+// and a wider-range job's fetch OVERWRITES the same cached series_id for
+// the dates they share) therefore anchor the series at different points
+// and compound forward differently — so a calendar date's TRI level was
+// never actually stable, just "whatever the most recently cached fetch
+// happened to produce for it." That's a correctness bug, not
+// approximation noise: a fixed historical date must have ONE value.
+//
+// Fixed by anchoring every TRI-approx series at a FIXED epoch
+// (EPOCH_ISO, chosen as the earliest date all 5 benchmark tickers have
+// real Yahoo price history — Nifty Midcap 150 is the binding constraint,
+// first trading 2019-01-13, so the epoch sits comfortably after that)
+// instead of "day 1 of this particular request." Every fetch — regardless
+// of what range it was asked for — computes from EPOCH_ISO forward and
+// only returns the slice inside [from, to], so a given calendar date's
+// TRI level is the same number no matter which job or date range
+// triggered the fetch that (re)computed it.
+export const TRI_APPROX_EPOCH_ISO = "2019-02-01";
+
 function buildTriApproxSeries(priceByDate: Record<string, number>, divYieldSamples: Array<{ date: string; value: number }>): Record<string, number> {
   const dates = Object.keys(priceByDate).sort();
   if (dates.length === 0) return {};
@@ -273,10 +291,19 @@ export async function fetchBenchmarkHistoryLive(benchmarkId: string, from: Date,
 // div yield samples (niftyindices, sequential, one request per month) into
 // a TRI-approximation series — see buildTriApproxSeries's comment for the
 // compounding method and why this is the free-data ceiling here.
-async function fetchBenchmarkTriApproxLive(benchmarkId: string, from: Date, to: Date): Promise<Record<string, number>> {
+//
+// ALWAYS fetches from TRI_APPROX_EPOCH_ISO through `to`, never from the
+// caller's own `from` — see buildTriApproxSeries's 2026-09-21 comment.
+// Building from a fixed epoch every time (and letting the cache-read step
+// slice out whatever sub-range a particular backtest actually needs) is
+// what makes a given calendar date's cached TRI level stable across every
+// caller, instead of depending on which job's `from` happened to
+// (re)compute it last.
+async function fetchBenchmarkTriApproxLive(benchmarkId: string, to: Date): Promise<Record<string, number>> {
+  const epoch = new Date(TRI_APPROX_EPOCH_ISO);
   const [priceByDate, divYieldSamples] = await Promise.all([
-    fetchBenchmarkHistoryLive(benchmarkId, from, to),
-    fetchMonthlyDivYield(benchmarkId, from, to),
+    fetchBenchmarkHistoryLive(benchmarkId, epoch, to),
+    fetchMonthlyDivYield(benchmarkId, epoch, to),
   ]);
   return buildTriApproxSeries(priceByDate, divYieldSamples);
 }
@@ -286,12 +313,12 @@ async function fetchBenchmarkTriApproxLive(benchmarkId: string, from: Date, to: 
 // source BACKTEST_INDEX_DAILY — the values stored here are the TRI
 // approximation, not the raw price index), live-fetches only when the
 // requested range has a real gap, and writes the result back before
-// returning. Since a live fetch is a small, fixed number of requests
-// regardless of range (one Yahoo bulk call + ~1 niftyindices call per
-// month), this simply re-fetches the whole span on any gap rather than
-// computing partial missing-day ranges — that bookkeeping existed to
-// avoid hundreds of redundant per-day requests under the old niftyindices
-// day-by-day design and doesn't earn its complexity under this one.
+// returning. A live fetch always rebuilds the WHOLE series from the fixed
+// epoch (see fetchBenchmarkTriApproxLive) — cheap regardless of how far
+// back `to` reaches, since it's still one Yahoo bulk call + ~1
+// niftyindices call per elapsed month, not per requested-range month — so
+// there's no benefit to a narrower live fetch, and a narrower one is
+// exactly what caused the anchor-instability bug this replaced.
 export async function fetchBenchmarkHistoryCached(
   db: Database.Database,
   benchmarkId: string,
@@ -307,21 +334,19 @@ export async function fetchBenchmarkHistoryCached(
   const out: Record<string, number> = {};
   for (const row of cached) out[row.date] = row.value;
 
-  // Cache-miss heuristic mirroring the NAV cache in routes/backtest.ts —
-  // including the same bug that heuristic had until it was fixed there: a
-  // row count within [from, to] is not enough, because a cache built from
-  // an earlier, SHORTER-range backtest holds rows that are still inside a
-  // later, WIDER range's window (a superset) while covering none of that
-  // wider range's earlier years. Requires the earliest cached row to be
-  // within 10 days of the requested `from`, not just "some row exists
-  // somewhere in range" — otherwise a widened range silently re-served a
-  // stale, too-short cached window instead of live-fetching the gap.
+  // Cache-miss heuristic: a row count alone is not enough — see the same
+  // reasoning in routes/backtest.ts's NAV cache. Requires the earliest
+  // cached row to be within 10 days of the requested `from`, not just
+  // "some row exists somewhere in range". A rebuild triggered by this is
+  // always anchor-safe now (see fetchBenchmarkTriApproxLive) — it always
+  // recomputes the whole series from the fixed epoch, so this check only
+  // decides whether a rebuild is worth doing, never whether one is safe.
   const spanDays = (to.getTime() - from.getTime()) / (24 * 3600 * 1000);
   const earliestCachedDate = cached[0]?.date;
   const coversStart = earliestCachedDate !== undefined && new Date(earliestCachedDate).getTime() - from.getTime() <= 10 * 24 * 3600 * 1000;
   if (cached.length >= Math.min(5, spanDays) && coversStart) return out;
 
-  const fetched = await fetchBenchmarkTriApproxLive(benchmarkId, from, to);
+  const fetched = await fetchBenchmarkTriApproxLive(benchmarkId, to);
   const now = new Date().toISOString();
   insertObservations(
     db,
@@ -334,6 +359,13 @@ export async function fetchBenchmarkHistoryCached(
       fetchedAt: now,
     }))
   );
-  Object.assign(out, fetched);
+  // Only merge the caller's actual [from, to] slice into the returned
+  // series — the fetch above computed the full epoch->to series (and
+  // wrote all of it to the cache, so later callers with an earlier `from`
+  // hit the cache instead of re-fetching), but a caller asking for a
+  // narrower window shouldn't receive dates outside what it requested.
+  for (const [date, value] of Object.entries(fetched)) {
+    if (date >= fromIso && date <= toIso) out[date] = value;
+  }
   return out;
 }

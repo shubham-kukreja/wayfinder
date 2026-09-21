@@ -20,7 +20,7 @@ export function ReferenceRail({ referenced }: { referenced: MentionCandidate[] }
   const navigate = useNavigate();
 
   return (
-    <aside className="w-full shrink-0 border-t border-line bg-paper-2 px-4 py-6 lg:sticky lg:top-0 lg:h-screen lg:flex-1 lg:overflow-y-auto lg:border-l lg:border-t-0 lg:py-8">
+    <aside className="w-full shrink-0 border-t border-line bg-paper-2 px-10 py-6 lg:sticky lg:top-0 lg:h-screen lg:flex-1 lg:overflow-y-auto lg:border-l lg:border-t-0">
       <span className="text-xs font-bold uppercase tracking-eyebrow text-muted">Referenced</span>
 
       <div className="mt-3 flex flex-col">

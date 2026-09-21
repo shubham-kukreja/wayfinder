@@ -22,6 +22,11 @@ export interface BacktestPoint {
   date: string;
   portfolioValue: number;
   benchmarkValue: number;
+  // % gain vs money invested SO FAR (not the eventual total) — a leg that
+  // hasn't started yet must not depress the return of legs already live,
+  // so this indexes each point against investedToDate, not totalInvested.
+  portfolioReturnPct: number;
+  benchmarkReturnPct: number;
 }
 
 export interface BacktestLegResult {
@@ -43,9 +48,18 @@ export interface BacktestSummary {
   benchmarkCurrentValue: number; // what the same total, invested the same way, would be worth in the benchmark
   portfolioXirr: number | null; // annualised, as a fraction (0.12 = 12%)
   benchmarkXirr: number | null;
+  portfolioCagr: number | null; // simple annualised growth from total invested to current value
+  benchmarkCagr: number | null;
   absoluteReturnPct: number;
   benchmarkReturnPct: number;
   maxDrawdownPct: number; // portfolio, over the backtest window
+}
+
+function cagr(invested: number, currentValue: number, years: number): number | null {
+  if (invested <= 0 || currentValue < 0 || years <= 0) return null;
+  if (currentValue === 0) return -1;
+  const result = Math.pow(currentValue / invested, 1 / years) - 1;
+  return Number.isFinite(result) ? result : null;
 }
 
 export interface BacktestResult {
@@ -181,8 +195,10 @@ export function runBacktest(
 
   const series: BacktestPoint[] = timeline.map((date) => {
     let portfolioValue = 0;
+    let investedToDate = 0;
     for (const { leg, units, navDates, series: s } of legUnits) {
       if (date < leg.date) continue;
+      investedToDate += leg.amount;
       const v = valueOnOrBefore(s, navDates, date);
       if (v !== null) portfolioValue += units * v;
     }
@@ -193,7 +209,9 @@ export function runBacktest(
       const bv = valueOnOrBefore(benchmarkSeries, benchmarkDates, date);
       if (bv !== null) benchmarkValue += benchmarkUnitsPerLeg[i]!.units * bv;
     }
-    return { date, portfolioValue, benchmarkValue };
+    const portfolioReturnPct = investedToDate > 0 ? ((portfolioValue - investedToDate) / investedToDate) * 100 : 0;
+    const benchmarkReturnPct = investedToDate > 0 ? ((benchmarkValue - investedToDate) / investedToDate) * 100 : 0;
+    return { date, portfolioValue, benchmarkValue, portfolioReturnPct, benchmarkReturnPct };
   });
 
   const totalInvested = legs.reduce((sum, l) => sum + l.amount, 0);
@@ -208,6 +226,11 @@ export function runBacktest(
     ...legResults.filter((l) => !l.missingHistory).map((l) => ({ date: l.date, amount: -l.amount })),
     { date: today, amount: benchmarkCurrentValue },
   ];
+
+  const earliestLegDate = legs.reduce<string | null>((earliest, leg) => (!earliest || leg.date < earliest ? leg.date : earliest), null);
+  const elapsedYears = earliestLegDate
+    ? Math.max((new Date(today).getTime() - new Date(earliestLegDate).getTime()) / (365.25 * 24 * 3600 * 1000), 1 / 365.25)
+    : 0;
 
   let peak = -Infinity;
   let maxDrawdownPct = 0;
@@ -228,6 +251,8 @@ export function runBacktest(
       benchmarkCurrentValue,
       portfolioXirr: xirr(portfolioCashflows),
       benchmarkXirr: xirr(benchmarkCashflows),
+      portfolioCagr: cagr(totalInvested, portfolioCurrentValue, elapsedYears),
+      benchmarkCagr: cagr(totalInvested, benchmarkCurrentValue, elapsedYears),
       absoluteReturnPct: totalInvested > 0 ? ((portfolioCurrentValue - totalInvested) / totalInvested) * 100 : 0,
       benchmarkReturnPct: totalInvested > 0 ? ((benchmarkCurrentValue - totalInvested) / totalInvested) * 100 : 0,
       maxDrawdownPct,

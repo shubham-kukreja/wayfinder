@@ -181,6 +181,25 @@ export async function fetchTrackedNavLatest(trackedCodes: ReadonlySet<string>): 
   return navRowsToObservations(rows);
 }
 
+// Which scheme codes had a published NAV in a short window years back —
+// used by lib/defaultFunds.ts to tell an established fund apart from a
+// recently launched one when several candidates match the same sleeve
+// pattern. A 5-day window keeps this cheap (a few hundred KB to ~1MB,
+// confirmed live) while being immune to any single day 404ing as a
+// holiday. NOT a general-purpose history fetch — callers that need actual
+// NAV values (not just "did this scheme exist") should use
+// fetchTrackedNavHistory instead.
+export async function fetchSchemeCodesExistingOn(date: Date): Promise<Set<string>> {
+  const from = new Date(date);
+  const to = new Date(date);
+  to.setDate(to.getDate() + 4);
+  const params = new URLSearchParams({ frmdt: toAmfiDate(from), todt: toAmfiDate(to) });
+  const text = await fetchText(`${NAV_HISTORY_URL}?${params.toString()}`);
+  const codes = new Set<string>();
+  for (const row of parseNavHistoryChunk(text)) codes.add(row.schemeCode);
+  return codes;
+}
+
 // Each chunk is the FULL ~14k-scheme universe for that window (AMFI has no
 // server-side scheme filter — see file header), so it's a real download,
 // not a quick request: confirmed live 2026-09-20, a single 30-day chunk is

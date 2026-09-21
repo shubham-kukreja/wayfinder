@@ -1,13 +1,12 @@
-import type Database from "better-sqlite3";
 import type { FastifyInstance } from "fastify";
 import { request } from "undici";
-import { runBacktest, type BacktestLegInput, type DateValueSeries } from "@wayfinder/engine";
 import { openDb } from "../store/db.js";
 import { loadConfig } from "../config.js";
-import { amfiNavSeriesId, fetchTrackedNavHistory, parseNavAllLatest } from "../adapters/amfiNav.js";
-import { fetchBenchmarkHistoryCached, BENCHMARK_INDICES } from "../adapters/benchmarkIndex.js";
-import { insertObservations, latestObservations } from "../store/observations.js";
+import { fetchSchemeCodesExistingOn, parseNavAllLatest } from "../adapters/amfiNav.js";
+import { BENCHMARK_INDICES } from "../adapters/benchmarkIndex.js";
 import { pickDefaultFunds } from "../lib/defaultFunds.js";
+import { isValidBenchmark, resolveAndRunBacktest, validateLegs } from "../lib/backtestRunner.js";
+import { latestObservations } from "../store/observations.js";
 import {
   deleteBacktestScenario,
   getBacktestScenario,
@@ -21,117 +20,32 @@ interface RunBody {
   benchmarkId?: string;
 }
 
-function isoToday(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function validateLegs(legs: unknown): legs is BacktestLeg[] {
-  if (!Array.isArray(legs) || legs.length === 0) return false;
-  return legs.every(
-    (l) =>
-      l &&
-      typeof l.sleeveId === "string" &&
-      typeof l.schemeCode === "string" &&
-      typeof l.schemeName === "string" &&
-      typeof l.amount === "number" &&
-      l.amount > 0 &&
-      typeof l.date === "string" &&
-      /^\d{4}-\d{2}-\d{2}$/.test(l.date)
-  );
-}
-
-// Resolves NAV history for every distinct scheme in the legs and the
-// benchmark's daily index history, then runs the pure engine calculation.
-// Both legs of the fetch are cached in observations (per-scheme NAV under
-// its existing "amfi_nav:<code>"/AMFI_NAV series — the same one
-// store/trackedSchemes.ts's refresh pipeline writes to — and the
-// benchmark under "bt_index:<id>"/BACKTEST_INDEX_DAILY, see
-// adapters/benchmarkIndex.ts). A backtest is a what-if a user reruns
-// interactively with edited legs/dates, so subsequent runs over an
-// overlapping range fetch only the missing tail rather than the whole
-// range again — the first run for a fresh scheme+range is still a full
-// live fetch (AMFI in 30-day chunks, the benchmark day-by-day with bounded
-// concurrency), which is the unavoidable cost of genuinely new data.
-// Days to fetch/cache before the earliest leg's purchase date. The engine
-// looks up each leg's entry price as "the most recent NAV/index value on
-// or before the purchase date" (packages/engine/src/backtest.ts's
-// valueOnOrBefore) — necessary because a purchase date can land on a
-// weekend or holiday with no trading that day. Without this buffer, a
-// purchase date that IS itself a non-trading day has nothing earlier in
-// the fetched/cached window to fall back to, and the leg is wrongly
-// reported as missingHistory even though real history exists just before
-// it. 7 days comfortably covers any single weekend or short holiday run.
-const LOOKBACK_BUFFER_DAYS = 7;
-
-async function resolveAndRun(db: Database.Database, legs: BacktestLegInput[], benchmarkId: string) {
-  const dates = legs.map((l) => l.date);
-  const earliest = dates.reduce((min, d) => (d < min ? d : min));
-  const from = new Date(earliest);
-  from.setDate(from.getDate() - LOOKBACK_BUFFER_DAYS);
-  const to = new Date(isoToday());
-  const fromIso = from.toISOString().slice(0, 10);
-  const toIso = to.toISOString().slice(0, 10);
-
-  const schemeCodes = [...new Set(legs.map((l) => l.schemeCode))];
-  const navSeriesByScheme: Record<string, DateValueSeries> = {};
-
-  const missingCodes: string[] = [];
-  for (const code of schemeCodes) {
-    const seriesId = amfiNavSeriesId(code);
-    const cached = latestObservations(db, seriesId, { from: fromIso, to: toIso });
-    const series: DateValueSeries = {};
-    for (const row of cached) series[row.date] = row.value;
-    navSeriesByScheme[code] = series;
-    // Cache-miss heuristic: a row count alone is not enough — a cache built
-    // from an earlier, SHORTER-range backtest (e.g. one whose earliest leg
-    // was a year ago) can hold hundreds of rows that are all still inside a
-    // later, WIDER range's [from, to] window (a superset), while covering
-    // none of that wider range's earlier years at all. That previously
-    // passed the "fewer than 5 points" check and silently returned an
-    // entry-price lookup with nothing before the fund's true purchase date
-    // — reported as missingHistory even though AMFI has real history there,
-    // it was just never fetched. So this now also requires the earliest
-    // cached row to be within 10 days of the requested `from` (AMFI's own
-    // 7-day lookback buffer above plus a few days of slack for the first
-    // trading day after a fund's inception) — not just "some point on or
-    // after `from` exists somewhere in range".
-    const spanDays = (to.getTime() - from.getTime()) / (24 * 3600 * 1000);
-    const earliestCachedDate = cached[0]?.date;
-    const coversStart = earliestCachedDate !== undefined && new Date(earliestCachedDate).getTime() - from.getTime() <= 10 * 24 * 3600 * 1000;
-    if (cached.length < Math.min(5, spanDays) || !coversStart) missingCodes.push(code);
-  }
-
-  // NAV (AMFI, 30-day chunks) and the benchmark (niftyindices, day-by-day)
-  // are independent, unrelated data sources — kick both off together
-  // rather than awaiting one before starting the other. For a multi-year
-  // cold range this roughly halves wall time, since neither fetch waits
-  // on the other's requests.
-  const navPromise = missingCodes.length > 0 ? fetchTrackedNavHistory(new Set(missingCodes), from, to) : Promise.resolve([]);
-  const benchmarkPromise = fetchBenchmarkHistoryCached(db, benchmarkId, from, to);
-  const [navFetch, benchmarkSeries] = await Promise.all([navPromise, benchmarkPromise]);
-
-  if (missingCodes.length > 0) {
-    const now = new Date().toISOString();
-    const rows = navFetch.map((obs) => {
-      const code = obs.raw && typeof obs.raw === "object" && "schemeCode" in obs.raw ? (obs.raw as { schemeCode: string }).schemeCode : null;
-      return { seriesId: amfiNavSeriesId(code ?? ""), date: obs.date, value: obs.value, basis: null, source: "AMFI_NAV", fetchedAt: now };
-    });
-    insertObservations(db, rows);
-    for (const row of rows) {
-      const code = row.seriesId.slice("amfi_nav:".length);
-      navSeriesByScheme[code] ??= {};
-      navSeriesByScheme[code]![row.date] = row.value;
-    }
-  }
-
-  return runBacktest(legs, navSeriesByScheme, benchmarkSeries, isoToday());
-}
-
 const NAV_LATEST_URL = "https://portal.amfiindia.com/spages/NAVAll.txt";
 
 export function registerBacktestRoute(app: FastifyInstance): void {
   app.get("/api/backtest/benchmarks", async () => {
     return { benchmarks: Object.keys(BENCHMARK_INDICES) };
+  });
+
+  // GET /api/backtest/inflation — latest India CPI YoY print, used by a
+  // report's "real return" estimate (nominal CAGR/XIRR minus this rate).
+  // A single flat rate rather than a full CPI time series deflating each
+  // leg's own window — simpler, and the report already states it's an
+  // estimate rather than a precise inflation-adjusted calculation.
+  app.get("/api/backtest/inflation", async (_req, reply) => {
+    const config = loadConfig();
+    const db = openDb(config.dbPath);
+    try {
+      const rows = latestObservations(db, "cpi_yoy");
+      const latest = rows[rows.length - 1];
+      if (!latest) {
+        reply.code(404);
+        return { error: "No cpi_yoy observation available." };
+      }
+      return { ratePct: latest.value, asOf: latest.date };
+    } finally {
+      db.close();
+    }
   });
 
   // GET /api/backtest/default-funds — one default fund per sleeve, so the
@@ -140,15 +54,27 @@ export function registerBacktestRoute(app: FastifyInstance): void {
   // lib/defaultFunds.ts documents; reuses the exact NAV file
   // /api/schemes/search already pulls, so results share that route's
   // ~2s-per-call cost and freshness, not a separate stale mirror.
+  //
+  // Also fetches which scheme codes existed 8 years back (a short 5-day
+  // window, cheap) so pickDefaultFunds can prefer an established fund over
+  // a recently-launched one within the same sleeve — 8 years comfortably
+  // covers this app's 5-year default backtest window with margin. Both
+  // fetches are independent AMFI calls, run concurrently.
   app.get("/api/backtest/default-funds", async (_req, reply) => {
-    const res = await request(NAV_LATEST_URL, { method: "GET" });
-    if (res.statusCode !== 200) {
+    const eightYearsAgo = new Date();
+    eightYearsAgo.setFullYear(eightYearsAgo.getFullYear() - 8);
+
+    const [latestRes, establishedCodes] = await Promise.all([
+      request(NAV_LATEST_URL, { method: "GET" }),
+      fetchSchemeCodesExistingOn(eightYearsAgo).catch(() => new Set<string>()), // a failed "established" check just falls back to NAV-only ranking, not a hard error
+    ]);
+    if (latestRes.statusCode !== 200) {
       reply.code(502);
-      return { error: `AMFI NAV file fetch failed (${res.statusCode}).` };
+      return { error: `AMFI NAV file fetch failed (${latestRes.statusCode}).` };
     }
-    const text = await res.body.text();
+    const text = await latestRes.body.text();
     const rows = parseNavAllLatest(text);
-    return { defaults: pickDefaultFunds(rows) };
+    return { defaults: pickDefaultFunds(rows, establishedCodes) };
   });
 
   app.post<{ Body: RunBody }>("/api/backtest/run", async (req, reply) => {
@@ -157,7 +83,7 @@ export function registerBacktestRoute(app: FastifyInstance): void {
       reply.code(400);
       return { error: "legs must be a non-empty array of {sleeveId, schemeCode, schemeName, amount, date}." };
     }
-    if (!benchmarkId || !BENCHMARK_INDICES[benchmarkId]) {
+    if (!isValidBenchmark(benchmarkId)) {
       reply.code(400);
       return { error: `benchmarkId must be one of: ${Object.keys(BENCHMARK_INDICES).join(", ")}` };
     }
@@ -165,7 +91,7 @@ export function registerBacktestRoute(app: FastifyInstance): void {
     const config = loadConfig();
     const db = openDb(config.dbPath);
     try {
-      const result = await resolveAndRun(db, legs, benchmarkId);
+      const result = await resolveAndRunBacktest(db, legs, benchmarkId);
       return result;
     } catch (err) {
       reply.code(502);
@@ -204,7 +130,7 @@ export function registerBacktestRoute(app: FastifyInstance): void {
     "/api/backtest/scenarios",
     async (req, reply) => {
       const { id, label, legs, benchmarkId } = req.body ?? {};
-      if (!label || !validateLegs(legs) || !benchmarkId || !BENCHMARK_INDICES[benchmarkId]) {
+      if (!label || !validateLegs(legs) || !isValidBenchmark(benchmarkId)) {
         reply.code(400);
         return { error: "label, legs, and a valid benchmarkId are required." };
       }

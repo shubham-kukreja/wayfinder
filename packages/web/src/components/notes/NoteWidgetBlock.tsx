@@ -17,19 +17,10 @@ const OFFERED_SIZES: NoteWidgetSize[] = ["small", "medium", "full"];
 // "fill this block," not "escape it."
 const SIZE_CLASS: Record<NoteWidgetSize, string> = { small: "max-w-xs", medium: "max-w-lg", large: "max-w-3xl", full: "max-w-full" };
 
-// Three bars of increasing width — a literal size glyph rather than a
-// letter, so the control reads at a glance the way the app's other size/zoom
-// toggles do, and doesn't need translating.
-function SizeIcon({ size }: { size: NoteWidgetSize }) {
-  const widths: Record<NoteWidgetSize, number> = { small: 6, medium: 10, large: 12, full: 14 };
-  return (
-    <svg viewBox="0 0 16 12" className="h-3 w-4" fill="none">
-      <rect x="0" y="0" width={widths[size]} height="3" rx="1" fill="currentColor" />
-      <rect x="0" y="4.5" width={Math.min(widths[size] + 3, 16)} height="3" rx="1" fill="currentColor" />
-      <rect x="0" y="9" width={Math.min(widths[size] + 6, 16)} height="3" rx="1" fill="currentColor" />
-    </svg>
-  );
-}
+// A plain letter reads faster than any glyph could — S/M/L is a scale
+// everyone already knows (clothing sizes, t-shirt sizing in UI), so it
+// doesn't need a legend the way an abstract fill-bar icon would.
+const SIZE_LABEL: Record<NoteWidgetSize, string> = { small: "S", medium: "M", large: "L", full: "L" };
 
 export const WIDGET_TITLES: Record<string, string> = {
   allocation: "Allocation",
@@ -62,10 +53,14 @@ export function NoteWidgetBlock({
 }) {
   const render = WIDGET_RENDERERS[widget.widgetType];
 
+  // Same card shell as every section on Overview and Parameters: a plain
+  // `border border-line bg-paper` box (no radius, no shadow — this app
+  // never uses either for a card), with a `bg-paper-2` header strip
+  // separated by its own border-bottom rather than the whole card tinted.
   return (
-    <div className={`group relative w-full border border-line bg-paper-2 px-5 py-6 ${SIZE_CLASS[widget.size]}`}>
-      <div className="mb-4 flex items-center justify-between">
-        <span className="text-xs font-bold uppercase tracking-eyebrow text-muted">{WIDGET_TITLES[widget.widgetType] ?? widget.widgetType}</span>
+    <div className={`group relative w-full border border-line bg-paper ${SIZE_CLASS[widget.size]}`}>
+      <div className="flex items-center justify-between border-b border-line bg-paper-2 px-5 py-3">
+        <span className="text-[13px] font-semibold text-ink">{WIDGET_TITLES[widget.widgetType] ?? widget.widgetType}</span>
         {/* Hover-to-reveal only works with a pointer, so these stay visible
             below `sm` (touch devices) and only hide-then-reveal at desktop
             widths where hover is a real signal. */}
@@ -77,11 +72,11 @@ export function NoteWidgetBlock({
               onClick={() => onResize(s)}
               title={s}
               aria-label={`${s} size`}
-              className={`flex h-6 w-7 items-center justify-center transition-colors duration-100 ease-in ${
+              className={`flex h-6 w-7 items-center justify-center text-[11px] font-semibold transition-colors duration-100 ease-in ${
                 widget.size === s ? "bg-ink text-paper" : "text-muted hover:bg-paper hover:text-ink"
               }`}
             >
-              <SizeIcon size={s} />
+              {SIZE_LABEL[s]}
             </button>
           ))}
           <button
@@ -96,7 +91,7 @@ export function NoteWidgetBlock({
           </button>
         </div>
       </div>
-      <div className="overflow-x-auto">{render ? render(widget.size) : <p className="text-[12px] text-muted">Unknown widget type "{widget.widgetType}".</p>}</div>
+      <div className="overflow-x-auto p-5">{render ? render(widget.size) : <p className="text-[12px] text-muted">Unknown widget type "{widget.widgetType}".</p>}</div>
     </div>
   );
 }

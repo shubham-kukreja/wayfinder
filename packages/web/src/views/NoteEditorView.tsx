@@ -91,31 +91,43 @@ export function NoteEditorView() {
 
   return (
     <div className="flex w-full flex-col lg:flex-row">
-      <main className="min-w-0 px-6 py-4 sm:px-10 sm:py-6 lg:flex-[4] lg:px-14">
-        <div className="mb-5 flex items-center justify-between gap-4">
-          <button type="button" onClick={() => navigate("/notes")} className="flex items-center gap-1.5 px-1 py-1 text-[13px] font-semibold text-muted transition-colors duration-100 ease-in hover:text-ink">
-            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M10 3L5 8l5 5" />
-            </svg>
-            Notes
-          </button>
-          <div className="flex items-center gap-5">
-            <SaveIndicator state={saveState} />
-            <button type="button" onClick={() => setConfirmingDelete(true)} className="text-[13px] font-semibold text-muted transition-colors duration-100 ease-in hover:text-danger-500">
-              Delete
+      <main className="min-w-0 py-6 lg:flex-[4]">
+        {/* pl-16 (not the usual px-10) so the editor's floating side menu —
+            the +/drag-handle pair BlockNote anchors to each block's own left
+            edge — has real clearance from the sidebar instead of nearly
+            touching it. Back link, title, date and the editor all live
+            inside this one container so they share that same inset instead
+            of each needing it applied separately. */}
+        <div className="pl-16 pr-10">
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <button type="button" onClick={() => navigate("/notes")} className="flex items-center gap-1.5 px-1 py-1 text-[13px] font-semibold text-muted transition-colors duration-100 ease-in hover:text-ink">
+              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 3L5 8l5 5" />
+              </svg>
+              Notes
             </button>
+            <div className="flex items-center gap-5">
+              <SaveIndicator state={saveState} />
+              <button type="button" onClick={() => setConfirmingDelete(true)} className="text-[13px] font-semibold text-muted transition-colors duration-100 ease-in hover:text-danger-500">
+                Delete
+              </button>
+            </div>
           </div>
-        </div>
 
-        <input
-          value={title}
-          onChange={(e) => handleTitleChange(e.target.value)}
-          placeholder="Untitled note"
-          className="w-full border-none bg-transparent font-display text-2xl font-bold leading-tight text-ink outline-none placeholder:text-muted/70 sm:text-3xl"
-        />
+          <input
+            value={title}
+            onChange={(e) => handleTitleChange(e.target.value)}
+            placeholder="Untitled note"
+            className="w-full border-none bg-transparent font-display text-2xl font-bold leading-tight text-ink outline-none placeholder:text-muted/70 sm:text-3xl"
+          />
+          <p className="mt-1.5 text-[12px] text-muted">
+            {new Date(note.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
+            {note.author && <> · {note.author}</>}
+          </p>
 
-        <div className="mt-7">
-          <NoteEditor key={id} body={body} onChange={handleBodyChange} snapshot={snapshot} placeholder='Write freely. Type "/" to reference a data point, sleeve, version — or add a widget.' autoFocus />
+          <div className="mt-6">
+            <NoteEditor key={id} body={body} onChange={handleBodyChange} snapshot={snapshot} placeholder='Write freely. Type "/" to reference a data point, sleeve, version — or add a widget.' autoFocus />
+          </div>
         </div>
       </main>
 
