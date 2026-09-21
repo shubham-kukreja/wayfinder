@@ -55,18 +55,28 @@ export function registerBacktestRoute(app: FastifyInstance): void {
   // /api/schemes/search already pulls, so results share that route's
   // ~2s-per-call cost and freshness, not a separate stale mirror.
   //
-  // Also fetches which scheme codes existed 8 years back (a short 5-day
-  // window, cheap) so pickDefaultFunds can prefer an established fund over
-  // a recently-launched one within the same sleeve — 8 years comfortably
-  // covers this app's 5-year default backtest window with margin. Both
-  // fetches are independent AMFI calls, run concurrently.
+  // Also fetches which scheme codes existed 8 and 3 years back (short
+  // 5-day windows, cheap) so pickDefaultFunds can prefer an established
+  // fund over a recently-launched one within the same sleeve — 8 years
+  // comfortably covers this app's 5-year default backtest window with
+  // margin, and 3 years breaks the tie in categories too new for any
+  // candidate to clear 8. All three fetches are independent AMFI calls,
+  // run concurrently.
   app.get("/api/backtest/default-funds", async (_req, reply) => {
     const eightYearsAgo = new Date();
     eightYearsAgo.setFullYear(eightYearsAgo.getFullYear() - 8);
+    // Second, nearer probe. The 8-year gate is binary, so in a category
+    // where nothing is that old (silver ETFs, none before 2022) every
+    // candidate ties and highest-NAV decides — which for a metal-tracking
+    // fund means "launched most recently", the opposite of what a
+    // multi-year backtest needs. See pickTopFundsPerSleeve.
+    const threeYearsAgo = new Date();
+    threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
 
-    const [latestRes, establishedCodes] = await Promise.all([
+    const [latestRes, establishedCodes, recentlyEstablishedCodes] = await Promise.all([
       request(NAV_LATEST_URL, { method: "GET" }),
       fetchSchemeCodesExistingOn(eightYearsAgo).catch(() => new Set<string>()), // a failed "established" check just falls back to NAV-only ranking, not a hard error
+      fetchSchemeCodesExistingOn(threeYearsAgo).catch(() => new Set<string>()),
     ]);
     if (latestRes.statusCode !== 200) {
       reply.code(502);
@@ -74,7 +84,7 @@ export function registerBacktestRoute(app: FastifyInstance): void {
     }
     const text = await latestRes.body.text();
     const rows = parseNavAllLatest(text);
-    return { defaults: pickDefaultFunds(rows, establishedCodes) };
+    return { defaults: pickDefaultFunds(rows, establishedCodes, recentlyEstablishedCodes) };
   });
 
   app.post<{ Body: RunBody }>("/api/backtest/run", async (req, reply) => {

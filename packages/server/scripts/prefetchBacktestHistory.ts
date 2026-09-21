@@ -45,16 +45,19 @@ async function resolveTopFunds(perSleeve: number) {
   // the #1 pick here is byte-identical to the default the picker shows.
   const eightYearsAgo = new Date();
   eightYearsAgo.setFullYear(eightYearsAgo.getFullYear() - 8);
+  const threeYearsAgo = new Date();
+  threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
 
-  const [latestRes, establishedCodes] = await Promise.all([
+  const [latestRes, establishedCodes, recentlyEstablishedCodes] = await Promise.all([
     request(NAV_LATEST_URL, { method: "GET" }),
     fetchSchemeCodesExistingOn(eightYearsAgo).catch(() => new Set<string>()),
+    fetchSchemeCodesExistingOn(threeYearsAgo).catch(() => new Set<string>()),
   ]);
   if (latestRes.statusCode !== 200) {
     throw new Error(`AMFI NAV file fetch failed (${latestRes.statusCode}).`);
   }
   const rows = parseNavAllLatest(await latestRes.body.text());
-  return pickTopFundsPerSleeve(rows, perSleeve, establishedCodes);
+  return pickTopFundsPerSleeve(rows, perSleeve, establishedCodes, recentlyEstablishedCodes);
 }
 
 async function main() {

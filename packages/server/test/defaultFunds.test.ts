@@ -56,6 +56,38 @@ describe("pickTopFundsPerSleeve", () => {
     expect(picks.map((p) => p.schemeCode)).toEqual(["tata-dg", "mirae-dg"]);
   });
 
+  it("prefers the older fund in a category too new for the 8-year gate", () => {
+    // The live regression: silver ETFs are all post-2022, so no candidate
+    // clears the 8-year gate, every one ties on it, and highest-NAV wins.
+    // A metal fund's NAV tracks the metal price rather than fund age, so
+    // that picked the YOUNGEST (2025) fund over four 2022 ones — and a
+    // 5-year backtest then reported the leg as missingHistory, worth zero.
+    const silver = [
+      row("launched-2025", "Zeta Silver ETF", 120, "Direct Plan", "Growth"),
+      row("launched-2022", "Alpha Silver ETF", 95, "Direct Plan", "Growth"),
+    ];
+    const established = new Set<string>(); // nothing is 8 years old
+    const recentlyEstablished = new Set(["launched-2022"]);
+
+    const [top] = pickTopFundsPerSleeve(silver, 2, established, recentlyEstablished);
+    expect(top!.schemeCode).toBe("launched-2022");
+
+    // Without the nearer probe, the higher-NAV newcomer still wins —
+    // this is the behaviour that shipped the bad default.
+    const [withoutProbe] = pickTopFundsPerSleeve(silver, 2, established);
+    expect(withoutProbe!.schemeCode).toBe("launched-2025");
+  });
+
+  it("lets the 8-year gate win over the nearer probe", () => {
+    // The nearer probe must only break ties, never override real seniority.
+    const rows = [
+      row("old", "Alpha Large Cap Fund", 10, "Direct Plan", "Growth"),
+      row("newer", "Beta Large Cap Fund", 900, "Direct Plan", "Growth"),
+    ];
+    const [top] = pickTopFundsPerSleeve(rows, 2, new Set(["old"]), new Set(["newer"]));
+    expect(top!.schemeCode).toBe("old");
+  });
+
   it("keeps each sleeve's picks under its own sleeveId", () => {
     const rows = [...LARGE_CAP, row("liq", "Delta Liquid Fund", 30, "Direct Plan", "Growth")];
     const picks = pickTopFundsPerSleeve(rows, 2, ESTABLISHED);

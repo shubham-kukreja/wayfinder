@@ -87,8 +87,24 @@ export interface DefaultFundPick {
 // match is a genuinely new category), falls back to the same-cohort
 // ranking among all candidates rather than picking nothing — a young
 // default is still better than an empty picker.
-export function pickDefaultFunds(rows: NavRow[], establishedCodes: ReadonlySet<string> = new Set()): DefaultFundPick[] {
-  return pickTopFundsPerSleeve(rows, 1, establishedCodes).map(({ sleeveId, schemeCode, schemeName }) => ({
+//
+// `recentlyEstablishedCodes` is an OPTIONAL second, nearer probe that
+// breaks exactly that fallback case. The single 8-year gate is binary, so
+// within a category where nothing is 8 years old — silver ETFs, none of
+// which predate 2022 — every candidate ties on it and rank 3 (highest
+// NAV) decides. For a metal-tracking fund NAV is the metal price, not
+// fund age, so that systematically re-selected the YOUNGEST fund: the
+// 2025-04-03 360 ONE Silver ETF beat four 2022 funds, and a 5-year
+// backtest then reported that leg as missingHistory with zero value.
+// Confirmed live 2026-09-21. A probe a few years back separates the 2022
+// cohort from the 2025 one and the older fund wins, without changing any
+// sleeve where the 8-year gate already decides.
+export function pickDefaultFunds(
+  rows: NavRow[],
+  establishedCodes: ReadonlySet<string> = new Set(),
+  recentlyEstablishedCodes: ReadonlySet<string> = new Set()
+): DefaultFundPick[] {
+  return pickTopFundsPerSleeve(rows, 1, establishedCodes, recentlyEstablishedCodes).map(({ sleeveId, schemeCode, schemeName }) => ({
     sleeveId,
     schemeCode,
     schemeName,
@@ -114,7 +130,8 @@ export function pickDefaultFunds(rows: NavRow[], establishedCodes: ReadonlySet<s
 export function pickTopFundsPerSleeve(
   rows: NavRow[],
   perSleeve: number,
-  establishedCodes: ReadonlySet<string> = new Set()
+  establishedCodes: ReadonlySet<string> = new Set(),
+  recentlyEstablishedCodes: ReadonlySet<string> = new Set()
 ): DefaultFundPick[] {
   const picks: DefaultFundPick[] = [];
 
@@ -125,6 +142,11 @@ export function pickTopFundsPerSleeve(
     candidates.sort((a, b) => {
       const establishedDiff = Number(establishedCodes.has(b.schemeCode)) - Number(establishedCodes.has(a.schemeCode));
       if (establishedDiff !== 0) return establishedDiff;
+      // Only bites where the 8-year gate tied — i.e. a category too new
+      // for any candidate to clear it. Keeps NAV from deciding by proxy
+      // for "most recently launched at a high unit price".
+      const recentDiff = Number(recentlyEstablishedCodes.has(b.schemeCode)) - Number(recentlyEstablishedCodes.has(a.schemeCode));
+      if (recentDiff !== 0) return recentDiff;
       const scoreDiff = planScore(b) - planScore(a);
       if (scoreDiff !== 0) return scoreDiff;
       return b.nav - a.nav;
