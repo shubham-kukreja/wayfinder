@@ -82,10 +82,14 @@ fi
 echo "Uploading and merging..."
 # Wrapped in a transaction so a dropped connection leaves the DB unchanged
 # rather than half-merged.
-railway ssh -- "cat > /tmp/obs.sql.gz \
+# Runs from /app/packages/server so better-sqlite3 resolves by name —
+# pnpm does not hoist it to /app/node_modules, it lives under the
+# package's own node_modules (a symlink into .pnpm).
+railway ssh -- "cd /app/packages/server \
+  && cat > /tmp/obs.sql.gz \
   && gzip -dc /tmp/obs.sql.gz > /tmp/obs.sql \
   && node -e \"
-    const Database = require('/app/node_modules/better-sqlite3');
+    const Database = require('better-sqlite3');
     const fs = require('fs');
     const db = new Database('/data/wayfinder.db');
     const before = db.prepare('SELECT COUNT(*) c FROM observations').get().c;

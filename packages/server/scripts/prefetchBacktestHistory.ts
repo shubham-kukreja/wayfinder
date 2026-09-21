@@ -21,7 +21,7 @@ import { openDb } from "../src/store/db.js";
 import { loadConfig } from "../src/config.js";
 import { request } from "undici";
 import { fetchTrackedNavHistory, fetchSchemeCodesExistingOn, parseNavAllLatest, amfiNavSeriesId } from "../src/adapters/amfiNav.js";
-import { fetchBenchmarkHistoryCached, BENCHMARK_INDICES } from "../src/adapters/benchmarkIndex.js";
+import { fetchBenchmarkHistoryCached, BENCHMARK_INDICES, TRI_APPROX_EPOCH_ISO } from "../src/adapters/benchmarkIndex.js";
 import { insertObservations, seriesCoverage } from "../src/store/observations.js";
 import { addTrackedScheme } from "../src/store/trackedSchemes.js";
 import { pickTopFundsPerSleeve } from "../src/lib/defaultFunds.js";
@@ -131,8 +131,25 @@ async function main() {
       }
     }
 
+    // The benchmark series cannot reach as far back as the NAVs: every
+    // TRI-approx series is anchored at TRI_APPROX_EPOCH_ISO (2019-02-01),
+    // which is set by the earliest Yahoo price history available for the
+    // binding ticker (Nifty Midcap 150, first trading 2019-01-13). A
+    // backtest starting before that has fund NAVs but no benchmark to
+    // compare against, so say so here rather than letting it surface as
+    // an empty benchmark line on the report.
+    const navStart = new Date(from).toISOString().slice(0, 10);
+    if (navStart < TRI_APPROX_EPOCH_ISO) {
+      console.log();
+      console.log(
+        `NOTE: NAV history reaches ${navStart}, but benchmarks only reach ` +
+          `${TRI_APPROX_EPOCH_ISO} (Yahoo has no earlier price history for Nifty Midcap 150). ` +
+          `Backtests starting before ${TRI_APPROX_EPOCH_ISO} will have no benchmark comparison.`
+      );
+    }
+
     console.log();
-    console.log("Done. Ship the DB with: scripts/shipDbToProduction.sh");
+    console.log("Done. Ship to production with: scripts/shipObservationsToProduction.sh");
   } finally {
     db.close();
   }
