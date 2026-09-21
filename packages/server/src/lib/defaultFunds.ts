@@ -88,6 +88,34 @@ export interface DefaultFundPick {
 // ranking among all candidates rather than picking nothing — a young
 // default is still better than an empty picker.
 export function pickDefaultFunds(rows: NavRow[], establishedCodes: ReadonlySet<string> = new Set()): DefaultFundPick[] {
+  return pickTopFundsPerSleeve(rows, 1, establishedCodes).map(({ sleeveId, schemeCode, schemeName }) => ({
+    sleeveId,
+    schemeCode,
+    schemeName,
+  }));
+}
+
+// The same ranking pickDefaultFunds uses, but keeping the top `perSleeve`
+// candidates instead of only the winner. Exists for the NAV prefetch
+// (scripts/prefetchBacktestHistory.ts): production cannot fetch AMFI
+// history itself — Railway's egress to portal.amfiindia.com is throttled
+// to ~1-22KB/s against ~1-2MB/s from a normal connection (measured live
+// 2026-09-21 from inside the container, on both the 24MB history endpoint
+// and the ~1MB NAVAll.txt), so a 24MB chunk there would need hours. The
+// history is therefore fetched locally and shipped in the SQLite file,
+// and caching several candidates per sleeve rather than just the default
+// means switching a leg to the 2nd/3rd choice in the picker still hits
+// cache instead of a fetch production cannot complete.
+//
+// This does NOT cover an arbitrary fund chosen through the search box —
+// there are ~14k schemes and no way to pre-cache them all. Those legs
+// still fall back to a live fetch and will be slow/fail on production
+// until that egress problem is solved.
+export function pickTopFundsPerSleeve(
+  rows: NavRow[],
+  perSleeve: number,
+  establishedCodes: ReadonlySet<string> = new Set()
+): DefaultFundPick[] {
   const picks: DefaultFundPick[] = [];
 
   for (const [sleeveId, pattern] of Object.entries(SLEEVE_NAME_PATTERNS)) {
@@ -102,8 +130,20 @@ export function pickDefaultFunds(rows: NavRow[], establishedCodes: ReadonlySet<s
       return b.nav - a.nav;
     });
 
-    const best = candidates[0]!;
-    picks.push({ sleeveId, schemeCode: best.schemeCode, schemeName: best.schemeName });
+    // One entry per distinct scheme NAME. AMFI lists every plan/option
+    // variant as its own scheme code, so without this a sleeve's slots
+    // fill with e.g. five Direct/Regular × Growth/IDCW rows of the same
+    // Tata fund — five codes, one actual fund. The sort already put each
+    // name's best variant first, so keeping the first occurrence keeps
+    // that choice while spending the remaining slots on real alternatives.
+    const seenNames = new Set<string>();
+    for (const row of candidates) {
+      if (seenNames.size >= perSleeve) break;
+      const name = row.schemeName.trim().toLowerCase();
+      if (seenNames.has(name)) continue;
+      seenNames.add(name);
+      picks.push({ sleeveId, schemeCode: row.schemeCode, schemeName: row.schemeName });
+    }
   }
 
   return picks;
