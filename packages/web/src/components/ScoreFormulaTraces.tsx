@@ -15,7 +15,7 @@
 // by the SAME arithmetic the server used — never re-fetched and never
 // approximated, so a figure here that disagrees with the score is a real
 // bug, not a rounding artefact of the view.
-import type { ScoreState, SeriesState } from "@wayfinder/engine";
+import type { ScoreLeg, ScoreLegComponent, ScoreState, SeriesState } from "@wayfinder/engine";
 import { DistributionStrip } from "./DistributionStrip.js";
 import { formatScore } from "../lib/format.js";
 
@@ -24,15 +24,16 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
-// Span of a series' stored history in years. Observation COUNT can't
-// stand in for this — nifty50_pe is daily (645 rows ≈ 2.5 years) while
-// gsec_10y is monthly (176 rows ≈ 15 years) — so depth-of-history
-// warnings have to measure the calendar span, not the row count.
-function historyYears(windowStart: string | null): number | null {
-  if (!windowStart) return null;
-  const start = new Date(windowStart).getTime();
-  if (Number.isNaN(start)) return null;
-  return (Date.now() - start) / (365.25 * 24 * 60 * 60 * 1000);
+// NOTE: a local historyYears(windowStart) helper used to estimate depth
+// of history as "now minus the series' window start". Depth-of-history
+// warnings now read ScoreLeg.spanYears — the span of the rows the score
+// actually ranked — which is both exact and specific to the leg being
+// warned about, rather than measured against the wall clock.
+
+// A derived leg's input, rendered in its own unit — a yield reads 6.78%,
+// a P/E reads 20.78.
+function formatComponent(c: ScoreLegComponent): string {
+  return c.unit === "percent" ? `${c.value.toFixed(2)}%` : c.value.toFixed(2);
 }
 
 function TraceHeading({ signalLabel, children }: { signalLabel: string; children: React.ReactNode }) {
@@ -98,23 +99,84 @@ function Caveat({ children }: { children: React.ReactNode }) {
 }
 
 // ── valuation ──────────────────────────────────────────────────────────
-// Calculation Guide row 7. Two percentile parts, then averaged. Both
-// parts are reconstructed here from each series' own SeriesState
-// percentile, which is exactly what the server percentiled.
-function ValuationTrace({ series, score }: { series: Record<string, SeriesState>; score: number }) {
+// Calculation Guide row 7. Two percentile parts, then averaged.
+//
+// Both parts come from scoreState.legs — what the server actually
+// ranked. Neither is reconstructed here, and that is the point:
+//
+//   Part (a) used to be BACK-SOLVED from the published score as
+//   2 * score - partB. That arithmetic is circular — it is derived from
+//   the very score it appears to verify, so it reconciles perfectly even
+//   if the server's part (a) is wrong, and can never surface a bug in
+//   the half it claims to show.
+//
+//   Part (b) used to read SeriesState.percentile, taken over ALL stored
+//   rows rather than the window the score ranked (750 daily rows vs the
+//   scored history) — the same defect documented on
+//   SegmentValuationTrace below.
+//
+//   The gap itself used to be recomputed on screen from each input's
+//   latest value. The gap series month-joins daily nifty50_pe against
+//   monthly gsec_10y, so its newest point trails both: on 2026-09-21 the
+//   trace showed -1.73% (September P/E vs July G-sec, two readings that
+//   never coexisted) while the ranked value was -1.97% from 2026-07-31.
+//
+// Every figure below is one the server computed, and the chain closes:
+// the two leg scores average to the published value exactly.
+function ValuationTrace({
+  scoreState,
+  series,
+  score,
+}: {
+  scoreState: ScoreState;
+  series: Record<string, SeriesState>;
+  score: number;
+}) {
   const pe = series["nifty50_pe"];
   const gsec = series["gsec_10y"];
-  if (!pe || !gsec || pe.latest === null || gsec.latest === null) return null;
+  const legs = scoreState.legs ?? null;
+  const gapLeg = legs?.find((l) => l.seriesId === "equity_earnings_yield_gap") ?? null;
+  const peLeg = legs?.find((l) => l.seriesId === "nifty50_pe") ?? null;
 
-  const earningsYield = 100 / pe.latest;
-  const gap = earningsYield - gsec.latest;
+  // Pre-legs snapshot: show the inputs, but do NOT reconstruct either
+  // part. The only numbers available on that path are the two the
+  // comment above rejects.
+  if (gapLeg === null || peLeg === null) {
+    if (!pe || !gsec || pe.latest === null || gsec.latest === null) return null;
+    return (
+      <section>
+        <TraceHeading signalLabel="Valuation">
+          Two independent reads on whether equity is cheap, averaged. One compares equity's earnings yield to the bond
+          yield; the other asks only whether the P/E itself is high or low by its own history.
+        </TraceHeading>
+        <Formula>score = (a + b) / 2</Formula>
+        <div className="mt-3 border-y border-line">
+          <InputRow id="nifty50_pe" label="Nifty 50 trailing P/E" value={pe.latest.toFixed(2)} state={pe} />
+          <InputRow id="gsec_10y" label="10Y G-sec yield" value={`${gsec.latest.toFixed(2)}%`} state={gsec} />
+        </div>
+        <FinalScore label="Valuation" score={score} />
+        <Caveat>
+          This snapshot predates per-leg tracing, so the two parts behind the average are not recorded in it. Refresh
+          the snapshot to see the full arithmetic.
+        </Caveat>
+      </section>
+    );
+  }
 
-  // Part (b) is the P/E series' own percentile, inverted. Part (a) is the
-  // GAP series' percentile, which is a derived series with no SeriesState
-  // of its own — so it is back-solved from the published score:
-  // score = (a + b) / 2  =>  a = 2 * score - b.
-  const partB = pe.percentile !== null ? 100 - pe.percentile : null;
-  const partA = partB !== null ? 2 * score - partB : null;
+  const partA = gapLeg.score;
+  const partB = peLeg.score;
+  const mean = (partA + partB) / 2;
+  const reconciles = Math.abs(mean - score) < 0.005;
+
+  // The gap's two inputs, if the server recorded them. Matched by series
+  // id rather than position so a future reordering cannot silently swap
+  // the P/E and the yield.
+  const peComponent = gapLeg.components?.find((c) => c.seriesId === "nifty50_pe") ?? null;
+  const gsecComponent = gapLeg.components?.find((c) => c.seriesId === "gsec_10y") ?? null;
+  const gapComponents =
+    peComponent !== null && gsecComponent !== null && peComponent.value !== 0
+      ? { pe: peComponent, gsec: gsecComponent }
+      : null;
 
   return (
     <section>
@@ -126,81 +188,139 @@ function ValuationTrace({ series, score }: { series: Record<string, SeriesState>
       <Formula>score = (a + b) / 2</Formula>
 
       <div className="mt-3 border-y border-line">
-        <InputRow id="nifty50_pe" label="Nifty 50 trailing P/E" value={pe.latest.toFixed(2)} state={pe} />
-        <InputRow id="gsec_10y" label="10Y G-sec yield" value={`${gsec.latest.toFixed(2)}%`} state={gsec} />
+        {pe && pe.latest !== null && (
+          <InputRow id="nifty50_pe" label="Nifty 50 trailing P/E" value={pe.latest.toFixed(2)} state={pe} />
+        )}
+        {gsec && gsec.latest !== null && (
+          <InputRow id="gsec_10y" label="10Y G-sec yield" value={`${gsec.latest.toFixed(2)}%`} state={gsec} />
+        )}
       </div>
 
       {/* Part (a) */}
       <div className="mt-4">
         <div className="flex items-baseline justify-between gap-3">
           <h4 className="text-[12px] font-bold uppercase tracking-eyebrow text-ink">Part (a) — earnings-yield gap</h4>
-          {partA !== null && <span className="text-[15px] font-semibold tabular-nums text-ink">{formatScore(partA)}</span>}
+          <span className="text-[15px] font-semibold tabular-nums text-ink">{formatScore(partA)}</span>
         </div>
         <Formula>a = PERCENTRANK(gap history, gap) × 100 &nbsp;·&nbsp; AS-IS</Formula>
-        <div className="mt-1">
-          <Step n={1} value={`${earningsYield.toFixed(2)}%`}>
-            Earnings yield = 100 ÷ {pe.latest.toFixed(2)}
-          </Step>
-          <Step n={2} value={`${gap >= 0 ? "+" : ""}${gap.toFixed(2)}%`}>
-            Gap = {earningsYield.toFixed(2)}% − {gsec.latest.toFixed(2)}%
-          </Step>
-          <Step n={3} value={partA !== null ? formatScore(partA) : "—"}>
-            Rank that gap against its own monthly history. A wide gap means equity is cheap against bonds, so it is{" "}
-            <span className="font-semibold text-ink">not</span> inverted.
-          </Step>
-        </div>
+        {/* The two readings the gap was built from, each on its own
+            date, then the arithmetic that turns them into the ranked
+            value. Stating -1.97% without these makes the number
+            unverifiable — it is the one figure a reader most wants to
+            recompute by hand. */}
+        {gapComponents !== null && (
+          <div className="mt-1">
+            <Step n={1} value={formatComponent(gapComponents.pe)}>
+              {gapComponents.pe.label}, {formatDate(gapComponents.pe.date)}
+            </Step>
+            <Step n={2} value={formatComponent(gapComponents.gsec)}>
+              {gapComponents.gsec.label}, {formatDate(gapComponents.gsec.date)}
+            </Step>
+            <Step n={3} value={`${(100 / gapComponents.pe.value).toFixed(2)}%`}>
+              <span className="font-mono text-[11px]">Earnings yield = 100 ÷ {gapComponents.pe.value.toFixed(2)}</span>
+            </Step>
+            <Step n={4} value={`${gapLeg.value >= 0 ? "+" : ""}${gapLeg.value.toFixed(2)}%`}>
+              <span className="font-mono text-[11px]">
+                Gap = {(100 / gapComponents.pe.value).toFixed(2)}% − {gapComponents.gsec.value.toFixed(2)}%
+              </span>
+            </Step>
+            <Step n={5} value={formatScore(partA)}>
+              <span className="font-mono text-[11px]">
+                PERCENTRANK({gapLeg.observations} readings, {gapLeg.value.toFixed(2)}%) × 100
+              </span>{" "}
+              over {gapLeg.spanYears.toFixed(1)} years. A wide gap means equity is cheap against bonds, so this part is{" "}
+              <span className="font-semibold text-ink">not</span> inverted.
+            </Step>
+          </div>
+        )}
+        {gapComponents === null && (
+          <div className="mt-1">
+            <Step n={1} value={`${gapLeg.value >= 0 ? "+" : ""}${gapLeg.value.toFixed(2)}%`}>
+              The gap ranked, as of <span className="font-semibold text-ink">{formatDate(gapLeg.date)}</span>.
+            </Step>
+            <Step n={2} value={formatScore(partA)}>
+              <span className="font-mono text-[11px]">
+                PERCENTRANK({gapLeg.observations} readings, {gapLeg.value.toFixed(2)}%) × 100
+              </span>{" "}
+              over {gapLeg.spanYears.toFixed(1)} years, as-is.
+            </Step>
+          </div>
+        )}
+        <p className="mt-2 text-[12px] leading-5 text-muted">
+          The series month-joins a daily P/E to a monthly bond yield, so its newest point is the last month both sides
+          exist — not today
+          {gapComponents !== null && gapComponents.pe.date.slice(0, 7) === gapComponents.gsec.date.slice(0, 7)
+            ? ", and the two readings above share a month rather than a day"
+            : ""}
+          .
+        </p>
       </div>
 
       {/* Part (b) */}
       <div className="mt-4">
         <div className="flex items-baseline justify-between gap-3">
           <h4 className="text-[12px] font-bold uppercase tracking-eyebrow text-ink">Part (b) — P/E percentile</h4>
-          {partB !== null && <span className="text-[15px] font-semibold tabular-nums text-ink">{formatScore(partB)}</span>}
+          <span className="text-[15px] font-semibold tabular-nums text-ink">{formatScore(partB)}</span>
         </div>
         <Formula>b = 100 − PERCENTRANK(P/E history, P/E) × 100 &nbsp;·&nbsp; INVERTED</Formula>
-        {pe.percentile !== null ? (
-          <>
-            <div className="mt-2.5">
-              <DistributionStrip percentile={pe.percentile} />
-              <p className="mt-1.5 text-[12px] text-muted">
-                {Math.round((pe.percentile / 100) * pe.observations)} of {pe.observations} past readings sit at or below a P/E of{" "}
-                {pe.latest.toFixed(2)}
-                {pe.windowStart ? `, going back to ${formatDate(pe.windowStart)}` : ""}.
-              </p>
-            </div>
-            <div className="mt-1">
-              <Step n={1} value={`${pe.percentile.toFixed(1)}`}>
-                P/E percentile
-              </Step>
-              <Step n={2} value={partB !== null ? formatScore(partB) : "—"}>
-                Inverted: 100 − {pe.percentile.toFixed(1)}. A high P/E is expensive, so it scores low.
-              </Step>
-            </div>
-          </>
-        ) : (
-          <p className="mt-2 text-[12px] text-muted">
-            Not enough P/E history to rank yet — {pe.observations} observations stored.
+        <div className="mt-2.5">
+          <DistributionStrip percentile={peLeg.percentile} />
+          <p className="mt-1.5 text-[12px] text-muted">
+            A P/E of {peLeg.value.toFixed(2)}
+            {peLeg.date ? ` on ${formatDate(peLeg.date)}` : ""} sits above {peLeg.percentile.toFixed(1)}% of the{" "}
+            {peLeg.observations} readings in its {peLeg.spanYears.toFixed(1)}-year history.
           </p>
-        )}
+        </div>
+        <div className="mt-1">
+          <Step n={1} value={peLeg.percentile.toFixed(2)}>
+            <span className="font-mono text-[11px]">
+              PERCENTRANK({peLeg.observations} readings, {peLeg.value.toFixed(2)}) × 100
+            </span>
+          </Step>
+          <Step n={2} value={formatScore(partB)}>
+            Inverted: 100 − {peLeg.percentile.toFixed(2)}. A high P/E is expensive, so it scores low.
+          </Step>
+        </div>
       </div>
 
-      {partA !== null && partB !== null && (
-        <div className="mt-4 border-t border-line pt-3">
-          <div className="flex items-baseline justify-between gap-3">
-            <span className="font-mono text-[12px] text-ink-2">
-              ({formatScore(partA)} + {formatScore(partB)}) / 2
-            </span>
-            <span className="text-[15px] font-semibold tabular-nums text-ink">{formatScore(score)}</span>
-          </div>
+      <div className="mt-4 border-t border-line pt-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="font-mono text-[12px] text-ink-2">
+            ({partA.toFixed(2)} + {partB.toFixed(2)}) / 2
+          </span>
+          <span className="text-[15px] font-semibold tabular-nums text-ink">{formatScore(mean)}</span>
         </div>
+      </div>
+
+      <FinalScore label="Valuation" score={score} />
+
+      {!reconciles && (
+        <Caveat>
+          These two parts average to {mean.toFixed(4)}, but the published score is {score.toFixed(4)}. That gap is a bug
+          — the trace and the score are reading different computations. Please report it.
+        </Caveat>
       )}
 
-      {historyYears(pe.windowStart) !== null && historyYears(pe.windowStart)! < 10 && (
+      {/* The two parts are ranked over DIFFERENT histories and end on
+          DIFFERENT dates, which the old single-window caveat hid. */}
+      <p className="mt-3 text-[12px] leading-5 text-ink-2">
+        The two parts rank different series over different windows: the gap over {gapLeg.observations} readings ending{" "}
+        {formatDate(gapLeg.date)}, the P/E over {peLeg.observations} ending {formatDate(peLeg.date)}. Each series' own
+        page shows a percentile taken over all its stored rows, which is a different figure from the ones here.
+      </p>
+
+      {gapLeg.spanYears < 10 && (
         <Caveat>
-          The spec asks for 10–15 years of P/E history; only about {historyYears(pe.windowStart)!.toFixed(1)} years is stored
-          {pe.windowStart ? `, starting ${formatDate(pe.windowStart)}` : ""} ({pe.observations} observations). That is too short to
-          contain a full valuation cycle, so part (b) ranks against an unrepresentatively narrow range and reads more extreme than
-          it should. A niftyindices backfill fixes this — the formula itself is correct.
+          The spec asks for 10–15 years; the gap ranks against {gapLeg.spanYears.toFixed(1)} years (
+          {gapLeg.observations} readings). Too short to contain a full valuation cycle, so part (a) reads more extreme
+          than it should. A backfill fixes this — the formula itself is correct.
+        </Caveat>
+      )}
+
+      {peLeg.spanYears < 10 && (
+        <Caveat>
+          The spec asks for 10–15 years of P/E history; part (b) ranks against {peLeg.spanYears.toFixed(1)} years (
+          {peLeg.observations} readings). A niftyindices backfill fixes this — the formula itself is correct.
         </Caveat>
       )}
     </section>
@@ -1120,15 +1240,24 @@ function SectorValuationTrace({
 // history, INVERTED: attractiveness = 100 - PERCENTRANK x 100.
 // Optionally average with the same on P/B."
 //
-// Bespoke rather than generic for two reasons. First, the same one the
-// sector trace documents: the generic trace reads SeriesState.percentile,
-// computed over the series' ENTIRE stored history, while the score is
-// computed over a 10-year MONTH-END sample. Those now differ materially
-// (the store holds ~740 daily rows against 119 monthly ones), so a
-// generic trace would display a percentile that did not produce the
-// score. Second, this cell averages TWO inverted percentiles, and the
-// average is not recoverable from the final score alone — each leg's
-// own percentile has to be read from its series state and shown.
+// Bespoke rather than generic because the generic trace reads
+// SeriesState.percentile, computed over the series' ENTIRE stored
+// history, while the score is computed over a 10-year MONTH-END sample.
+// Those differ materially (the store holds ~750 daily rows against 119
+// monthly ones), so a generic trace would display a percentile that did
+// not produce the score.
+//
+// The per-leg numbers therefore come from scoreState.legs — what the
+// server actually ranked — and NOT from SeriesState. Reading SeriesState
+// here was a real defect, not a rounding one: on 2026-09-20 this cell
+// published 97.8814 while the two SeriesState percentiles reconstructed
+// 97.17, because nifty100_pe ranks 2.54 over all 750 stored rows but
+// 1.69 over the 119 month-end rows inside the window. A reader doing the
+// arithmetic on screen would have found it not to add up and concluded
+// the score was broken.
+//
+// Every figure below is one the server computed, and the chain closes:
+// leg scores average to the published value exactly.
 function SegmentValuationTrace({
   scoreState,
   series,
@@ -1140,13 +1269,58 @@ function SegmentValuationTrace({
   score: number;
   segmentLabel: string;
 }) {
-  const peId = scoreState.derivedFrom.find((id) => id.endsWith("_pe"));
-  const pbId = scoreState.derivedFrom.find((id) => id.endsWith("_pb"));
-  const pe = peId ? series[peId] : undefined;
-  const pb = pbId ? series[pbId] : undefined;
   const spanYears = scoreState.historySpanYears ?? null;
   const shortfall = scoreState.historyShortfall === true;
-  const legCount = (peId ? 1 : 0) + (pbId ? 1 : 0);
+
+  // Prefer the server's own legs. Fall back to derivedFrom only to keep
+  // rendering something for a snapshot written before legs existed —
+  // that path shows the inputs but deliberately NOT a reconstructed
+  // percentile, because the only one available there (SeriesState's) is
+  // not the number that produced the score.
+  const legs = scoreState.legs ?? null;
+  const labelFor = (seriesId: string) =>
+    seriesId.endsWith("_pb") ? `${segmentLabel} P/B` : `${segmentLabel} trailing P/E`;
+
+  if (legs === null || legs.length === 0) {
+    const ids = scoreState.derivedFrom;
+    return (
+      <section>
+        <TraceHeading signalLabel={`${segmentLabel} valuation vs own history`}>
+          How expensive this segment's own multiples are versus its own past — not versus other segments. A segment can
+          be the cheapest in the market and still score badly here if it is dear by its own standards.
+        </TraceHeading>
+        <Formula>
+          {ids.length > 1
+            ? "score = mean of (100 − PERCENTRANK(P/E) × 100, 100 − PERCENTRANK(P/B) × 100), 10Y month-end"
+            : "score = 100 − PERCENTRANK(P/E, 10Y month-end) × 100"}
+        </Formula>
+        <div className="mt-3">
+          {ids.map((id) => {
+            const s = series[id];
+            return (
+              <InputRow
+                key={id}
+                id={id}
+                label={labelFor(id)}
+                value={s?.latest !== null && s?.latest !== undefined ? s.latest.toFixed(2) : "—"}
+                state={s}
+              />
+            );
+          })}
+        </div>
+        <FinalScore label={`${segmentLabel} valuation`} score={score} />
+        <Caveat>
+          This snapshot predates per-leg tracing, so the individual rankings behind the average are not recorded in it.
+          Refresh the snapshot to see the full arithmetic.
+        </Caveat>
+      </section>
+    );
+  }
+
+  const mean = legs.reduce((sum, l) => sum + l.score, 0) / legs.length;
+  // The chain must close. If it does not, say so rather than printing a
+  // tidy sum that disagrees with the score the rest of the app shows.
+  const reconciles = Math.abs(mean - score) < 0.005;
 
   return (
     <section>
@@ -1156,46 +1330,60 @@ function SegmentValuationTrace({
       </TraceHeading>
 
       <Formula>
-        {legCount > 1
+        {legs.length > 1
           ? "score = mean of (100 − PERCENTRANK(P/E) × 100, 100 − PERCENTRANK(P/B) × 100), 10Y month-end"
           : "score = 100 − PERCENTRANK(P/E, 10Y month-end) × 100"}
       </Formula>
 
       <div className="mt-3">
-        {peId && (
+        {legs.map((leg) => (
           <InputRow
-            id={peId}
-            label={`${segmentLabel} trailing P/E`}
-            value={pe?.latest !== null && pe?.latest !== undefined ? pe.latest.toFixed(2) : "—"}
-            state={pe}
+            key={leg.seriesId}
+            id={leg.seriesId}
+            label={labelFor(leg.seriesId)}
+            value={leg.value.toFixed(2)}
+            state={series[leg.seriesId]}
           />
-        )}
-        {pbId && (
-          <InputRow
-            id={pbId}
-            label={`${segmentLabel} P/B`}
-            value={pb?.latest !== null && pb?.latest !== undefined ? pb.latest.toFixed(2) : "—"}
-            state={pb}
-          />
+        ))}
+      </div>
+
+      {/* Each leg's own arithmetic, in the order the average consumes
+          them: the reading ranked, where it fell in its own history, and
+          what that becomes after inversion. */}
+      {legs.map((leg) => (
+        <LegBreakdown key={leg.seriesId} leg={leg} label={labelFor(leg.seriesId)} />
+      ))}
+
+      <div className="mt-4 border-t border-line pt-3">
+        {legs.length > 1 ? (
+          <Step n={legs.length + 1} value={formatScore(mean)}>
+            Average the {legs.length} inverted percentiles — the spec's “optionally average with the same on P/B”.{" "}
+            <span className="font-mono text-[11px] text-ink-2">
+              ({legs.map((l) => l.score.toFixed(2)).join(" + ")}) ÷ {legs.length}
+            </span>
+          </Step>
+        ) : (
+          <Step n={2} value={formatScore(mean)}>
+            Only one multiple has enough history here, so it carries the score alone.
+          </Step>
         )}
       </div>
 
-      <div className="mt-3">
-        <Step n={1} value={legCount > 1 ? "two legs" : "one leg"}>
-          Rank each multiple against its own 10-year month-end history and invert it, so a high multiple scores low.
-          {spanYears !== null ? ` History spans ${spanYears.toFixed(1)} years.` : ""}
-        </Step>
-        <Step n={2} value={formatScore(score)}>
-          {legCount > 1
-            ? "Average the two inverted percentiles — the spec's “optionally average with the same on P/B”."
-            : "Only one multiple has enough history here, so it carries the score alone."}
-        </Step>
-      </div>
+      <FinalScore label={`${segmentLabel} valuation`} score={score} />
+
+      {!reconciles && (
+        <Caveat>
+          These legs average to {mean.toFixed(4)}, but the published score is {score.toFixed(4)}. That gap is a bug —
+          the trace and the score are reading different computations. Please report it.
+        </Caveat>
+      )}
 
       <p className="mt-3 text-[12px] leading-5 text-ink-2">
-        Sampled month-end, one reading per month. The raw feed is daily since August 2024 but month-end before it, so
-        ranking every stored row would weight the last two years roughly twenty times as heavily per unit of calendar
-        time as the eight before them.
+        Ranked month-end, one reading per month, against the {spanYears !== null ? `${spanYears.toFixed(1)}-year` : ""}{" "}
+        window only. The raw feed is daily since August 2024 but month-end before it, so ranking every stored row would
+        weight the last two years roughly twenty times as heavily per unit of calendar time as the eight before them —
+        and would give a different, wrong answer. The percentile shown on each series' own page is that all-rows figure
+        and will not match the one here.
       </p>
 
       {shortfall && (
@@ -1206,6 +1394,32 @@ function SegmentValuationTrace({
         </p>
       )}
     </section>
+  );
+}
+
+// One leg's arithmetic, spelled out: the ranked reading, its rank within
+// its own sampled history, and the inversion that turns "cheap" into a
+// high score. Shows the sample size because a percentile over 119 points
+// and one over 4 are not the same claim.
+function LegBreakdown({ leg, label }: { leg: ScoreLeg; label: string }) {
+  const cheaperThan = 100 - leg.percentile;
+  return (
+    <div className="mt-3 border border-line bg-paper-2 px-3 py-2.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[12px] font-semibold text-ink">{label}</span>
+        <span className="font-mono text-[11px] text-muted">{leg.seriesId}</span>
+      </div>
+      <p className="mt-1.5 font-mono text-[11px] leading-5 text-ink-2">
+        PERCENTRANK({leg.observations} month-end readings, {leg.value.toFixed(2)}) × 100 = {leg.percentile.toFixed(2)}
+        <br />
+        100 − {leg.percentile.toFixed(2)} = <span className="font-semibold text-ink">{leg.score.toFixed(2)}</span>
+      </p>
+      <p className="mt-1.5 text-[12px] leading-5 text-muted">
+        At {leg.value.toFixed(2)}
+        {leg.date ? ` on ${formatDate(leg.date)}` : ""}, this segment is cheaper than {cheaperThan.toFixed(1)}% of the{" "}
+        {leg.observations} month-end readings in its {leg.spanYears.toFixed(1)}-year history.
+      </p>
+    </div>
   );
 }
 
@@ -1878,7 +2092,7 @@ export function ScoreFormulaTrace({
 }) {
   switch (scoreId) {
     case "l1.equity::valuation":
-      return <ValuationTrace series={series} score={score} />;
+      return <ValuationTrace scoreState={scoreState} series={series} score={score} />;
     case "l1.equity::flows":
       return <FlowsTrace
           series={series}

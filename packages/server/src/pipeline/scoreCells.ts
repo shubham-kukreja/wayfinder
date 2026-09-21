@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import type { Params } from "@wayfinder/engine";
-import { metalsFundamentalsScore, silverIndustrialScore, equityMacroScore, debtMacroScore, growthDiffScore, type RubricInput } from "@wayfinder/engine";
+import { metalsFundamentalsScore, silverIndustrialScore, equityMacroScore, debtMacroScore, growthDiffScore, type RubricInput, type ScoreLeg, type ScoreLegComponent } from "@wayfinder/engine";
 import { autoScore, autoScoreFromSeries, derivedDifferenceSeries, derivedRatioSeries } from "./scoreEngine.js";
 import { computePercentile, historySpanYears, monthEndSample, windowedHistory } from "./percentile.js";
 import {
@@ -59,6 +59,48 @@ export interface ScoreCellResult {
   // provisional instead of quietly wearing a decade's confidence.
   historySpanYears?: number;
   historyShortfall?: boolean;
+  // MULTI-LEG PERCENTILE cells — each leg's ranking as computed here.
+  // See ScoreLeg: the UI cannot recover these from SeriesState, whose
+  // percentile is taken over all stored rows rather than this cell's
+  // window, so a trace that reconstructs the average from SeriesState
+  // disagrees with the published score.
+  legs?: ScoreLeg[];
+}
+
+// Build a ScoreLeg from the series that was ranked and the result of
+// ranking it, so a trace can show the arithmetic instead of reverse-
+// engineering it from the published score.
+//
+// The reading reported is the LAST ROW OF THE RANKED SERIES, which for a
+// derived series is not the same thing as any input's latest value.
+// l1.equity::valuation's gap leg is the live example: it month-joins
+// nifty50_pe (daily, current to September) against gsec_10y (monthly,
+// trailing by two months), so the newest joinable point is July's. A
+// trace that recomputed the gap from each input's own latest showed
+// -1.73% while the ranked value was -1.97% — two numbers that never
+// coexisted, presented as the input to a percentile.
+function legFromSeries<T extends { date: string; value: number }>(
+  seriesId: string,
+  series: T[],
+  result: { value: number; observations: number },
+  transform: "percentile" | "inverted",
+  // Given the ranked row, the inputs that formed its value. Only a
+  // derived series needs this; a raw series' `value` IS the reading.
+  componentsOf?: (ranked: T) => ScoreLegComponent[]
+): ScoreLeg {
+  const ranked = series[series.length - 1] ?? null;
+  return {
+    seriesId,
+    value: ranked?.value ?? 0,
+    date: ranked?.date ?? null,
+    // Recover the raw rank rather than re-percentiling: for "inverted",
+    // result.value is already 100 - PERCENTRANK x 100.
+    percentile: transform === "inverted" ? 100 - result.value : result.value,
+    score: result.value,
+    observations: result.observations,
+    spanYears: historySpanYears(series),
+    ...(ranked && componentsOf ? { components: componentsOf(ranked) } : {}),
+  };
 }
 
 // §7 — every score cell computable end-to-end from the series this
@@ -154,8 +196,10 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
   // ready — a half-computed average is a different statistic, not a
   // rougher version of the specified one (§1 invariant 4).
   {
-    const gapResult = autoScoreFromSeries(deriveEarningsYieldGapSeries(db), params, "percentile");
-    const peResult = autoScoreFromSeries(deriveNiftyPeSeries(db), params, "inverted");
+    const gapSeries = deriveEarningsYieldGapSeries(db);
+    const peSeries = deriveNiftyPeSeries(db);
+    const gapResult = autoScoreFromSeries(gapSeries, params, "percentile");
+    const peResult = autoScoreFromSeries(peSeries, params, "inverted");
     const derivedFrom = ["nifty50_pe", "gsec_10y"];
 
     if (gapResult.status === "ok" && peResult.status === "ok") {
@@ -169,6 +213,26 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
         derivedFrom,
         transform: "average",
         latestDate,
+        // Parts (a) and (b), in the order the average consumes them.
+        // Without these the trace had to back-solve part (a) as
+        // 2 * score - partB — arithmetic that can never disagree with
+        // the score it was derived from, and so can never surface a bug
+        // in the half it claims to be showing.
+        //
+        // The gap leg carries the series id of the DERIVED gap rather
+        // than either input: it is the thing that was ranked, and the
+        // 706-row gap history is neither nifty50_pe's nor gsec_10y's.
+        legs: [
+          // The gap carries its two readings so the trace can show
+          // 100 / P/E - yield instead of asserting the result. Each
+          // keeps its OWN date: the join is by month, so July's row
+          // pairs the 31st's P/E with the 1st's yield.
+          legFromSeries("equity_earnings_yield_gap", gapSeries, gapResult, "percentile", (ranked) => [
+            { label: "Nifty 50 trailing P/E", seriesId: "nifty50_pe", value: ranked.pe, date: ranked.peDate, unit: "ratio" },
+            { label: "10Y G-sec yield", seriesId: "gsec_10y", value: ranked.gsec, date: ranked.gsecDate, unit: "percent" },
+          ]),
+          legFromSeries("nifty50_pe", peSeries, peResult, "inverted"),
+        ],
       });
     } else {
       out.push({
@@ -242,7 +306,12 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
       if (spanYears < MIN_VALUATION_HISTORY_YEARS) return null;
       const result = autoScoreFromSeries(windowed, params, "inverted");
       if (result.status !== "ok") return null;
-      return { ...result, spanYears };
+      // Built from the SAME windowed, month-end-sampled array
+      // autoScoreFromSeries just ranked, so the reading reported is the
+      // one that was ranked — not the series' raw latest, which may be a
+      // mid-month daily print the month-end sample dropped.
+      const leg = legFromSeries(seriesId, windowed, result, "inverted");
+      return { ...result, spanYears, leg };
     };
 
     const pe = legScore(peSeriesId);
@@ -284,6 +353,9 @@ export function computeAutoScoreCells(db: Database.Database, params: Params, asO
       latestDate,
       historySpanYears: spanYears,
       historyShortfall: spanYears < params.percentileWindowYears,
+      // Ordered P/E then P/B, matching derivedFrom, so the trace can
+      // walk legs and derivedFrom together.
+      legs: legs.map((l) => l.leg),
     });
   }
 

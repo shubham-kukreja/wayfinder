@@ -205,9 +205,65 @@ export interface ScoreState {
   // evidence behind it. A rubric's score is a sum of discrete choices,
   // so the final number alone is unauditable: "45" cannot be checked
   // without knowing that the stance read on_hold and inflation read
-  // rising. Percentile cells don't need this — their input series and
-  // percentile are already on SeriesState.
+  // rising.
   rubricInputs?: RubricInput[] | null;
+  // For a MULTI-LEG PERCENTILE cell, each leg's own windowed ranking.
+  //
+  // SeriesState.percentile cannot stand in for this, and assuming it
+  // could is a real reconciliation bug rather than a rounding one.
+  // SeriesState ranks a series over its ENTIRE stored history; a score
+  // cell ranks it over the spec's window, month-end sampled. On
+  // 2026-09-20 equity.large::valuation published 97.8814, while the two
+  // SeriesState percentiles reconstructed 97.17 — because nifty100_pe
+  // ranks 2.54 over all 750 stored rows but 1.69 over the 119 month-end
+  // rows in the 10Y window. Showing the reader the wrong one invites
+  // them to "check" the score and conclude it is broken.
+  //
+  // So each leg carries the percentile THE SCORE ACTUALLY USED, plus
+  // the sample it was taken over.
+  legs?: ScoreLeg[] | null;
+}
+
+// One leg of a multi-part percentile score, as the server computed it.
+export interface ScoreLeg {
+  // The series ranked ("nifty100_pe").
+  seriesId: string;
+  // The reading ranked, and the date it was observed.
+  value: number;
+  date: string | null;
+  // PERCENTRANK x 100 over the windowed, month-end-sampled history.
+  percentile: number;
+  // The leg's contribution after any inversion — what actually enters
+  // the average. For an inverted cell this is 100 - percentile.
+  score: number;
+  // How many points the window held after sampling, and the calendar
+  // span they cover. Both matter: 119 rows spanning 9.97 years is a
+  // very different claim from 119 rows spanning 2 years.
+  observations: number;
+  spanYears: number;
+  // For a leg whose ranked series is DERIVED, the readings that formed
+  // the ranked value — so the trace can show the arithmetic rather than
+  // assert its result. Absent for a leg that ranks a raw series, where
+  // `value` is already the reading itself.
+  //
+  // These cannot be recovered downstream. A derived series ends wherever
+  // its join last resolved, so pulling each input's own latest pairs
+  // readings that never coexisted and yields a different number.
+  components?: ScoreLegComponent[];
+}
+
+// One input to a derived leg's value, with the date it was observed.
+// The date is per-component because a month-granular join routinely
+// pairs different days — the July earnings-yield gap takes the P/E from
+// the 31st and the bond yield from the 1st.
+export interface ScoreLegComponent {
+  // The reader's term for this input ("Nifty 50 trailing P/E").
+  label: string;
+  seriesId: string;
+  value: number;
+  date: string;
+  // Rendering hint: "percent" appends %, "ratio" leaves the number bare.
+  unit: "percent" | "ratio";
 }
 
 export interface RubricInput {

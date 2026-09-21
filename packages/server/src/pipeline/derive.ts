@@ -375,19 +375,38 @@ export function deriveFlowRatio3mSeries(
 // Month-joined against gsec_10y (FRED, monthly) same as
 // derivedDifferenceSeries — nifty50_pe (NSE) publishes daily, gsec_10y
 // doesn't, so an exact-date join would silently drop almost every row.
-export function deriveEarningsYieldGapSeries(db: Database.Database): Array<{ date: string; value: number }> {
+// Each row carries the two readings it was built from, alongside the
+// gap itself. A trace cannot recover them afterwards: the gap ends
+// wherever the month-join last resolved, so re-deriving the P/E from
+// each series' own latest pairs readings that never coexisted (live on
+// 2026-09-21: September's P/E of 19.79 against July's 6.78% yield gave
+// -1.73%, while the ranked July row was -1.97%). Extra fields only —
+// the {date, value} shape every caller consumes is unchanged.
+export function deriveEarningsYieldGapSeries(
+  db: Database.Database
+): Array<{ date: string; value: number; pe: number; peDate: string; gsec: number; gsecDate: string }> {
   const peRows = latestObservations(db, "nifty50_pe");
   const gsecRows = latestObservations(db, "gsec_10y");
   if (peRows.length === 0 || gsecRows.length === 0) return [];
 
-  const gsecByMonth = new Map(gsecRows.map((r) => [r.date.slice(0, 7), r.value]));
+  // Keep the DATE of the joined yield, not just its value: the join is
+  // month-granular, so the two sides of a row routinely carry different
+  // days (July's gap pairs the 31st's P/E with the 1st's yield).
+  const gsecByMonth = new Map(gsecRows.map((r) => [r.date.slice(0, 7), r]));
 
-  const out: Array<{ date: string; value: number }> = [];
+  const out: Array<{ date: string; value: number; pe: number; peDate: string; gsec: number; gsecDate: string }> = [];
   for (const peRow of peRows) {
     if (peRow.value === 0) continue;
-    const gsecYield = gsecByMonth.get(peRow.date.slice(0, 7));
-    if (gsecYield === undefined) continue;
-    out.push({ date: peRow.date, value: (100 / peRow.value) - gsecYield });
+    const gsecRow = gsecByMonth.get(peRow.date.slice(0, 7));
+    if (gsecRow === undefined) continue;
+    out.push({
+      date: peRow.date,
+      value: 100 / peRow.value - gsecRow.value,
+      pe: peRow.value,
+      peDate: peRow.date,
+      gsec: gsecRow.value,
+      gsecDate: gsecRow.date,
+    });
   }
   return out;
 }

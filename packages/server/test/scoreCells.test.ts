@@ -531,6 +531,104 @@ describe("computeAutoScoreCells — §7 cells computable from live-fetchable ser
     expect(equityValuation.value).toBeCloseTo(100, 5);
   });
 
+  // TRACEABILITY. Part (a) used to be back-solved in the UI as
+  // 2 * score - partB, arithmetic derived from the score it claimed to
+  // explain, so it reconciled even when part (a) was wrong. The legs
+  // carry what the server actually ranked, and must reproduce the score.
+  it("l1.equity::valuation emits both parts as legs that reproduce the published score", () => {
+    seedMonthlySeries("nifty50_pe", "NSE", Array.from({ length: 30 }, (_, i) => 28 - i * 0.1), 2020, 1);
+    seedMonthlySeries("gsec_10y", "FRED", Array.from({ length: 30 }, () => 6.75), 2020, 1);
+
+    const cell = computeAutoScoreCells(db, DEFAULT_PARAMS, "2026-09-01").find(
+      (r) => r.scoreId === "l1.equity::valuation"
+    )!;
+
+    expect(cell.legs).toHaveLength(2);
+    const [gapLeg, peLeg] = cell.legs!;
+    // Part (a) is the DERIVED gap, not either raw input: it is the
+    // series that was ranked, and its history is neither input's.
+    expect(gapLeg!.seriesId).toBe("equity_earnings_yield_gap");
+    expect(peLeg!.seriesId).toBe("nifty50_pe");
+
+    // (a) ranks AS-IS, (b) ranks INVERTED — the spec's asymmetry.
+    expect(gapLeg!.score).toBeCloseTo(gapLeg!.percentile, 10);
+    expect(peLeg!.score).toBeCloseTo(100 - peLeg!.percentile, 10);
+
+    const mean = (gapLeg!.score + peLeg!.score) / 2;
+    expect(mean).toBeCloseTo(cell.value, 10);
+  });
+
+  // The live defect that motivated per-leg tracing: the gap series
+  // month-joins a daily P/E to a monthly bond yield, so its newest point
+  // trails the P/E's. Recomputing the gap from each input's own latest
+  // produced a number that never existed (-1.73% vs the ranked -1.97%).
+  it("l1.equity::valuation's gap leg reports the joined reading, not one built from each input's latest", () => {
+    seedMonthlySeries("nifty50_pe", "NSE", Array.from({ length: 30 }, (_, i) => 28 - i * 0.1), 2020, 1);
+    // Bond yield stops two months before the P/E does.
+    seedMonthlySeries("gsec_10y", "FRED", Array.from({ length: 28 }, () => 6.75), 2020, 1);
+
+    const cell = computeAutoScoreCells(db, DEFAULT_PARAMS, "2026-09-01").find(
+      (r) => r.scoreId === "l1.equity::valuation"
+    )!;
+
+    const gapLeg = cell.legs!.find((l) => l.seriesId === "equity_earnings_yield_gap")!;
+    const peLeg = cell.legs!.find((l) => l.seriesId === "nifty50_pe")!;
+
+    // The gap ends where the join last resolved — EARLIER than the P/E.
+    expect(gapLeg.date! < peLeg.date!).toBe(true);
+    expect(gapLeg.observations).toBe(28);
+    expect(peLeg.observations).toBe(30);
+
+    // And the gap value is the joined one: 100/P/E - gsec at the gap's
+    // OWN date, never 100/(September P/E) - (July gsec).
+    const peAtGapDate = 28 - 27 * 0.1; // the 28th seeded P/E
+    expect(gapLeg.value).toBeCloseTo(100 / peAtGapDate - 6.75, 10);
+
+    // The chain still closes.
+    expect((gapLeg.score + peLeg.score) / 2).toBeCloseTo(cell.value, 10);
+  });
+
+  // The gap leg carries the two readings behind its value, so the trace
+  // can show 100/P/E - yield rather than assert the result. They must
+  // come from the RANKED row and reproduce its value exactly.
+  it("l1.equity::valuation's gap leg carries the P/E and yield that produced the ranked value", () => {
+    seedMonthlySeries("nifty50_pe", "NSE", Array.from({ length: 30 }, (_, i) => 28 - i * 0.1), 2020, 1);
+    // Ends two months early, so the ranked gap row is NOT the latest P/E.
+    seedMonthlySeries("gsec_10y", "FRED", Array.from({ length: 28 }, () => 6.75), 2020, 1);
+
+    const cell = computeAutoScoreCells(db, DEFAULT_PARAMS, "2026-09-01").find(
+      (r) => r.scoreId === "l1.equity::valuation"
+    )!;
+    const gapLeg = cell.legs!.find((l) => l.seriesId === "equity_earnings_yield_gap")!;
+
+    const pe = gapLeg.components!.find((c) => c.seriesId === "nifty50_pe")!;
+    const gsec = gapLeg.components!.find((c) => c.seriesId === "gsec_10y")!;
+
+    // The components must rebuild the ranked gap, to the last digit.
+    expect(100 / pe.value - gsec.value).toBeCloseTo(gapLeg.value, 10);
+
+    // And they must be the JOINED readings, not each series' latest: the
+    // P/E here is the 28th seeded value, two months before the 30th.
+    expect(pe.value).toBeCloseTo(28 - 27 * 0.1, 10);
+    expect(pe.date).toBe(gapLeg.date);
+    expect(gsec.value).toBe(6.75);
+    // Units drive rendering — a yield reads 6.75%, a P/E reads 25.30.
+    expect(pe.unit).toBe("ratio");
+    expect(gsec.unit).toBe("percent");
+  });
+
+  // The P/E leg ranks a RAW series, where value is already the reading —
+  // there is no arithmetic to show, so it carries no components.
+  it("l1.equity::valuation's P/E leg carries no components", () => {
+    seedMonthlySeries("nifty50_pe", "NSE", Array.from({ length: 30 }, (_, i) => 28 - i * 0.1), 2020, 1);
+    seedMonthlySeries("gsec_10y", "FRED", Array.from({ length: 30 }, () => 6.75), 2020, 1);
+
+    const cell = computeAutoScoreCells(db, DEFAULT_PARAMS, "2026-09-01").find(
+      (r) => r.scoreId === "l1.equity::valuation"
+    )!;
+    expect(cell.legs!.find((l) => l.seriesId === "nifty50_pe")!.components).toBeUndefined();
+  });
+
   it("l1.equity::valuation reports insufficient_history at neutral 50 when only ONE part clears the observation floor", () => {
     // 30 P/E observations (part (b) is fine) but gsec_10y covers only the
     // first 5 months, so the month-joined gap series has 5 rows and can

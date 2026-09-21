@@ -136,6 +136,9 @@ export function buildCurrentSnapshot(db: Database.Database, asOf: string = new D
       // so a 2-year percentile cannot present as a 10-year one.
       historySpanYears: cell.historySpanYears ?? null,
       historyShortfall: cell.historyShortfall ?? false,
+      // Multi-leg percentile cells — each leg's ranking over THIS
+      // cell's window, which SeriesState.percentile does not answer.
+      legs: cell.legs ?? null,
     };
     recomputedIds.push(cell.scoreId);
 

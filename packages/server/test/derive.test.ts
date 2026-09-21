@@ -293,7 +293,19 @@ describe("deriveEarningsYieldGapSeries — §8.1 (Calculation Guide row 7) earni
     seed("nifty50_pe", "2026-01-15", 20); // 100/20 = 5
     seed("gsec_10y", "2026-01-01", 6.75);
     const result = deriveEarningsYieldGapSeries(db);
-    expect(result).toEqual([{ date: "2026-01-15", value: 5 - 6.75 }]);
+    // Each row also carries the two readings behind its value, with
+    // their OWN dates — the join is by month, so the P/E's day and the
+    // yield's day differ. A trace cannot recover these afterwards.
+    expect(result).toEqual([
+      {
+        date: "2026-01-15",
+        value: 5 - 6.75,
+        pe: 20,
+        peDate: "2026-01-15",
+        gsec: 6.75,
+        gsecDate: "2026-01-01",
+      },
+    ]);
   });
 
   it("skips a P/E row when no gsec_10y reading exists for that year-month", () => {

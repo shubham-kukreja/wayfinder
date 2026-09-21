@@ -65,6 +65,37 @@ const scoreStateSchema = z.object({
     )
     .nullable()
     .optional(),
+  // MULTI-LEG PERCENTILE cells only — each leg's rank over THIS cell's
+  // window. Must cross the wire explicitly: zod strips unknown keys, and
+  // the UI cannot re-derive these from SeriesState, which percentiles a
+  // series over all its stored rows rather than this cell's window.
+  legs: z
+    .array(
+      z.object({
+        seriesId: z.string(),
+        value: z.number(),
+        date: z.string().nullable(),
+        percentile: z.number(),
+        score: z.number(),
+        observations: z.number(),
+        spanYears: z.number(),
+        // Present only for a leg ranking a DERIVED series — the inputs
+        // behind `value`, each with its own observation date.
+        components: z
+          .array(
+            z.object({
+              label: z.string(),
+              seriesId: z.string(),
+              value: z.number(),
+              date: z.string(),
+              unit: z.enum(["percent", "ratio"]),
+            })
+          )
+          .optional(),
+      })
+    )
+    .nullable()
+    .optional(),
 });
 
 const vetoStateSchema = z.object({

@@ -74,6 +74,92 @@ describe("equity.*::valuation", () => {
     db.close();
   });
 
+  // TRACEABILITY. The published score has to be reachable from the
+  // numbers the trace shows, or the trace is decoration. The legs carry
+  // the rank each leg contributed over THIS cell's window, and they must
+  // average back to the cell's own value exactly.
+  it("emits per-leg rankings that reproduce the published score", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    seedMonthly(db, "smallcap250_pe", 120, (i) => 40 - i * 0.16);
+    seedMonthly(db, "smallcap250_pb", 120, (i) => 2 + i * 0.02);
+
+    const cell = computeAutoScoreCells(db, DEFAULT_PARAMS, "2026-09-20").find(
+      (c) => c.scoreId === "equity.small::valuation"
+    )!;
+
+    expect(cell.legs).toHaveLength(2);
+    // Ordered to match derivedFrom, so the UI can walk them together.
+    expect(cell.legs!.map((l) => l.seriesId)).toEqual(cell.derivedFrom);
+
+    for (const leg of cell.legs!) {
+      // Inversion is the whole point of the cell: cheap must score high.
+      expect(leg.score).toBeCloseTo(100 - leg.percentile, 10);
+      // Ranked over the month-end sample, not the raw stored rows. 119,
+      // not the 120 seeded: the 10-year window clips the oldest month.
+      expect(leg.observations).toBe(119);
+      expect(leg.spanYears).toBeGreaterThan(9);
+      // August's month-end, not September's: asOfDate is the 20th, and
+      // the window ends there, so the 2026-09-30 row is out of scope.
+      expect(leg.date).toBe("2026-08-31");
+    }
+
+    const mean = cell.legs!.reduce((sum, l) => sum + l.score, 0) / cell.legs!.length;
+    expect(mean).toBeCloseTo(cell.value, 10);
+    db.close();
+  });
+
+  // The single-leg case still has to close, and must not claim a P/B leg
+  // it never ranked.
+  it("emits one leg, reproducing the score, when only P/E has history", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    seedMonthly(db, "midcap150_pe", 120, (i) => 40 - i * 0.16);
+
+    const cell = computeAutoScoreCells(db, DEFAULT_PARAMS, "2026-09-20").find(
+      (c) => c.scoreId === "equity.mid::valuation"
+    )!;
+
+    expect(cell.legs).toHaveLength(1);
+    expect(cell.legs![0]!.seriesId).toBe("midcap150_pe");
+    expect(cell.legs![0]!.score).toBeCloseTo(cell.value, 10);
+    db.close();
+  });
+
+  // The leg ranks the value from the MONTH-END SAMPLE, not the series'
+  // raw latest row. Those differ whenever a mid-month daily print is the
+  // newest row: printing the raw latest next to a percentile taken on a
+  // different number is the class of mismatch this whole change removes.
+  it("reports the reading it actually ranked, not a later intra-month print", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    seedMonthly(db, "nifty100_pe", 120, (i) => 40 - i * 0.16);
+    // A daily row after the last month-end, at a wildly different level.
+    insertObservations(db, [
+      {
+        seriesId: "nifty100_pe",
+        date: "2026-09-20",
+        value: 99,
+        basis: null,
+        source: "NIFTYINDICES",
+        fetchedAt: "2026-09-20T00:00:00Z",
+      },
+    ]);
+
+    const cell = computeAutoScoreCells(db, DEFAULT_PARAMS, "2026-09-20").find(
+      (c) => c.scoreId === "equity.large::valuation"
+    )!;
+
+    const leg = cell.legs![0]!;
+    // 2026-09-20 IS the month's last row once it exists, so that is what
+    // gets ranked — and the leg must report that same 99, never the
+    // month-end it displaced.
+    expect(leg.date).toBe("2026-09-20");
+    expect(leg.value).toBe(99);
+    expect(leg.score).toBeCloseTo(cell.value, 10);
+    db.close();
+  });
+
   // The bug this whole change existed to fix: a 2-year window answering
   // a question the spec asks of a 10-15 year one. Large/mid scored 97.99
   // and 97.37 off 2.1 years of stored history (live 2026-09-20).
