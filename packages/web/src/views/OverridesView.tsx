@@ -1,19 +1,84 @@
-import { useMemo, useRef, useState } from "react";
-import type { Snapshot, Params, ScoreProvenance } from "@wayfinder/engine";
-import { GROUP_LABELS, NODE_LABELS, RUBRIC_UI_BY_SCORE_ID } from "@wayfinder/engine";
-import { scoresFromSnapshot, vetoesFromSnapshot, useLocalAllocation } from "../hooks/useLocalAllocation.js";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Allocation, Params, ScoreProvenance } from "@wayfinder/engine";
+import { GROUP_LABELS, NODE_LABELS } from "@wayfinder/engine";
 import { AllocationBar, type AllocationDepth } from "../components/AllocationBar.js";
 import { StickyAllocationBar } from "../components/StickyAllocationBar.js";
 import { AllocationChanges } from "../components/AllocationChanges.js";
 import { WeightEditor } from "../components/WeightEditor.js";
 import { CapEditor } from "../components/CapEditor.js";
-import { RubricPicker } from "../components/RubricPicker.js";
+import { CoreRubricPicker } from "../components/CoreRubricPicker.js";
 import { TabRow } from "../components/ui/TabRow.js";
-import { runFragilityTest } from "../lib/fragility.js";
-import { computeSensitivity } from "../lib/sensitivity.js";
 import { formatPct, formatScore } from "../lib/format.js";
-import { saveParams } from "../lib/paramsApi.js";
-import { saveScore } from "../lib/scoresApi.js";
+import { coreFetch } from "../lib/coreApi.js";
+import { draftApi, paramEdits, toParams, type CoreDraft, type DraftEdit } from "../lib/draftApi.js";
+import { toAllocation } from "../lib/portfolioApi.js";
+
+// Overrides edits core-jobs-service's shared draft (/v1/draft). Every change
+// previews through core's engine (POST /v1/draft/evaluate); Save applies
+// them all as one draft change with a reason (PATCH /v1/draft).
+
+interface ScoreRow {
+  key: string;
+  state: { value: number; staleDays: number | null; note: string | null };
+  impact: number;
+}
+
+interface RegistryScore {
+  key: string;
+  layer: string;
+  update_type: string;
+  value: number | boolean | string | null;
+  observed_at: string | null;
+  source: string | null;
+}
+
+interface LoadedDraft {
+  draft: CoreDraft;
+  live: Allocation;
+  scores: Record<ScoreProvenance, ScoreRow[]>;
+}
+
+function daysSince(date: string | null): number | null {
+  if (!date) return null;
+  return Math.max(0, Math.floor((Date.now() - new Date(`${date}T00:00:00Z`).getTime()) / 86_400_000));
+}
+
+async function loadDraft(): Promise<LoadedDraft> {
+  const [draft, live, registry, sens] = await Promise.all([
+    draftApi.get(),
+    draftApi.allocation(),
+    coreFetch<{ rows: RegistryScore[] }>("/v1/registry"),
+    draftApi.sensitivity().catch(() => ({ rows: [] as Array<{ key: string; impact_pp: number }> })),
+  ]);
+  const impact = new Map(sens.rows.map((r) => [r.key, r.impact_pp / 100]));
+  const scores: Record<ScoreProvenance, ScoreRow[]> = { manual: [], rubric: [], auto: [], static: [], default: [] };
+  for (const r of registry.rows) {
+    if (r.layer !== "score" || typeof r.value !== "number") continue;
+    const provenance: ScoreProvenance = r.update_type === "rubric" ? "rubric" : r.update_type === "constant" ? "static" : r.update_type === "analyst" ? "manual" : "auto";
+    scores[provenance].push({
+      key: r.key,
+      state: { value: r.value, staleDays: daysSince(r.observed_at), note: r.source === "override" ? "Overridden" : null },
+      impact: impact.get(r.key) ?? 0,
+    });
+  }
+  for (const list of Object.values(scores)) list.sort((a, b) => b.impact - a.impact);
+  return { draft, live: toAllocation(live), scores };
+}
+
+export function OverridesView() {
+  const [loaded, setLoaded] = useState<LoadedDraft | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const reload = () =>
+    loadDraft()
+      .then(setLoaded)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+  useEffect(() => {
+    void reload();
+  }, []);
+  if (error) return <p className="px-6 py-10 text-sm text-danger-500">Failed to load the draft: {error}</p>;
+  if (!loaded) return <div className="px-6 py-10 text-sm text-muted">Loading…</div>;
+  return <OverridesBody key={loaded.draft.rev} loaded={loaded} onSaved={reload} />;
+}
 
 const TILT_GROUPS = ["l1", "equity", "debt", "metals"] as const;
 
@@ -53,68 +118,90 @@ function staleBadge(staleDays: number | null): { label: string; className: strin
   return { label: `${staleDays}d stale`, className: "text-danger-500" };
 }
 
-export function OverridesView({ snapshot }: { snapshot: Snapshot }) {
+function OverridesBody({ loaded, onSaved }: { loaded: LoadedDraft; onSaved: () => Promise<void> | void }) {
   const [activeTab, setActiveTab] = useState<OverrideTab>("signals");
   const [depth, setDepth] = useState<AllocationDepth>("detail");
 
-  const [params, setParams] = useState<Params>(snapshot.params);
-  // Tracks what's actually persisted server-side (starts as the loaded
-  // snapshot's params, updates on a successful save) — comparing `params`
-  // against the ORIGINAL snapshot.params prop would keep isDirty stuck true
-  // forever after a save, since that prop never changes within this
-  // component's lifetime.
-  const [lastSavedParams, setLastSavedParams] = useState<Params>(snapshot.params);
+  const savedParams = useMemo(() => toParams(loaded.draft), [loaded.draft]);
+  const [params, setParams] = useState<Params>(savedParams);
   const [neutralEditUnlocked, setNeutralEditUnlocked] = useState(false);
-  const [showFragility, setShowFragility] = useState(false);
+  const [fragility, setFragility] = useState<Array<{ rollupId: string; label: string; minObserved: number; maxObserved: number; stable: boolean }> | null>(null);
+  const [fragilityBusy, setFragilityBusy] = useState(false);
 
-  // Score overrides use the same "local preview now, explicit save later"
-  // split as ParametersView's `params` / `lastSavedParams` pair: keys here
-  // are draft edits not yet written to the server, and `persistedScores`
-  // layers on top of the snapshot once a save succeeds.
+  // Unsaved score overrides and rubric answers, by score key.
   const [scoreOverrides, setScoreOverrides] = useState<Record<string, number>>({});
-  const [persistedScores, setPersistedScores] = useState<Record<string, number>>({});
-  // Both provenance groups open by default and toggle independently — unlike
-  // an accordion, there's no reason picking one should close the other when
-  // there are only two of them.
+  const [rubricAnswers, setRubricAnswers] = useState<Record<string, { answers: Record<string, string>; score: number | null }>>({});
   const [openProvenances, setOpenProvenances] = useState<Set<ScoreProvenance>>(() => new Set(["rubric", "auto"]));
   const [expandedRubricKey, setExpandedRubricKey] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
 
-  // The full bar is what the sticky strip watches: once this scrolls out of
-  // view, the condensed version takes over.
   const liveBarRef = useRef<HTMLElement>(null);
+  const liveAllocation = loaded.live;
 
-  const liveScores = useMemo(() => ({ ...scoresFromSnapshot(snapshot.scores), ...persistedScores }), [snapshot.scores, persistedScores]);
-  const vetoes = vetoesFromSnapshot(snapshot.vetoes);
-  const liveAllocation = useLocalAllocation(liveScores, vetoes, lastSavedParams);
-
-  const draftScores = useMemo(() => ({ ...liveScores, ...scoreOverrides }), [liveScores, scoreOverrides]);
-  const allocation = useLocalAllocation(draftScores, vetoes, params);
-
-  const fragility = useMemo(() => {
-    if (!showFragility) return null;
-    return runFragilityTest(draftScores, vetoes, params);
-  }, [showFragility, draftScores, vetoes, params]);
-
-  const sensitivity = useMemo(() => computeSensitivity(draftScores, vetoes, params), [draftScores, vetoes, params]);
-  const sensitivityByKey = useMemo(() => new Map(sensitivity.map((s) => [s.scoreKey, s.impact])), [sensitivity]);
-
-  const groupedScores = useMemo(() => {
-    const out: Record<ScoreProvenance, Array<{ key: string; state: (typeof snapshot.scores)[string]; impact: number }>> = {
-      manual: [],
-      rubric: [],
-      auto: [],
-      static: [],
-      default: [],
-    };
-    for (const [key, state] of Object.entries(snapshot.scores)) {
-      out[state.provenance].push({ key, state, impact: sensitivityByKey.get(key) ?? 0 });
-    }
-    for (const p of PROVENANCE_ORDER) out[p]!.sort((a, b) => b.impact - a.impact);
+  const edits = useMemo<DraftEdit[]>(() => {
+    const out = paramEdits(loaded.draft, savedParams, params);
+    for (const [key, value] of Object.entries(scoreOverrides)) out.push({ op: "set_score", key, value });
+    for (const [key, r] of Object.entries(rubricAnswers)) out.push({ op: "set_rubric", key, conditions: r.answers });
     return out;
-  }, [snapshot.scores, sensitivityByKey]);
+  }, [loaded.draft, savedParams, params, scoreOverrides, rubricAnswers]);
+
+  // Core previews the edited draft; until it answers, the last preview stays.
+  const [allocation, setAllocation] = useState<Allocation>(liveAllocation);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  useEffect(() => {
+    if (edits.length === 0) {
+      setAllocation(liveAllocation);
+      setPreviewError(null);
+      return;
+    }
+    const ac = new AbortController();
+    const timer = window.setTimeout(() => {
+      draftApi
+        .evaluate(loaded.draft.rev, edits, ac.signal)
+        .then((p) => {
+          setAllocation(toAllocation(p.portfolio));
+          setPreviewError(null);
+        })
+        .catch((err: unknown) => {
+          if (!ac.signal.aborted) setPreviewError(err instanceof Error ? err.message : String(err));
+        });
+    }, 250);
+    return () => {
+      ac.abort();
+      window.clearTimeout(timer);
+    };
+  }, [edits, liveAllocation, loaded.draft.rev]);
+
+  const groupedScores = loaded.scores;
+  const draftScores: Record<string, number> = { ...scoreOverrides };
+  for (const [key, r] of Object.entries(rubricAnswers)) if (r.score !== null) draftScores[key] = r.score;
+
+  async function runFragility() {
+    if (fragility) {
+      setFragility(null);
+      return;
+    }
+    setFragilityBusy(true);
+    try {
+      const res = await draftApi.fragility(0.1);
+      setFragility(
+        res.rollups.map((r) => ({
+          rollupId: r.node,
+          label: NODE_LABELS[r.node as keyof typeof NODE_LABELS] ?? r.node,
+          minObserved: r.min,
+          maxObserved: r.max,
+          stable: r.range_pp < 2,
+        })),
+      );
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFragilityBusy(false);
+    }
+  }
 
   function updateSignalWeights(group: (typeof TILT_GROUPS)[number] | "sector", next: Record<string, number>) {
     setParams((p) => ({ ...p, signalWeights: { ...p.signalWeights, [group]: next } as Params["signalWeights"] }));
@@ -136,46 +223,31 @@ export function OverridesView({ snapshot }: { snapshot: Snapshot }) {
     setScoreOverrides((current) => ({ ...current, ...values }));
   }
 
-  const paramsDirty = JSON.stringify(params) !== JSON.stringify(lastSavedParams);
   const dirtyScoreEntries = Object.entries(scoreOverrides);
-  const isDirty = paramsDirty || dirtyScoreEntries.length > 0;
+  const isDirty = edits.length > 0;
 
   function resetDraft() {
-    setParams(lastSavedParams);
+    setParams(savedParams);
     setScoreOverrides({});
+    setRubricAnswers({});
     setSaveError(null);
   }
 
   async function handleSave() {
+    if (!reason.trim()) {
+      setSaveError("Add a reason for this change");
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     try {
-      const writes: Array<Promise<unknown>> = [];
-      if (paramsDirty) writes.push(saveParams(params));
-      for (const [id, value] of dirtyScoreEntries) {
-        writes.push(saveScore(id, value, "Manual override from Overrides"));
-      }
-      await Promise.all(writes);
-      if (paramsDirty) setLastSavedParams(params);
-      if (dirtyScoreEntries.length > 0) {
-        setPersistedScores((current) => ({ ...current, ...Object.fromEntries(dirtyScoreEntries) }));
-        setScoreOverrides({});
-      }
+      await draftApi.apply(loaded.draft.rev, edits, reason.trim());
+      await onSaved();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);
     }
-  }
-
-  async function handleSaveRubric(values: Record<string, number>) {
-    await Promise.all(Object.entries(values).map(([id, value]) => saveScore(id, value)));
-    setPersistedScores((current) => ({ ...current, ...values }));
-    setScoreOverrides((current) => {
-      const next = { ...current };
-      for (const id of Object.keys(values)) delete next[id];
-      return next;
-    });
   }
 
   return (
@@ -188,7 +260,19 @@ export function OverridesView({ snapshot }: { snapshot: Snapshot }) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          {previewError && <span className="text-xs text-danger-500">Preview: {previewError}</span>}
           {saveError && <span className="text-xs text-danger-500">Save failed: {saveError}</span>}
+          {isDirty && (
+            <input
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Reason for this change"
+              aria-label="Reason for this change"
+              maxLength={2000}
+              className="w-56 border border-line bg-paper px-2.5 py-1.5 text-xs text-ink outline-none focus:border-ink"
+            />
+          )}
           {!saveError && !isDirty && <span className="text-xs text-brand-800">Saved</span>}
           {isDirty && <span className="text-xs text-warn-600">Unsaved changes</span>}
           <button
@@ -338,14 +422,15 @@ export function OverridesView({ snapshot }: { snapshot: Snapshot }) {
             <div className="flex items-center justify-between border-b border-line bg-paper-2 px-5 py-3">
               <div>
                 <h2 className="text-[13px] font-semibold text-ink">Fragility test</h2>
-                <p className="mt-0.5 text-xs text-muted">How far each rollup moves when every weight is perturbed ±10%.</p>
+                <p className="mt-0.5 text-xs text-muted">How far each line moves when every signal weight is perturbed ±10% (on the saved draft).</p>
               </div>
               <button
                 type="button"
-                onClick={() => setShowFragility((v) => !v)}
-                className="shrink-0 border border-ink px-3 py-1.5 text-xs font-semibold text-ink transition duration-100 ease-in hover:bg-paper"
+                onClick={() => void runFragility()}
+                disabled={fragilityBusy}
+                className="shrink-0 border border-ink px-3 py-1.5 text-xs font-semibold text-ink transition duration-100 ease-in hover:bg-paper disabled:opacity-50"
               >
-                {showFragility ? "Hide" : "Run test"}
+                {fragilityBusy ? "Running…" : fragility ? "Hide" : "Run test"}
               </button>
             </div>
             {fragility && (
@@ -375,8 +460,8 @@ export function OverridesView({ snapshot }: { snapshot: Snapshot }) {
 
           {dirtyScoreEntries.length > 0 && (
             <div className="mb-4 rounded-lg border border-warn-200 bg-warn-50 px-4 py-2 text-xs text-warn-800">
-              Edits below update the live preview instantly. Click "Save overrides" above to persist them to the server —
-              until then they're local to this page and a reload will lose them.
+              Edits below preview through the model straight away. Click "Save overrides" above, with a reason, to apply
+              them to the shared draft. Until then they're local to this page and a reload will lose them.
             </div>
           )}
 
@@ -407,10 +492,10 @@ export function OverridesView({ snapshot }: { snapshot: Snapshot }) {
                   <div className="divide-y divide-paper-2 border-t border-paper-2">
                     {items.map(({ key, state, impact }) => {
                       const stale = staleBadge(state.staleDays);
-                      const rubricSpec = provenance === "rubric" ? RUBRIC_UI_BY_SCORE_ID[key] : undefined;
+                      const rubricSpec = provenance === "rubric";
                       const isRubricExpanded = expandedRubricKey === key;
                       const value = draftScores[key] ?? state.value;
-                      const changed = scoreOverrides[key] !== undefined;
+                      const changed = scoreOverrides[key] !== undefined || rubricAnswers[key] !== undefined;
                       return (
                         <div key={key}>
                           <div
@@ -455,12 +540,17 @@ export function OverridesView({ snapshot }: { snapshot: Snapshot }) {
                           </div>
                           {rubricSpec && isRubricExpanded && (
                             <div className="px-4 pb-3">
-                              <RubricPicker
-                                spec={rubricSpec}
-                                scoreId={key}
-                                currentValue={state.value}
-                                onEvaluate={(values) => updateScores(values)}
-                                onSave={handleSaveRubric}
+                              <CoreRubricPicker
+                                scoreKey={key}
+                                answers={rubricAnswers[key]?.answers}
+                                onChange={(answers, score) =>
+                                  setRubricAnswers((current) => {
+                                    const next = { ...current };
+                                    if (answers) next[key] = { answers, score };
+                                    else delete next[key];
+                                    return next;
+                                  })
+                                }
                               />
                             </div>
                           )}

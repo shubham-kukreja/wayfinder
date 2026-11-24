@@ -50,6 +50,10 @@ export default function App() {
           </CoreSessionGate>
         ) : location.pathname === "/" ? (
           <Navigate to="/overview" replace />
+        ) : location.pathname === "/model" ? (
+          <Navigate to="/model/signals" replace />
+        ) : location.pathname === "/model/parameters" || location.pathname === "/model/inputs" ? (
+          <Navigate to="/model/overrides" replace />
         ) : location.pathname === "/overview" ? (
           <CoreSessionGate>
             <OverviewView />
@@ -57,6 +61,10 @@ export default function App() {
         ) : location.pathname === "/model/signals" ? (
           <CoreSessionGate>
             <DriversView />
+          </CoreSessionGate>
+        ) : location.pathname === "/model/overrides" ? (
+          <CoreSessionGate>
+            <OverridesView />
           </CoreSessionGate>
         ) : (
           <>
@@ -83,7 +91,6 @@ export default function App() {
             <Route path="/model/datapoints" element={<CoreSessionGate><DataPointControlCenterView snapshot={snapshot} /></CoreSessionGate>} />
             <Route path="/methodology" element={<MethodologyView snapshot={snapshot} />} />
             <Route path="/model/methodology" element={<Navigate to="/methodology" replace />} />
-            <Route path="/model/overrides" element={<OverridesView snapshot={snapshot} />} />
             <Route path="/model/parameters" element={<Navigate to="/model/overrides" replace />} />
             <Route path="/model/inputs" element={<Navigate to="/model/overrides" replace />} />
             <Route path="/reviews" element={<Navigate to="/reviews/decide" replace />} />
