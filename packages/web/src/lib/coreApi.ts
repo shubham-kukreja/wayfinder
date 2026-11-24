@@ -43,6 +43,15 @@ export async function coreFetch<T>(path: string, init: RequestInit = {}, signal?
   return body as T;
 }
 
+/**
+ * A series or node key for a /v1 path. CORE keys use only [a-z0-9_.:-],
+ * which are path-safe; the "::" separator must stay literal (the API does
+ * not decode %3A in path segments). Anything else is encoded.
+ */
+export function pathKey(key: string): string {
+  return key.replace(/[^A-Za-z0-9_.:\-]/g, (c) => encodeURIComponent(c));
+}
+
 export interface CoreUser {
   email: string;
   role: string;

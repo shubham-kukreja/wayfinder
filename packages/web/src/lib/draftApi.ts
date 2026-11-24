@@ -1,5 +1,5 @@
 import type { Params } from "@wayfinder/engine";
-import { coreFetch } from "./coreApi.js";
+import { coreFetch, pathKey } from "./coreApi.js";
 import type { PortfolioAllocation } from "./portfolioApi.js";
 
 // The shared draft on core-jobs-service (/v1/draft). Overrides edits it:
@@ -155,7 +155,7 @@ export interface CoreRubric {
 }
 
 export const rubricApi = {
-  get: (key: string) => coreFetch<CoreRubric>(`/v1/rubrics/${encodeURIComponent(key)}`),
+  get: (key: string) => coreFetch<CoreRubric>(`/v1/rubrics/${pathKey(key)}`),
 };
 
 /** A rubric's score for these answers: base + points, clamped. Null until every condition is answered. */

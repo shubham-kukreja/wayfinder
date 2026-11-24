@@ -4,7 +4,7 @@ import type { ScoreState, SeriesState, Snapshot } from "@wayfinder/engine";
 import { SCORE_MAP, scoreMapEntry, seriesRole } from "@wayfinder/engine";
 import { listDataPoints, listRefreshSources, refreshDataPoints, type DataPointFreshness, type DataPointRow } from "../lib/datapointsApi.js";
 import { DistributionStrip } from "../components/DistributionStrip.js";
-import { ScoreFormulaTrace, hasScoreFormulaTrace } from "../components/ScoreFormulaTraces.js";
+import { ExplainBreakdown, useExplanation } from "../components/CoreExplain.js";
 import { UpstreamSeriesRow } from "../components/UpstreamSeriesRow.js";
 import { formatScore } from "../lib/format.js";
 
@@ -255,132 +255,10 @@ function tabFromSearch(mode: GroupMode, value: string | null): TabId {
   return (match ?? options[0]!).id;
 }
 
-function CalculationBreakdown({
-  row,
-  scoreState,
-  seriesById,
-}: {
-  row: DataPointRow;
-  scoreState: ScoreState | undefined;
-  seriesById: Snapshot["series"];
-}) {
-  if (!scoreState) {
-    return (
-      <div className="rounded-sm border border-line bg-paper-2 p-3">
-        <p className="text-[13px] font-semibold text-ink">Calculation breakdown</p>
-        <p className="mt-1 text-[12px] leading-5 text-muted">No computed score is available for this row yet.</p>
-      </div>
-    );
-  }
-
-  // Cells whose calculation is more than "percentile one series" have a
-  // step-by-step trace stating the literal formula. Same component the
-  // allocation inspector uses, so both surfaces show identical arithmetic
-  // and there is no second copy to drift from the server.
-  if (hasScoreFormulaTrace(row.id)) {
-    return <ScoreFormulaTrace scoreId={row.id} scoreState={scoreState} series={seriesById} score={scoreState.value} />;
-  }
-
-  const sourceIds = effectiveSourceIds(row, scoreState);
-  const sources = sourceIds.map((id) => ({ id, series: seriesById[id] }));
-  const hasStaleSource = sources.some(({ series }) => isStaleSeries(series));
-  const mapEntry = scoreMapEntry(row.id);
-  const oneSeries = sources.length === 1 ? sources[0] : null;
-  const rawPercentile =
-    oneSeries?.series?.percentile ??
-    (scoreState.transform === "inverted" ? 100 - scoreState.value : scoreState.transform === "percentile" ? scoreState.value : null);
-
-  return (
-    <div>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[13px] font-semibold text-ink">Calculation breakdown</p>
-          <p className="mt-0.5 text-[12px] leading-5 text-muted">{transformExplanation(scoreState)}</p>
-        </div>
-        {hasStaleSource && (
-          <span className="shrink-0 rounded-sm bg-warn-50 px-2 py-0.5 text-[11px] font-bold text-warn-800">
-            * stale
-          </span>
-        )}
-      </div>
-
-      <div className="mt-3 space-y-2.5">
-        {sources.length > 0 ? (
-          sources.map(({ id, series }) => {
-            const external = isExternalSeries(series);
-            const stale = isStaleSeries(series);
-            return (
-              <div
-                key={id}
-                className="border-t border-line py-3 first:border-t-0"
-              >
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="min-w-0 truncate text-[12px] font-semibold text-ink">
-                    {id}
-                    {stale ? " *" : ""}
-                  </span>
-                  <span className="shrink-0 text-[13px] font-semibold tabular-nums text-ink">{formatSeriesValue(series)}</span>
-                </div>
-                <p className="mt-0.5 text-[11px] leading-4 text-muted">
-                  <span className={external ? "font-semibold text-brand-800" : ""}>
-                    {external ? "External source" : "Internal/manual source"}
-                  </span>{" "}
-                  · {series?.source ?? row.source} · observed {formatDate(series?.latestDate ?? null)}
-                </p>
-                {seriesRole(mapEntry, id) === "percentile" && (
-                  <div className="mt-2">
-                    <DistributionStrip percentile={series?.percentile ?? null} />
-                  </div>
-                )}
-                <div className="mt-1.5 flex justify-between gap-3 text-[11px] text-muted">
-                  <span>{series?.observations ?? 0} observations{series?.windowStart ? ` since ${formatDate(series.windowStart)}` : ""}</span>
-                  {seriesRole(mapEntry, id) === "percentile" ? (
-                    <span className="shrink-0">{series?.percentile !== null && series?.percentile !== undefined ? `${series.percentile.toFixed(1)}th pct` : statusLabel(series?.status ?? "missing")}</span>
-                  ) : (
-                    /* Not percentiled here — say what the value IS used as,
-                       rather than showing a rank the score never consulted. */
-                    <span className="shrink-0">raw value used in the derivation</span>
-                  )}
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <p className="rounded-sm bg-paper-2 px-2.5 py-2 text-[12px] leading-5 text-muted">
-            No upstream market series. The score is {statusLabel(scoreState.provenance)}.
-          </p>
-        )}
-      </div>
-
-      <div className="mt-3 border-t border-line pt-3">
-        {oneSeries && seriesRole(mapEntry, oneSeries.id) === "percentile" && rawPercentile !== null && (
-          <p className="text-[12px] leading-5 text-ink-2">
-            Raw percentile: <span className="font-semibold tabular-nums text-ink">{rawPercentile.toFixed(1)}</span>
-          </p>
-        )}
-        <p className="mt-1 font-mono text-[12px] leading-5 text-ink">{scoreFormulaLine(scoreState)}</p>
-        {scoreState.note && <p className="mt-2 text-[12px] leading-5 text-muted">{scoreState.note}</p>}
-        {hasStaleSource && (
-          <p className="mt-2 text-[11px] leading-4 text-muted">
-            * Stale means this source is past its refresh window or has a recorded source error.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DataPointFormulaModal({
-  row,
-  scoreState,
-  seriesById,
-  onClose,
-}: {
-  row: DataPointRow | null;
-  scoreState: ScoreState | undefined;
-  seriesById: Snapshot["series"];
-  onClose: () => void;
-}) {
+// "View exact formula": core's explanation of how the value was formed
+// (GET /v1/series/{key}/explain).
+function DataPointFormulaModal({ row, onClose }: { row: DataPointRow | null; onClose: () => void }) {
+  const { data, error, loading } = useExplanation(row?.technicalKey ?? null);
   useEffect(() => {
     if (!row) return;
     function onKeyDown(event: KeyboardEvent) {
@@ -391,10 +269,8 @@ function DataPointFormulaModal({
   }, [row, onClose]);
 
   if (!row) return null;
-  const sourceIds = effectiveSourceIds(row, scoreState);
-  const sourceStates = sourceIds.map((id) => seriesById[id]).filter((series): series is SeriesState => !!series);
-  const observedAt = sourceStates.map((series) => series.latestDate).filter((date): date is string => !!date).sort().at(-1) ?? row.observedAt;
-  const sourceLabel = sourceStates.length > 0 ? [...new Set(sourceStates.map((series) => series.source))].join(" + ") : row.source;
+  const sourceLabel = data?.sources.length ? data.sources.join(" + ") : row.source;
+  const observedAt = data?.observed ?? row.observedAt;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-ink/30 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="data-point-formula-title">
@@ -421,8 +297,10 @@ function DataPointFormulaModal({
 
         <div className="mt-4 grid grid-cols-2 gap-4 border-b border-line pb-4 sm:grid-cols-4">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Score</p>
-            <p className="mt-1 text-lg font-semibold tabular-nums text-brand-800">{row.score !== null ? formatScore(row.score) : "-"}</p>
+            <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Value</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums text-brand-800">
+              {row.score !== null ? formatScore(row.score) : typeof row.currentValue === "number" ? formatScore(row.currentValue) : "-"}
+            </p>
           </div>
           <div>
             <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Source</p>
@@ -439,14 +317,16 @@ function DataPointFormulaModal({
         </div>
 
         <div className="mt-4">
-          <CalculationBreakdown row={row} scoreState={scoreState} seriesById={seriesById} />
+          {loading && <p className="text-[13px] text-muted">Loading the calculation…</p>}
+          {error && <p className="text-[13px] text-danger-500">Could not load the calculation: {error}</p>}
+          {data && <ExplainBreakdown explanation={data} />}
         </div>
       </div>
     </div>
   );
 }
 
-export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot }) {
+export function DataPointControlCenterView() {
   const [searchParams, setSearchParams] = useSearchParams();
   const groupMode = groupModeFromSearch(searchParams.get("group"));
   const activeTab = tabFromSearch(groupMode, searchParams.get("tab"));
@@ -522,11 +402,9 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
   }, [filteredRows]);
 
   const selectedRow = rows.find((row) => row.id === selectedId) ?? filteredRows[0] ?? null;
-  const selectedScoreState = selectedRow && isScoreCellId(selectedRow.id) ? snapshot.scores[selectedRow.id] : undefined;
-  const selectedUpstreamIds = selectedRow && selectedScoreState ? effectiveSourceIds(selectedRow, selectedScoreState) : selectedRow?.upstreamSeries ?? [];
+  const selectedUpstreamIds = selectedRow?.upstreamSeries ?? [];
   const selectedScoreMapEntry = selectedRow ? scoreMapEntry(selectedRow.id) : undefined;
   const inspectingRow = inspectingId ? rows.find((row) => row.id === inspectingId) ?? null : null;
-  const inspectingScoreState = inspectingRow && isScoreCellId(inspectingRow.id) ? snapshot.scores[inspectingRow.id] : undefined;
 
   const total = summary.total ?? 0;
 
@@ -955,7 +833,7 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                       <UpstreamSeriesRow
                         key={id}
                         id={id}
-                        series={snapshot.series[id as keyof typeof snapshot.series]}
+                        series={undefined}
                         role={seriesRole(selectedScoreMapEntry, id)}
                         fallback={selectedRow.upstreamValues?.[id]}
                       />
@@ -965,7 +843,7 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                   <p className="mt-1 text-[13px] text-muted">No upstream series</p>
                 )}
               </div>
-              {isScoreCellId(selectedRow.id) ? (
+              {isScoreCellId(selectedRow.id) || selectedRow.upstreamSeries.length > 0 ? (
                 <button
                   type="button"
                   onClick={() => setParam("inspect", selectedRow.id)}
@@ -984,7 +862,7 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                 </p>
               )}
               <p className="border-t border-line pt-3 text-[12px] leading-5 text-muted">
-                Draft preview, edit reason, expiry and publish impact land in Slice 4. This panel is read-only for the current MVP slice.
+                To change a score, use Overrides: edits there preview through the model and save to the shared draft with a reason.
               </p>
             </div>
           ) : (
@@ -995,8 +873,6 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
 
       <DataPointFormulaModal
         row={inspectingRow}
-        scoreState={inspectingScoreState}
-        seriesById={snapshot.series}
         onClose={() => setParam("inspect", null)}
       />
     </main>
