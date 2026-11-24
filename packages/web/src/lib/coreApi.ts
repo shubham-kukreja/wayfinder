@@ -25,7 +25,7 @@ function csrfToken(): string | null {
   return m?.[1] ? decodeURIComponent(m[1]) : null;
 }
 
-async function coreFetch<T>(path: string, init: RequestInit = {}, signal?: AbortSignal): Promise<T> {
+export async function coreFetch<T>(path: string, init: RequestInit = {}, signal?: AbortSignal): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
   const method = (init.method ?? "GET").toUpperCase();
@@ -135,6 +135,20 @@ export interface FundScoreRanking {
   };
   funds: FundScore[];
 }
+
+// ---- Search (GET /v1/search) ----
+
+export interface SearchHit {
+  kind: "series" | "node" | "parameter" | "note";
+  key: string;
+  title: string;
+  snippet?: string;
+}
+
+export const searchApi = {
+  search: (q: string, signal?: AbortSignal) =>
+    coreFetch<{ data: SearchHit[] }>(`/v1/search?q=${encodeURIComponent(q)}&limit=12`, {}, signal).then((r) => r.data),
+};
 
 export const fundScoresApi = {
   overview: (signal?: AbortSignal) => coreFetch<FundScoreOverview>("/v1/fund-scores", {}, signal),

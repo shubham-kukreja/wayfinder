@@ -1,15 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import {
-  CoreApiError,
-  coreAuth,
-  fundScoresApi,
-  type CoreUser,
-  type FundScore,
-  type FundScoreOverview,
-  type FundScoreRanking,
-} from "../../lib/coreApi.js";
-import { CoreSignIn } from "./CoreSignIn.js";
+import { CoreApiError, fundScoresApi, type FundScore, type FundScoreOverview, type FundScoreRanking } from "../../lib/coreApi.js";
+import { resetCoreSession } from "../../components/CoreSessionGate.js";
 import { FundDetailPanel } from "./FundDetailPanel.js";
 import { RankingTable } from "./RankingTable.js";
 import { CategoryIcon } from "./fundIcons.js";
@@ -19,8 +11,6 @@ import { formatDate } from "./fundFormat.js";
 // fund-scoring model (core-jobs-service docs/fund-scoring.md). Laid out after
 // Powerup's "Power Select" table: category tabs, then one row per fund with
 // rank and status, percentile scores, and rolling and trailing returns.
-
-type AuthState = { kind: "checking" } | { kind: "signed-out" } | { kind: "signed-in"; user: CoreUser };
 
 const SAVED_KEY = "core.funds.saved";
 
@@ -47,7 +37,6 @@ function errorText(e: unknown): string {
 }
 
 export function FundRankingsView() {
-  const [auth, setAuth] = useState<AuthState>({ kind: "checking" });
   const [overview, setOverview] = useState<FundScoreOverview | null>(null);
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [ranking, setRanking] = useState<FundScoreRanking | null>(null);
@@ -58,31 +47,17 @@ export function FundRankingsView() {
   const [shortlistOnly, setShortlistOnly] = useState(false);
   const [selected, setSelected] = useState<FundScore | null>(null);
 
+  // Rendered inside CoreSessionGate; a 401 here means the session expired.
   const onAuthError = useCallback((e: unknown) => {
     if (e instanceof CoreApiError && e.status === 401) {
-      setAuth({ kind: "signed-out" });
+      resetCoreSession();
+      window.location.reload();
       return true;
     }
     return false;
   }, []);
 
   useEffect(() => {
-    const ac = new AbortController();
-    coreAuth
-      .me(ac.signal)
-      .then((user) => setAuth({ kind: "signed-in", user }))
-      .catch((e: unknown) => {
-        if (ac.signal.aborted) return;
-        if (!onAuthError(e)) {
-          setAuth({ kind: "signed-out" });
-          setOverviewError(`Could not reach the data service: ${errorText(e)}`);
-        }
-      });
-    return () => ac.abort();
-  }, [onAuthError]);
-
-  useEffect(() => {
-    if (auth.kind !== "signed-in") return;
     const ac = new AbortController();
     setOverviewError(null);
     fundScoresApi
@@ -95,12 +70,12 @@ export function FundRankingsView() {
         );
       });
     return () => ac.abort();
-  }, [auth.kind, onAuthError]);
+  }, [onAuthError]);
 
   const categoryKey = params.get("c") ?? overview?.categories[0]?.key ?? null;
 
   useEffect(() => {
-    if (auth.kind !== "signed-in" || !categoryKey) return;
+    if (!categoryKey) return;
     const ac = new AbortController();
     setLoadingRanking(true);
     setRankingError(null);
@@ -116,7 +91,7 @@ export function FundRankingsView() {
         setLoadingRanking(false);
       });
     return () => ac.abort();
-  }, [auth.kind, categoryKey, onAuthError]);
+  }, [categoryKey, onAuthError]);
 
   const toggleSaved = useCallback((code: string) => {
     setSaved((prev) => {
@@ -138,13 +113,6 @@ export function FundRankingsView() {
     const total = scored.reduce((s, m) => s + m.weight, 0);
     return scored.map((m) => ({ ...m, share: total > 0 ? m.weight / total : 0 }));
   }, [ranking]);
-
-  if (auth.kind === "checking") {
-    return <div className="px-6 py-10 text-sm text-muted">Loading…</div>;
-  }
-  if (auth.kind === "signed-out") {
-    return <CoreSignIn error={overviewError} onSignedIn={(user) => setAuth({ kind: "signed-in", user })} />;
-  }
 
   const run = ranking?.run ?? overview?.run;
   const funds = ranking?.funds ?? [];

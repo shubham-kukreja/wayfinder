@@ -13,6 +13,7 @@ import { HistoryView } from "./views/HistoryView.js";
 import { NotesView } from "./views/NotesView.js";
 import { NoteEditorView } from "./views/NoteEditorView.js";
 import { FundRankingsView } from "./views/funds/FundRankingsView.js";
+import { CoreSessionGate } from "./components/CoreSessionGate.js";
 import { Sidebar } from "./components/shell/Sidebar.js";
 import { TopBar } from "./components/shell/TopBar.js";
 import { MobileNav } from "./components/shell/MobileNav.js";
@@ -42,7 +43,9 @@ export default function App() {
         {/* Fund rankings read core-jobs-service, not the legacy snapshot, so
             they render without waiting for it (or failing with it). */}
         {location.pathname.startsWith("/funds") ? (
-          <FundRankingsView />
+          <CoreSessionGate>
+            <FundRankingsView />
+          </CoreSessionGate>
         ) : (
           <>
         {loading && <div className="px-6 py-10 text-sm text-muted">Loading…</div>}
@@ -77,8 +80,8 @@ export default function App() {
             <Route path="/reviews/decide" element={<HistoryView snapshot={snapshot} section="decide" />} />
             <Route path="/reviews/history" element={<HistoryView snapshot={snapshot} section="history" />} />
             <Route path="/reviews/cadence" element={<HistoryView snapshot={snapshot} section="cadence" />} />
-            <Route path="/notes" element={<NotesView />} />
-            <Route path="/notes/:id" element={<NoteEditorView />} />
+            <Route path="/notes" element={<CoreSessionGate><NotesView /></CoreSessionGate>} />
+            <Route path="/notes/:id" element={<CoreSessionGate><NoteEditorView /></CoreSessionGate>} />
             <Route path="*" element={<Navigate to="/overview" replace />} />
           </Routes>
         )}

@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "./constants.js";
+import { coreAuth } from "./coreApi.js";
 
 // The session token lives in localStorage rather than a cookie because the
 // API is on a different origin (Railway) from the app (Netlify), and
@@ -44,6 +45,10 @@ export function clearSession(): void {
 }
 
 export async function login(email: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  // One sign-in for both backends while screens move to core-jobs-service:
+  // the same credentials also open a core (/v1) session. That half is best
+  // effort; a screen that needs it asks again if it failed.
+  const core = coreAuth.login(email, password).catch(() => null);
   let res: Response;
   try {
     res = await fetch(`${API_BASE_URL}/api/login`, {
@@ -62,7 +67,14 @@ export async function login(email: string, password: string): Promise<{ ok: true
 
   const body = (await res.json()) as { token: string; email: string };
   store(body.token, body.email);
+  await core;
   return { ok: true };
+}
+
+/** Signs out of both backends. */
+export async function logout(): Promise<void> {
+  clearSession();
+  await coreAuth.logout().catch(() => undefined);
 }
 
 // Validates a stored token against the server on app load, so an expired or
