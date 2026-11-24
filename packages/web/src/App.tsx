@@ -14,6 +14,7 @@ import { NotesView } from "./views/NotesView.js";
 import { NoteEditorView } from "./views/NoteEditorView.js";
 import { FundRankingsView } from "./views/funds/FundRankingsView.js";
 import { CoreSessionGate } from "./components/CoreSessionGate.js";
+import { LegacySessionBanner } from "./components/LegacySessionBanner.js";
 import { Sidebar } from "./components/shell/Sidebar.js";
 import { TopBar } from "./components/shell/TopBar.js";
 import { MobileNav } from "./components/shell/MobileNav.js";
@@ -39,6 +40,7 @@ export default function App() {
       <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((prev) => !prev)} />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
+        <LegacySessionBanner />
         <MobileNav />
         {/* Fund rankings read core-jobs-service, not the legacy snapshot, so
             they render without waiting for it (or failing with it). */}

@@ -1,11 +1,18 @@
 import { API_BASE_URL } from "./constants.js";
-import { coreAuth } from "./coreApi.js";
+import { CoreApiError, coreAuth } from "./coreApi.js";
 
-// The session token lives in localStorage rather than a cookie because the
-// API is on a different origin (Railway) from the app (Netlify), and
-// third-party cookies are unreliable across browsers. The tradeoff is XSS
-// exposure: any script running on the page can read it. That is acceptable
-// here — this app loads no third-party scripts and renders no user HTML.
+// Sign-in is core-jobs-service's (/v1/auth/login): an HttpOnly session
+// cookie, checked with GET /v1/me. That session decides whether the app is
+// signed in.
+//
+// Screens not yet moved to /v1 still write to the legacy server, which wants
+// its own bearer token. Signing in also fetches that token with the same
+// credentials, best effort: if it fails, the /v1 screens work as normal and
+// legacy writes report that their session is missing (see apiFetch).
+//
+// The legacy token lives in localStorage (that server is cross-origin, so a
+// cookie is unreliable). The tradeoff is XSS exposure; this app loads no
+// third-party scripts and renders no user HTML.
 const TOKEN_KEY = "core.session.token";
 const EMAIL_KEY = "core.session.email";
 
@@ -17,6 +24,7 @@ export function getToken(): string | null {
   }
 }
 
+/** The signed-in user's email (from core), for display. */
 export function getEmail(): string | null {
   try {
     return localStorage.getItem(EMAIL_KEY);
@@ -25,16 +33,15 @@ export function getEmail(): string | null {
   }
 }
 
-function store(token: string, email: string): void {
+function setItem(key: string, value: string): void {
   try {
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(EMAIL_KEY, email);
+    localStorage.setItem(key, value);
   } catch {
-    // Private mode or blocked storage: the session simply won't persist
-    // across reloads, which is survivable.
+    // Private mode or blocked storage: survivable, the value just won't persist.
   }
 }
 
+/** Drops the legacy token (and the cached email). */
 export function clearSession(): void {
   try {
     localStorage.removeItem(TOKEN_KEY);
@@ -44,57 +51,56 @@ export function clearSession(): void {
   }
 }
 
-export async function login(email: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  // One sign-in for both backends while screens move to core-jobs-service:
-  // the same credentials also open a core (/v1) session. That half is best
-  // effort; a screen that needs it asks again if it failed.
-  const core = coreAuth.login(email, password).catch(() => null);
-  let res: Response;
+/** Fetches the legacy server's token. Never throws; false when it failed. */
+async function legacyLogin(email: string, password: string): Promise<boolean> {
   try {
-    res = await fetch(`${API_BASE_URL}/api/login`, {
+    const res = await fetch(`${API_BASE_URL}/api/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
+    if (!res.ok) return false;
+    const body = (await res.json()) as { token?: string };
+    if (!body.token) return false;
+    setItem(TOKEN_KEY, body.token);
+    return true;
   } catch {
+    return false;
+  }
+}
+
+export async function login(email: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  let user;
+  try {
+    user = await coreAuth.login(email.trim(), password);
+  } catch (err) {
+    if (err instanceof CoreApiError && err.status === 401) return { ok: false, error: "Email or password is incorrect." };
+    if (err instanceof CoreApiError && err.status === 429) return { ok: false, error: "Too many attempts. Try again in a few minutes." };
+    if (err instanceof CoreApiError) return { ok: false, error: err.message };
     return { ok: false, error: "Could not reach the server. Check your connection and try again." };
   }
-
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    return { ok: false, error: body.error ?? `Sign in failed (${res.status}).` };
-  }
-
-  const body = (await res.json()) as { token: string; email: string };
-  store(body.token, body.email);
-  await core;
+  setItem(EMAIL_KEY, user.email);
+  await legacyLogin(email.trim(), password);
   return { ok: true };
 }
 
-/** Signs out of both backends. */
+/** Signs out of core and drops the legacy token. */
 export async function logout(): Promise<void> {
   clearSession();
   await coreAuth.logout().catch(() => undefined);
 }
 
-// Validates a stored token against the server on app load, so an expired or
-// revoked session lands on the login screen rather than failing later on the
-// first write the user attempts.
-export async function checkSession(): Promise<boolean> {
-  const token = getToken();
-  if (!token) return false;
+/**
+ * Checks the core session on app load: "in", "out", or "unreachable" when
+ * core cannot be reached (shown as such, rather than as a login screen).
+ */
+export async function checkSession(): Promise<"in" | "out" | "unreachable"> {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/session`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) {
-      clearSession();
-      return false;
-    }
-    return true;
-  } catch {
-    // A network blip should not log the user out; treat the stored token as
-    // good and let the next real request surface any problem.
-    return true;
+    const user = await coreAuth.me();
+    setItem(EMAIL_KEY, user.email);
+    return "in";
+  } catch (err) {
+    if (err instanceof CoreApiError && err.status === 401) return "out";
+    return "unreachable";
   }
 }

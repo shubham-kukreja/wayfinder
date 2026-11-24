@@ -1,7 +1,11 @@
 import { API_BASE_URL } from "./constants.js";
-import { clearSession, getToken } from "./auth.js";
+import { getToken } from "./auth.js";
 
-// Every write carries the session token from POST /api/login. This replaced an
+/** Fired when the legacy server rejects its token (see LegacySessionBanner). */
+export const LEGACY_SESSION_MISSING = "core:legacy-session-missing";
+
+// Every write to the legacy server carries its token from POST /api/login
+// (fetched at sign-in alongside the core session; see lib/auth.ts). This replaced an
 // earlier VITE_API_SECRET that was inlined into the bundle — that value was
 // readable by anyone who opened devtools, whereas a token is per-user, expires,
 // and never exists at build time.
@@ -14,11 +18,11 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 
   const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
 
-  // An expired or invalidated token should return the user to the login
-  // screen rather than surfacing as a confusing failure on a save button.
+  // The core session decides sign-in now, so a rejected legacy token must
+  // not log the user out or reload away their work. Say so instead; the
+  // caller still sees the 401 and reports the failed save.
   if (res.status === 401) {
-    clearSession();
-    window.location.reload();
+    window.dispatchEvent(new Event(LEGACY_SESSION_MISSING));
   }
 
   return res;

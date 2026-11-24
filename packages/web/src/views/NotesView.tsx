@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/index.js";
 import { createNote, listNotes, type NoteListItem } from "../lib/notesApi.js";
-import { getEmail } from "../lib/auth.js";
 import { bodyToPlainText } from "../lib/noteRefs.js";
 
 function relativeTime(iso: string): string {
@@ -60,7 +59,7 @@ export function NotesView() {
   async function handleNewNote() {
     setCreating(true);
     try {
-      const note = await createNote({ body: "", author: getEmail() });
+      const note = await createNote({ body: "" });
       navigate(`/notes/${note.id}`);
     } finally {
       setCreating(false);
