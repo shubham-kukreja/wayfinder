@@ -19,6 +19,7 @@
 // The per-series truth lives in scoreMap.ts (seriesRole), so the UI reads
 // it rather than re-deriving it from a cell-level flag.
 import type { SeriesState } from "@wayfinder/engine";
+import type { UpstreamValue } from "../lib/datapointsApi.js";
 import { DistributionStrip } from "./DistributionStrip.js";
 
 function formatSeriesValue(series: SeriesState | undefined): string {
@@ -31,15 +32,33 @@ export function UpstreamSeriesRow({
   series,
   role,
   detail,
+  fallback,
 }: {
   id: string;
   series: SeriesState | undefined;
+  // Core's (/v1/registry) latest value, shown when the snapshot has no
+  // entry for this input.
+  fallback?: UpstreamValue;
   role: "percentile" | "raw";
   // When true, renders the taller variant used in the calculation
   // inspector (source line + observation count) rather than the compact
   // sidebar variant.
   detail?: React.ReactNode;
 }) {
+  if (!series && fallback) {
+    const v = fallback.value;
+    const shown = v === null ? "—" : typeof v === "number" ? v.toLocaleString("en-IN", { maximumFractionDigits: 2 }) : String(v);
+    return (
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="min-w-0 truncate text-[12px] text-ink-2">{id}</span>
+        <span className={`shrink-0 text-[12px] tabular-nums ${fallback.freshness === "fresh" ? "text-muted" : "text-warn-600"}`}>
+          {shown}
+          {fallback.observedAt && <span className="text-muted"> · {fallback.observedAt}</span>}
+          {fallback.freshness !== "fresh" && <span> · {fallback.freshness}</span>}
+        </span>
+      </div>
+    );
+  }
   const showStrip = role === "percentile";
   const pct = series?.percentile;
   const hasPct = pct !== null && pct !== undefined;

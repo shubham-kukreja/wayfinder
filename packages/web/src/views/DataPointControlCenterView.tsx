@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ScoreState, SeriesState, Snapshot } from "@wayfinder/engine";
 import { SCORE_MAP, scoreMapEntry, seriesRole } from "@wayfinder/engine";
-import { listDataPoints, refreshDataPoints, type DataPointFreshness, type DataPointRow } from "../lib/datapointsApi.js";
+import { listDataPoints, listRefreshSources, refreshDataPoints, type DataPointFreshness, type DataPointRow } from "../lib/datapointsApi.js";
 import { DistributionStrip } from "../components/DistributionStrip.js";
 import { ScoreFormulaTrace, hasScoreFormulaTrace } from "../components/ScoreFormulaTraces.js";
 import { UpstreamSeriesRow } from "../components/UpstreamSeriesRow.js";
@@ -90,13 +90,6 @@ function tabOf(row: DataPointRow, mode: GroupMode): TabId {
   return "metals"; // l1.metals::* or modelGroup === "metals"
 }
 
-const REFRESH_SOURCE_LABELS: Record<string, string> = {
-  fred: "FRED",
-  bullion: "Bullion",
-  amfi: "AMFI",
-  rbi_homepage: "RBI homepage",
-  all: "All sources",
-};
 
 // Freshness is the page's one colour axis, so each state gets a fixed hue
 // from the system palette and keeps it everywhere it appears — the tab dot,
@@ -468,6 +461,8 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
   const [refreshSource, setRefreshSource] = useState("all");
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
+  // Sources core can fetch on demand (those with a connector).
+  const [refreshSources, setRefreshSources] = useState<Array<{ id: string; label: string }>>([]);
 
   async function loadRows() {
     setLoading(true);
@@ -485,15 +480,18 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
 
   useEffect(() => {
     void loadRows();
+    listRefreshSources()
+      .then(setRefreshSources)
+      .catch(() => setRefreshSources([]));
   }, []);
 
   async function handleRefresh() {
     setRefreshing(true);
     setRefreshMessage(null);
     try {
-      await refreshDataPoints(refreshSource);
+      const message = await refreshDataPoints(refreshSource);
       await loadRows();
-      setRefreshMessage("Refresh complete. Freshness and scores have been recalculated from stored observations.");
+      setRefreshMessage(message);
     } catch (err) {
       setRefreshMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -559,7 +557,7 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
             <h1 className="mt-1 font-display text-2xl text-ink">Data Point Control Center</h1>
             <p className="mt-2 max-w-3xl text-[13px] text-muted">
               Registry of model inputs, derived scores, manual controls, governance parameters and veto gates. Freshness reflects time
-              since the last stored refresh; no scheduler is running yet.
+              since each value's observation date, against its series' expected cadence.
             </p>
           </div>
           {/* Captions align on one baseline and each sits over a 32px control
@@ -609,7 +607,7 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                   {/* No leading glyph here: the refresh mark belongs on the
                       button that performs the action, not on the picker. */}
                   <div className="pointer-events-none flex h-9 items-center justify-between gap-3 rounded-sm border border-line px-3">
-                    <span className="whitespace-nowrap text-[13px] font-semibold text-ink">{REFRESH_SOURCE_LABELS[refreshSource] ?? refreshSource}</span>
+                    <span className="whitespace-nowrap text-[13px] font-semibold text-ink">{refreshSource === "all" ? "All sources" : (refreshSources.find((src) => src.id === refreshSource)?.label ?? refreshSource)}</span>
                     <svg viewBox="0 0 16 16" aria-hidden="true" className="h-4 w-4 shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M4 6l4 4 4-4" />
                     </svg>
@@ -620,10 +618,11 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                     onChange={(event) => setRefreshSource(event.target.value)}
                     className="absolute inset-0 h-9 w-full cursor-pointer opacity-0"
                   >
-                    <option value="fred">FRED</option>
-                    <option value="bullion">Bullion</option>
-                    <option value="amfi">AMFI</option>
-                    <option value="rbi_homepage">RBI homepage</option>
+                    {refreshSources.map((src) => (
+                      <option key={src.id} value={src.id}>
+                        {src.label}
+                      </option>
+                    ))}
                     <option value="all">All sources</option>
                   </select>
                 </div>
@@ -958,6 +957,7 @@ export function DataPointControlCenterView({ snapshot }: { snapshot: Snapshot })
                         id={id}
                         series={snapshot.series[id as keyof typeof snapshot.series]}
                         role={seriesRole(selectedScoreMapEntry, id)}
+                        fallback={selectedRow.upstreamValues?.[id]}
                       />
                     ))}
                   </div>

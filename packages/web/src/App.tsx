@@ -70,7 +70,7 @@ export default function App() {
             <Route path="/backtest/runs/:id" element={<BacktestReportView />} />
             <Route path="/model" element={<Navigate to="/model/signals" replace />} />
             <Route path="/model/signals" element={<DriversView snapshot={snapshot} />} />
-            <Route path="/model/datapoints" element={<DataPointControlCenterView snapshot={snapshot} />} />
+            <Route path="/model/datapoints" element={<CoreSessionGate><DataPointControlCenterView snapshot={snapshot} /></CoreSessionGate>} />
             <Route path="/methodology" element={<MethodologyView snapshot={snapshot} />} />
             <Route path="/model/methodology" element={<Navigate to="/methodology" replace />} />
             <Route path="/model/overrides" element={<OverridesView snapshot={snapshot} />} />
