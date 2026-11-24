@@ -1,5 +1,10 @@
-import { API_BASE_URL } from "./constants.js";
-import { apiFetch, apiFetchJson } from "./apiFetch.js";
+import { coreFetch } from "./coreApi.js";
+
+// Backtesting on core-jobs-service: GET /v1/benchmarks, /v1/funds/search,
+// /v1/backtests/defaults, and /v1/backtests (submit, list, get, cancel,
+// rerun). The types below are the ones the screens were built on; this
+// module maps core's snake_case records onto them. Benchmarks are shown by
+// name ("Nifty 50") and sent to core by key ("nifty50").
 
 export interface BacktestLeg {
   sleeveId: string;
@@ -31,7 +36,6 @@ export interface BacktestSummary {
   benchmarkCurrentValue: number;
   portfolioXirr: number | null;
   benchmarkXirr: number | null;
-  // Optional so reports saved before CAGR was introduced remain readable.
   portfolioCagr?: number | null;
   benchmarkCagr?: number | null;
   absoluteReturnPct: number;
@@ -45,90 +49,17 @@ export interface BacktestResult {
   summary: BacktestSummary;
 }
 
-export interface BacktestScenario {
-  id: string;
-  label: string;
-  legs: BacktestLeg[];
-  benchmarkId: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export async function listBenchmarks(): Promise<string[]> {
-  const res = await fetch(`${API_BASE_URL}/api/backtest/benchmarks`);
-  if (!res.ok) throw new Error(`Failed to load benchmarks: ${res.status}`);
-  const data = (await res.json()) as { benchmarks: string[] };
-  return data.benchmarks;
-}
-
-export interface InflationRate {
-  ratePct: number;
-  asOf: string;
-}
-
-export async function getInflationRate(): Promise<InflationRate | null> {
-  const res = await fetch(`${API_BASE_URL}/api/backtest/inflation`);
-  if (!res.ok) return null;
-  return res.json();
-}
-
 export interface DefaultFundPick {
   sleeveId: string;
   schemeCode: string;
   schemeName: string;
 }
 
-export async function listDefaultFunds(): Promise<DefaultFundPick[]> {
-  const res = await fetch(`${API_BASE_URL}/api/backtest/default-funds`);
-  if (!res.ok) throw new Error(`Failed to load default funds: ${res.status}`);
-  const data = (await res.json()) as { defaults: DefaultFundPick[] };
-  return data.defaults;
-}
-
-export async function runBacktest(legs: BacktestLeg[], benchmarkId: string): Promise<BacktestResult> {
-  const res = await apiFetchJson("/api/backtest/run", "POST", { legs, benchmarkId });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `Backtest run failed: ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function listBacktestScenarios(): Promise<BacktestScenario[]> {
-  const res = await fetch(`${API_BASE_URL}/api/backtest/scenarios`);
-  if (!res.ok) throw new Error(`Failed to load scenarios: ${res.status}`);
-  const data = (await res.json()) as { scenarios: BacktestScenario[] };
-  return data.scenarios;
-}
-
-export async function saveBacktestScenario(input: {
-  id?: string;
-  label: string;
-  legs: BacktestLeg[];
-  benchmarkId: string;
-}): Promise<BacktestScenario> {
-  const res = await apiFetchJson("/api/backtest/scenarios", "POST", input);
-  if (!res.ok) throw new Error(`Failed to save scenario: ${res.status}`);
-  return res.json();
-}
-
-export async function deleteBacktestScenario(id: string): Promise<void> {
-  const res = await apiFetch(`/api/backtest/scenarios/${encodeURIComponent(id)}`, { method: "DELETE" });
-  if (!res.ok) throw new Error(`Failed to delete scenario: ${res.status}`);
-}
-
 export interface SchemeSearchResult {
   schemeCode: string;
   schemeName: string;
-  nav: number;
-  date: string;
-}
-
-export async function searchSchemes(q: string): Promise<SchemeSearchResult[]> {
-  const res = await fetch(`${API_BASE_URL}/api/schemes/search?q=${encodeURIComponent(q)}`);
-  if (!res.ok) throw new Error(`Scheme search failed: ${res.status}`);
-  const data = (await res.json()) as { results: SchemeSearchResult[] };
-  return data.results;
+  /** Fund house and plan, shown under the name. */
+  detail: string;
 }
 
 export type BacktestJobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
@@ -150,44 +81,166 @@ export interface BacktestJob extends BacktestJobBase {
   result: BacktestResult | null;
 }
 
-// GET /api/backtest/jobs (the list/Runs-page endpoint) never includes each
-// job's full result — a completed job's result.series can hold ~1,800
-// points for a 5-year backtest, and the Runs page polls every few seconds
-// while anything is in flight, so returning full results there caused a
-// real server OOM (confirmed live 2026-09-20). Only GET
-// /api/backtest/jobs/:id (a single job's own detail/report page) returns
-// the full BacktestJob with `result` populated. `summary` is the one
-// exception — the server extracts just that small object (via SQLite's
-// json_extract, never the full result_json) so the list can show XIRR/
-// return without re-adding the series array that caused the OOM.
 export type BacktestJobSummary = BacktestJobBase & { summary: BacktestSummary | null };
 
+// ---- core wire format ----
+
+interface CoreLeg {
+  sleeve: string;
+  scheme_code: string;
+  scheme_name: string;
+  amount: number;
+  date: string;
+}
+
+interface CoreSummary {
+  total_invested: number;
+  portfolio_current_value: number;
+  benchmark_current_value: number;
+  portfolio_xirr: number | null;
+  benchmark_xirr: number | null;
+  portfolio_cagr: number | null;
+  benchmark_cagr: number | null;
+  absolute_return_pct: number;
+  benchmark_return_pct: number;
+  max_drawdown_pct: number;
+}
+
+interface CoreBacktest {
+  id: string;
+  name: string;
+  status: BacktestJobStatus;
+  benchmark: string;
+  legs: CoreLeg[];
+  summary: CoreSummary | null;
+  result?: {
+    legs: Array<CoreLeg & { units: number; entry_nav: number; latest_nav: number; current_value: number; missing_history: boolean }>;
+    series: Array<{ date: string; portfolio_value: number; benchmark_value: number; portfolio_return_pct: number; benchmark_return_pct: number }>;
+    summary: CoreSummary;
+  };
+  error: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+let benchmarkNames: Map<string, string> | null = null;
+
+async function benchmarkMap(): Promise<Map<string, string>> {
+  if (!benchmarkNames) {
+    const res = await coreFetch<{ data: Array<{ key: string; name: string; to: string | null }> }>("/v1/benchmarks");
+    benchmarkNames = new Map(res.data.map((b) => [b.key, b.name]));
+  }
+  return benchmarkNames;
+}
+
+async function benchmarkKey(name: string): Promise<string> {
+  for (const [k, n] of await benchmarkMap()) if (n === name || k === name) return k;
+  throw new Error(`Unknown benchmark: ${name}`);
+}
+
+const leg = (l: CoreLeg): BacktestLeg => ({ sleeveId: l.sleeve, schemeCode: l.scheme_code, schemeName: l.scheme_name, amount: l.amount, date: l.date });
+
+const summary = (s: CoreSummary): BacktestSummary => ({
+  totalInvested: s.total_invested,
+  portfolioCurrentValue: s.portfolio_current_value,
+  benchmarkCurrentValue: s.benchmark_current_value,
+  portfolioXirr: s.portfolio_xirr,
+  benchmarkXirr: s.benchmark_xirr,
+  portfolioCagr: s.portfolio_cagr,
+  benchmarkCagr: s.benchmark_cagr,
+  absoluteReturnPct: s.absolute_return_pct,
+  benchmarkReturnPct: s.benchmark_return_pct,
+  maxDrawdownPct: s.max_drawdown_pct,
+});
+
+function base(b: CoreBacktest, names: Map<string, string>): BacktestJobBase {
+  return {
+    id: b.id,
+    label: b.name || "Untitled backtest",
+    legs: b.legs.map(leg),
+    benchmarkId: names.get(b.benchmark) ?? b.benchmark,
+    status: b.status,
+    etaSeconds: null,
+    error: b.error,
+    createdAt: b.created_at,
+    startedAt: b.started_at,
+    finishedAt: b.finished_at,
+  };
+}
+
+function toJob(b: CoreBacktest, names: Map<string, string>): BacktestJob {
+  const r = b.result;
+  return {
+    ...base(b, names),
+    result: r
+      ? {
+          legs: r.legs.map((l) => ({
+            ...leg(l),
+            units: l.units,
+            entryNav: l.entry_nav,
+            latestNav: l.latest_nav,
+            currentValue: l.current_value,
+            missingHistory: l.missing_history,
+          })),
+          series: r.series.map((p) => ({
+            date: p.date,
+            portfolioValue: p.portfolio_value,
+            benchmarkValue: p.benchmark_value,
+            portfolioReturnPct: p.portfolio_return_pct,
+            benchmarkReturnPct: p.benchmark_return_pct,
+          })),
+          summary: summary(r.summary),
+        }
+      : null,
+  };
+}
+
+/** Benchmark names that have history in core. */
+export async function listBenchmarks(): Promise<string[]> {
+  const res = await coreFetch<{ data: Array<{ key: string; name: string; to: string | null }> }>("/v1/benchmarks");
+  benchmarkNames = new Map(res.data.map((b) => [b.key, b.name]));
+  return res.data.filter((b) => b.to !== null).map((b) => b.name);
+}
+
+export async function listDefaultFunds(): Promise<DefaultFundPick[]> {
+  const res = await coreFetch<{ data: Array<{ sleeve: string; scheme_code: string; scheme_name: string }> }>("/v1/backtests/defaults");
+  return res.data.map((d) => ({ sleeveId: d.sleeve, schemeCode: d.scheme_code, schemeName: d.scheme_name }));
+}
+
+export async function searchSchemes(q: string): Promise<SchemeSearchResult[]> {
+  const res = await coreFetch<{ data: Array<{ scheme_code: string; name: string; amc: string; plan: string; option: string; active: boolean }> }>(
+    `/v1/funds/search?q=${encodeURIComponent(q)}&limit=30`,
+  );
+  return res.data
+    .filter((f) => f.active)
+    .map((f) => ({ schemeCode: f.scheme_code, schemeName: f.name, detail: [f.amc, f.plan, f.option].filter(Boolean).join(" · ") }));
+}
+
 export async function listBacktestJobs(): Promise<BacktestJobSummary[]> {
-  const res = await fetch(`${API_BASE_URL}/api/backtest/jobs`);
-  if (!res.ok) throw new Error(`Failed to load backtest jobs: ${res.status}`);
-  const data = (await res.json()) as { jobs: BacktestJobSummary[] };
-  return data.jobs;
+  const [names, res] = await Promise.all([benchmarkMap(), coreFetch<{ data: CoreBacktest[] }>("/v1/backtests?limit=100")]);
+  return res.data.map((b) => ({ ...base(b, names), summary: b.summary ? summary(b.summary) : null }));
 }
 
 export async function getBacktestJob(id: string): Promise<BacktestJob> {
-  const res = await fetch(`${API_BASE_URL}/api/backtest/jobs/${encodeURIComponent(id)}`);
-  if (!res.ok) throw new Error(`Failed to load backtest job: ${res.status}`);
-  return res.json();
+  const [names, b] = await Promise.all([benchmarkMap(), coreFetch<CoreBacktest>(`/v1/backtests/${encodeURIComponent(id)}`)]);
+  return toJob(b, names);
 }
 
 export async function enqueueBacktestJob(input: { label: string; legs: BacktestLeg[]; benchmarkId: string }): Promise<BacktestJob> {
-  const res = await apiFetchJson("/api/backtest/jobs", "POST", input);
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `Failed to queue backtest: ${res.status}`);
-  }
-  return res.json();
+  const [names, key] = await Promise.all([benchmarkMap(), benchmarkKey(input.benchmarkId)]);
+  const b = await coreFetch<CoreBacktest>("/v1/backtests", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: input.label,
+      benchmark: key,
+      legs: input.legs.map((l) => ({ sleeve: l.sleeveId, scheme_code: l.schemeCode, scheme_name: l.schemeName, amount: l.amount, date: l.date })),
+    }),
+  });
+  return toJob(b, names);
 }
 
 export async function cancelBacktestJob(id: string): Promise<void> {
-  const res = await apiFetch(`/api/backtest/jobs/${encodeURIComponent(id)}`, { method: "DELETE" });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `Failed to cancel job: ${res.status}`);
-  }
+  await coreFetch(`/v1/backtests/${encodeURIComponent(id)}/cancel`, { method: "POST" });
 }

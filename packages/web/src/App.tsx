@@ -66,6 +66,15 @@ export default function App() {
           <CoreSessionGate>
             <DataPointControlCenterView />
           </CoreSessionGate>
+        ) : location.pathname.startsWith("/backtest") ? (
+          <CoreSessionGate>
+            <Routes>
+              <Route path="/backtest" element={<Navigate to="/backtest/runs" replace />} />
+              <Route path="/backtest/new" element={<NewBacktestView />} />
+              <Route path="/backtest/runs" element={<BacktestRunsView />} />
+              <Route path="/backtest/runs/:id" element={<BacktestReportView />} />
+            </Routes>
+          </CoreSessionGate>
         ) : location.pathname === "/model/overrides" ? (
           <CoreSessionGate>
             <OverridesView />
@@ -87,10 +96,6 @@ export default function App() {
         {snapshot && (
           <Routes>
             <Route path="/" element={<Navigate to="/overview" replace />} />
-            <Route path="/backtest" element={<Navigate to="/backtest/runs" replace />} />
-            <Route path="/backtest/new" element={<NewBacktestView />} />
-            <Route path="/backtest/runs" element={<BacktestRunsView />} />
-            <Route path="/backtest/runs/:id" element={<BacktestReportView />} />
             <Route path="/model" element={<Navigate to="/model/signals" replace />} />
             <Route path="/methodology" element={<MethodologyView snapshot={snapshot} />} />
             <Route path="/model/methodology" element={<Navigate to="/methodology" replace />} />

@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { computeAllocation } from "@wayfinder/engine";
-import { useSnapshot } from "../../hooks/useSnapshot.js";
-import { scoresFromSnapshot, vetoesFromSnapshot } from "../../hooks/useLocalAllocation.js";
+import type { Allocation } from "@wayfinder/engine";
 import { segmentColor, stickyClassTotals } from "../../components/AllocationBar.js";
-import { PUBLISHED_SNAPSHOT_URL, CURRENT_SNAPSHOT_URL } from "../../lib/constants.js";
+import { loadPortfolioAllocation, toAllocation } from "../../lib/portfolioApi.js";
 import { FundPicker } from "../../components/backtest/FundPicker.js";
 import { Slider } from "../../components/ui/Slider.js";
 import { SearchableSelect, type SearchableSelectOption } from "../../components/ui/SearchableSelect.js";
@@ -14,7 +12,6 @@ import { TabRow } from "../../components/ui/TabRow.js";
 import { formatPct } from "../../lib/format.js";
 import { todayIso, defaultPurchaseDateIso } from "../../lib/backtestFormat.js";
 import { listBenchmarks, listDefaultFunds, enqueueBacktestJob, type BacktestLeg } from "../../lib/backtestApi.js";
-import { listReviews, getReview } from "../../lib/reviewsApi.js";
 
 let legIdCounter = 0;
 function nextLegId(): string {
@@ -34,11 +31,14 @@ const PANEL_TAB_OPTIONS: ReadonlyArray<{ id: PanelTab; label: string }> = [
 
 export function NewBacktestView() {
   const navigate = useNavigate();
-  const { snapshot } = useSnapshot(PUBLISHED_SNAPSHOT_URL, CURRENT_SNAPSHOT_URL);
-  const liveAllocation = useMemo(() => {
-    if (!snapshot) return null;
-    return computeAllocation(scoresFromSnapshot(snapshot.scores), vetoesFromSnapshot(snapshot.vetoes), snapshot.params);
-  }, [snapshot]);
+  // The model allocation from core: the published one, or the draft while
+  // nothing is published (as Overview shows it).
+  const [liveAllocation, setLiveAllocation] = useState<Allocation | null>(null);
+  useEffect(() => {
+    loadPortfolioAllocation()
+      .then(({ data }) => setLiveAllocation(toAllocation(data)))
+      .catch((err: unknown) => setQueueError(`Could not load the model allocation: ${err instanceof Error ? err.message : String(err)}`));
+  }, []);
 
   const [legs, setLegs] = useState<LegDraft[]>([]);
   const [benchmarkId, setBenchmarkId] = useState<string>("Nifty 50");
@@ -60,7 +60,7 @@ export function NewBacktestView() {
   // frozen scores/vetoes/params rather than the current draft.
   const [publishedVersions, setPublishedVersions] = useState<SearchableSelectOption[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
-  const [versionAllocation, setVersionAllocation] = useState<ReturnType<typeof computeAllocation> | null>(null);
+  const [versionAllocation, setVersionAllocation] = useState<Allocation | null>(null);
   const [loadingVersion, setLoadingVersion] = useState(false);
 
   const allocation = versionAllocation ?? liveAllocation;
@@ -74,23 +74,12 @@ export function NewBacktestView() {
         setDefaultFunds(bySleeve);
       })
       .catch(() => setDefaultFunds({}));
-    listReviews()
-      .then((rows) => {
-        const published = rows.filter((r) => r.published);
-        setPublishedVersions(
-          published.map((r) => ({
-            id: r.id,
-            // "short" both parts: this renders inside a fixed w-56
-            // control, where a "medium" date overflows and clips.
-            label: r.label ?? new Date(r.createdAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }),
-            sublabel: new Date(r.createdAt).toLocaleDateString("en-IN", { dateStyle: "medium" }),
-          }))
-        );
-      })
-      .catch(() => setPublishedVersions([]));
+    // Saved versions move to core with Compare & Publish; until then the
+    // starting point is the live model allocation only.
+    setPublishedVersions([]);
   }, []);
 
-  function applyAllocationRows(nextAllocation: ReturnType<typeof computeAllocation>) {
+  function applyAllocationRows(nextAllocation: Allocation) {
     const rows = nextAllocation.rollup.filter((r) => r.portfolioWeight > 0.001);
     const percentages: Record<string, number> = {};
     for (const r of rows) percentages[r.id] = r.portfolioWeight;
@@ -122,14 +111,7 @@ export function NewBacktestView() {
     }
     setLoadingVersion(true);
     try {
-      const versionSnapshot = await getReview(id);
-      const nextAllocation = computeAllocation(
-        scoresFromSnapshot(versionSnapshot.scores),
-        vetoesFromSnapshot(versionSnapshot.vetoes),
-        versionSnapshot.params
-      );
-      setVersionAllocation(nextAllocation);
-      applyAllocationRows(nextAllocation);
+      throw new Error(`Version ${id} is not available yet`);
     } catch (err) {
       setQueueError(err instanceof Error ? err.message : String(err));
     } finally {

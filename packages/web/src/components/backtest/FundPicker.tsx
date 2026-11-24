@@ -48,7 +48,7 @@ export function FundPicker({
   const options: SearchableSelectOption[] = results.map((r) => ({
     id: r.schemeCode,
     label: r.schemeName,
-    sublabel: `NAV ₹${r.nav.toFixed(4)} as of ${r.date}`,
+    sublabel: r.detail,
   }));
 
   return (
