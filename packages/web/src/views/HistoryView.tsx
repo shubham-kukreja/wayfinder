@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Snapshot } from "@wayfinder/engine";
-import { NODE_LABELS, computeAllocation } from "@wayfinder/engine";
+import { NODE_LABELS } from "@wayfinder/engine";
 import { AllocationBar, segmentSwatchStyle } from "../components/AllocationBar.js";
 import { InfoPopover } from "../components/ui/InfoPopover.js";
-import { scoresFromSnapshot, vetoesFromSnapshot } from "../hooks/useLocalAllocation.js";
 import { formatPct, formatScore, formatSignedPct } from "../lib/format.js";
 import {
   getDraftStatus,
@@ -16,6 +14,7 @@ import {
   deleteReview,
   revertToSnapshot,
   type DraftStatus,
+  type FrozenReview,
   type ReviewListItem,
   type SnapshotDiff,
 } from "../lib/reviewsApi.js";
@@ -62,9 +61,6 @@ function scoreLabel(id: string): string {
   return `${node} · ${signal}`;
 }
 
-function allocationOf(snapshot: Pick<Snapshot, "scores" | "vetoes" | "params">) {
-  return computeAllocation(scoresFromSnapshot(snapshot.scores), vetoesFromSnapshot(snapshot.vetoes), snapshot.params);
-}
 
 // The three governance surfaces are routes, not tabs. Comparing-and-
 // publishing is a decision made now; History reconstructs a past one; Cadence
@@ -91,7 +87,7 @@ const SECTION_COPY: Record<GovernanceSection, { eyebrow: string; title: string; 
   },
 };
 
-export function HistoryView({ snapshot, section = "decide" }: { snapshot: Snapshot; section?: GovernanceSection }) {
+export function HistoryView({ section = "decide" }: { section?: GovernanceSection }) {
   const navigate = useNavigate();
   const tab = section;
 
@@ -106,7 +102,7 @@ export function HistoryView({ snapshot, section = "decide" }: { snapshot: Snapsh
   const [actionError, setActionError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
 
-  const [loadedReview, setLoadedReview] = useState<{ id: string; item: ReviewListItem; snapshot: Snapshot } | null>(null);
+  const [loadedReview, setLoadedReview] = useState<{ id: string; item: ReviewListItem; frozen: FrozenReview } | null>(null);
   const [loadingReviewId, setLoadingReviewId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [revertingId, setRevertingId] = useState<string | null>(null);
@@ -245,7 +241,7 @@ export function HistoryView({ snapshot, section = "decide" }: { snapshot: Snapsh
     setLoadingReviewId(item.id);
     setActionError(null);
     try {
-      setLoadedReview({ id: item.id, item, snapshot: await getReview(item.id) });
+      setLoadedReview({ id: item.id, item, frozen: await getReview(item.id) });
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -372,7 +368,6 @@ export function HistoryView({ snapshot, section = "decide" }: { snapshot: Snapsh
       {tab === "decide" && (
         <DecideTab
           reviews={reviews ?? []}
-          snapshot={snapshot}
           draftStatus={draftStatus}
           comparison={comparison}
           comparing={comparing}
@@ -436,7 +431,7 @@ function TimelineTab({
   onCompare,
 }: {
   reviews: ReviewListItem[] | null;
-  loadedReview: { id: string; item: ReviewListItem; snapshot: Snapshot } | null;
+  loadedReview: { id: string; item: ReviewListItem; frozen: FrozenReview } | null;
   loadingReviewId: string | null;
   deletingId: string | null;
   onLoad: (item: ReviewListItem) => void;
@@ -587,7 +582,7 @@ function TimelineTab({
 
 
       {loadedReview && (
-        <ReviewSnapshotModal snapshot={loadedReview.snapshot} item={loadedReview.item} onClose={onClosePreview} />
+        <ReviewSnapshotModal frozen={loadedReview.frozen} item={loadedReview.item} onClose={onClosePreview} />
       )}
     </div>
   );
@@ -601,7 +596,6 @@ function TimelineTab({
 // what they were already looking at.
 function DecideTab({
   reviews,
-  snapshot,
   draftStatus,
   comparison,
   comparing,
@@ -619,7 +613,6 @@ function DecideTab({
   onPublish,
 }: {
   reviews: ReviewListItem[];
-  snapshot: Snapshot;
   draftStatus: DraftStatus | null;
   comparison: SnapshotDiff | null;
   comparing: boolean;
@@ -638,26 +631,19 @@ function DecideTab({
 }) {
   const [showPicker, setShowPicker] = useState(false);
 
-  const afterAllocation = useMemo(() => (comparison ? allocationOf(comparison.after) : null), [comparison]);
+  const afterAllocation = comparison?.after ?? null;
 
-  // Which sleeve moved, and by how much. The changed-input list says what the
-  // model read; this says what it did to the portfolio, which is the question
-  // a publish decision actually turns on.
+  // Which sleeve moved, and by how much (core's allocation moves). The
+  // changed-input list says what the model read; this says what it did to
+  // the portfolio, which is the question a publish decision turns on.
   const allocationDelta = useMemo(() => {
-    if (!comparison?.before || !afterAllocation) return null;
-    const before = allocationOf(comparison.before);
-    const beforeById = new Map(before.rollup.map((r) => [r.id, r.portfolioWeight]));
-    return afterAllocation.rollup
-      .map((r) => ({
-        id: r.id,
-        label: r.label,
-        after: r.portfolioWeight,
-        before: beforeById.get(r.id) ?? 0,
-        delta: r.portfolioWeight - (beforeById.get(r.id) ?? 0),
-      }))
-      .filter((r) => Math.abs(r.delta) > 0.00005)
+    if (!comparison?.hasBefore) return null;
+    const labels = new Map(comparison.after.rollup.map((r) => [r.id, r.label]));
+    return comparison.moves
+      .filter((m) => labels.has(m.id) && Math.abs(m.delta) > 0.00005)
+      .map((m) => ({ ...m, label: labels.get(m.id) ?? m.id }))
       .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
-  }, [comparison, afterAllocation]);
+  }, [comparison]);
 
   const options = [
     { id: "draft", label: "Current draft (unsaved)" },
@@ -726,7 +712,7 @@ function DecideTab({
             <Stat label="Parameters" value={comparison.diff.paramsChanged ? "Changed" : "Same"} />
           </div>
 
-          {!comparison.before && (
+          {!comparison.hasBefore && (
             <p className="mt-6 text-[13px] text-muted">
               No baseline selected — showing this version's inputs as a first publish, with nothing to compare against.
             </p>
@@ -1074,16 +1060,15 @@ function CadenceTab({
 // trail exists to reconstruct was the one thing shown smallest. As a modal
 // it gets the width the bar actually needs.
 function ReviewSnapshotModal({
-  snapshot,
+  frozen,
   item,
   onClose,
 }: {
-  snapshot: Snapshot;
+  frozen: FrozenReview;
   item: ReviewListItem;
   onClose: () => void;
 }) {
-  const allocation = useMemo(() => allocationOf(snapshot), [snapshot]);
-  const activeVetoes = Object.entries(snapshot.vetoes).filter(([, veto]) => veto.active);
+  const { allocation, vetoes: activeVetoes } = frozen;
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -1142,10 +1127,10 @@ function ReviewSnapshotModal({
               </p>
             </div>
             <ul className="mt-2 space-y-1">
-              {activeVetoes.map(([nodeId, veto]) => (
-                <li key={nodeId} className="pl-4 text-[13px] leading-5 text-muted">
-                  <span className="font-semibold text-ink-2">{scoreLabel(nodeId)}</span>
-                  {veto.detail ? ` — ${veto.detail}` : ""}
+              {activeVetoes.map((veto) => (
+                <li key={veto.node} className="pl-4 text-[13px] leading-5 text-muted">
+                  <span className="font-semibold text-ink-2">{scoreLabel(veto.node)}</span>
+                  {veto.source === "override" ? " — set by override" : ""}
                 </li>
               ))}
             </ul>

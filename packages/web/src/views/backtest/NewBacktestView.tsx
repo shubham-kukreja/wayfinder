@@ -12,6 +12,7 @@ import { TabRow } from "../../components/ui/TabRow.js";
 import { formatPct } from "../../lib/format.js";
 import { todayIso, defaultPurchaseDateIso } from "../../lib/backtestFormat.js";
 import { listBenchmarks, listDefaultFunds, enqueueBacktestJob, type BacktestLeg } from "../../lib/backtestApi.js";
+import { getReview, listReviews } from "../../lib/reviewsApi.js";
 
 let legIdCounter = 0;
 function nextLegId(): string {
@@ -74,9 +75,19 @@ export function NewBacktestView() {
         setDefaultFunds(bySleeve);
       })
       .catch(() => setDefaultFunds({}));
-    // Saved versions move to core with Compare & Publish; until then the
-    // starting point is the live model allocation only.
-    setPublishedVersions([]);
+    listReviews()
+      .then((reviews) =>
+        setPublishedVersions(
+          reviews
+            .filter((r) => r.published)
+            .map((r) => ({
+              id: r.id,
+              label: r.label ?? "Unlabelled",
+              sublabel: new Date(r.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
+            })),
+        ),
+      )
+      .catch(() => setPublishedVersions([]));
   }, []);
 
   function applyAllocationRows(nextAllocation: Allocation) {
@@ -111,7 +122,9 @@ export function NewBacktestView() {
     }
     setLoadingVersion(true);
     try {
-      throw new Error(`Version ${id} is not available yet`);
+      const { allocation: frozen } = await getReview(id);
+      setVersionAllocation(frozen);
+      applyAllocationRows(frozen);
     } catch (err) {
       setQueueError(err instanceof Error ? err.message : String(err));
     } finally {

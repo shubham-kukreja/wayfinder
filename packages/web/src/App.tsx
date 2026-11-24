@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { useSnapshot } from "./hooks/useSnapshot.js";
 import { OverviewView } from "./views/OverviewView.js";
 import { NewBacktestView } from "./views/backtest/NewBacktestView.js";
 import { BacktestRunsView } from "./views/backtest/BacktestRunsView.js";
@@ -14,109 +13,49 @@ import { NotesView } from "./views/NotesView.js";
 import { NoteEditorView } from "./views/NoteEditorView.js";
 import { FundRankingsView } from "./views/funds/FundRankingsView.js";
 import { CoreSessionGate } from "./components/CoreSessionGate.js";
-import { LegacySessionBanner } from "./components/LegacySessionBanner.js";
 import { Sidebar } from "./components/shell/Sidebar.js";
 import { TopBar } from "./components/shell/TopBar.js";
 import { MobileNav } from "./components/shell/MobileNav.js";
 import { DraftStatusBanner } from "./components/DraftStatusBanner.js";
-import { CURRENT_SNAPSHOT_URL, FIXTURES, PUBLISHED_SNAPSHOT_URL } from "./lib/constants.js";
 
+// Every screen reads core-jobs-service (/v1); the legacy server is retired.
 export default function App() {
   const location = useLocation();
-
-  // The dev fixture switcher was removed from the top bar, so the app always
-  // loads live data. The fixture plumbing below stays in place for the mock
-  // states it can still serve if a switcher is reintroduced.
-  const fixtureId: string = "live";
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const fixture = FIXTURES.find((f) => f.id === fixtureId) ?? FIXTURES[0]!;
-  const usePublishedOverview = (fixtureId === "live" || fixtureId === "published") && location.pathname === "/overview";
-  const snapshotUrl = usePublishedOverview ? PUBLISHED_SNAPSHOT_URL : fixture.url;
-  const fallbackUrl = usePublishedOverview ? CURRENT_SNAPSHOT_URL : fixtureId === "published" ? CURRENT_SNAPSHOT_URL : undefined;
-  const { snapshot, loading, error, fallbackUsed } = useSnapshot(snapshotUrl, fallbackUrl);
 
   return (
     <div className="flex min-h-screen bg-paper">
       <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((prev) => !prev)} />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
-        <LegacySessionBanner />
         <MobileNav />
-        {/* Fund rankings read core-jobs-service, not the legacy snapshot, so
-            they render without waiting for it (or failing with it). */}
-        {location.pathname.startsWith("/funds") ? (
-          <CoreSessionGate>
-            <FundRankingsView />
-          </CoreSessionGate>
-        ) : location.pathname === "/" ? (
-          <Navigate to="/overview" replace />
-        ) : location.pathname === "/model" ? (
-          <Navigate to="/model/signals" replace />
-        ) : location.pathname === "/model/parameters" || location.pathname === "/model/inputs" ? (
-          <Navigate to="/model/overrides" replace />
-        ) : location.pathname === "/overview" ? (
-          <CoreSessionGate>
-            <OverviewView />
-          </CoreSessionGate>
-        ) : location.pathname === "/model/signals" ? (
-          <CoreSessionGate>
-            <DriversView />
-          </CoreSessionGate>
-        ) : location.pathname === "/model/datapoints" ? (
-          <CoreSessionGate>
-            <DataPointControlCenterView />
-          </CoreSessionGate>
-        ) : location.pathname.startsWith("/notes") ? (
-          <CoreSessionGate>
-            <Routes>
-              <Route path="/notes" element={<NotesView />} />
-              <Route path="/notes/:id" element={<NoteEditorView />} />
-            </Routes>
-          </CoreSessionGate>
-        ) : location.pathname.startsWith("/backtest") ? (
-          <CoreSessionGate>
-            <Routes>
-              <Route path="/backtest" element={<Navigate to="/backtest/runs" replace />} />
-              <Route path="/backtest/new" element={<NewBacktestView />} />
-              <Route path="/backtest/runs" element={<BacktestRunsView />} />
-              <Route path="/backtest/runs/:id" element={<BacktestReportView />} />
-            </Routes>
-          </CoreSessionGate>
-        ) : location.pathname === "/model/overrides" ? (
-          <CoreSessionGate>
-            <OverridesView />
-          </CoreSessionGate>
-        ) : (
-          <>
-        {loading && <div className="px-6 py-10 text-sm text-muted">Loading…</div>}
-        {error && (
-          <div className="px-6 py-10">
-            <p className="text-sm text-danger-500">Failed to load snapshot: {error}</p>
-          </div>
-        )}
-        {fallbackUsed && (
-          <div className="border-b border-warn-200 bg-warn-50 px-6 py-2 text-center text-xs text-warn-800">
-            No published model version exists yet; showing current draft state on Overview.
-          </div>
-        )}
-        {location.pathname.startsWith("/model/") && <DraftStatusBanner />}
-        {snapshot && (
+        <CoreSessionGate>
+          {location.pathname.startsWith("/model/") && <DraftStatusBanner />}
           <Routes>
             <Route path="/" element={<Navigate to="/overview" replace />} />
+            <Route path="/overview" element={<OverviewView />} />
+            <Route path="/funds/*" element={<FundRankingsView />} />
             <Route path="/model" element={<Navigate to="/model/signals" replace />} />
-            <Route path="/methodology" element={<MethodologyView snapshot={snapshot} />} />
-            <Route path="/model/methodology" element={<Navigate to="/methodology" replace />} />
+            <Route path="/model/signals" element={<DriversView />} />
+            <Route path="/model/datapoints" element={<DataPointControlCenterView />} />
+            <Route path="/model/overrides" element={<OverridesView />} />
             <Route path="/model/parameters" element={<Navigate to="/model/overrides" replace />} />
             <Route path="/model/inputs" element={<Navigate to="/model/overrides" replace />} />
+            <Route path="/model/methodology" element={<Navigate to="/methodology" replace />} />
+            <Route path="/methodology" element={<MethodologyView />} />
             <Route path="/reviews" element={<Navigate to="/reviews/decide" replace />} />
-            <Route path="/reviews/decide" element={<HistoryView snapshot={snapshot} section="decide" />} />
-            <Route path="/reviews/history" element={<HistoryView snapshot={snapshot} section="history" />} />
-            <Route path="/reviews/cadence" element={<HistoryView snapshot={snapshot} section="cadence" />} />
+            <Route path="/reviews/decide" element={<HistoryView section="decide" />} />
+            <Route path="/reviews/history" element={<HistoryView section="history" />} />
+            <Route path="/reviews/cadence" element={<HistoryView section="cadence" />} />
+            <Route path="/notes" element={<NotesView />} />
+            <Route path="/notes/:id" element={<NoteEditorView />} />
+            <Route path="/backtest" element={<Navigate to="/backtest/runs" replace />} />
+            <Route path="/backtest/new" element={<NewBacktestView />} />
+            <Route path="/backtest/runs" element={<BacktestRunsView />} />
+            <Route path="/backtest/runs/:id" element={<BacktestReportView />} />
             <Route path="*" element={<Navigate to="/overview" replace />} />
           </Routes>
-        )}
-          </>
-        )}
+        </CoreSessionGate>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
-import type { Snapshot } from "@wayfinder/engine";
+import { useEffect, useState } from "react";
+import { coreFetch } from "../lib/coreApi.js";
 import { formatPct } from "../lib/format.js";
 
 // §24-26 of the UX spec ("Methodology screen" / "Standing framework rules"):
@@ -17,6 +18,9 @@ const SIGNAL_LABELS: Record<string, string> = {
   relvalue: "Relative value vs segments",
   revisions: "Earnings revision breadth",
   growth_diff: "Earnings growth differential",
+  eps_growth_diff: "Earnings growth differential",
+  credit_spread: "Credit spread cushion",
+  ratio: "Gold/Silver ratio positioning",
   margin_cycle: "Margin / cycle position",
   carry: "Carry vs history",
   rate_cycle: "Rate-cycle duration benefit",
@@ -25,6 +29,8 @@ const SIGNAL_LABELS: Record<string, string> = {
   ratio_position: "Gold/Silver ratio positioning",
   real_rates: "Real-rates trend benefit",
   industrial: "Industrial demand cycle",
+  rel_momentum: "Relative momentum",
+  cycle: "Sector cycle position",
 };
 
 const WEIGHT_GROUPS: ReadonlyArray<{ key: "l1" | "equity" | "debt" | "metals" | "sector"; title: string; blurb: string }> = [
@@ -200,8 +206,51 @@ function BacktestMethodVisual() {
   );
 }
 
-export function MethodologyView({ snapshot }: { snapshot: Snapshot }) {
-  const { params } = snapshot;
+interface CoreSignal {
+  key: string;
+  weight: number;
+}
+
+interface CoreConfig {
+  scorecards: Record<string, { tilt_cap?: number; signals: CoreSignal[] }>;
+  sector_satellite?: { signals: CoreSignal[]; sleeve_cap: number; max_sectors: number; qualify_threshold: number; max_quarters_held: number };
+}
+
+interface MethodologyParams {
+  maxTilt: Record<"l1" | "equity" | "debt" | "metals", number>;
+  sector: { sleeveCap: number; maxSectors: number; threshold: number; maxConsecutiveQuarters: number };
+  signalWeights: Record<string, Record<string, number>>;
+}
+
+const weightsOf = (signals: CoreSignal[] = []) => Object.fromEntries(signals.map((s) => [s.key, s.weight]));
+
+/** The parameters this page quotes, from the model config on core (the shared draft's). */
+function toParams(c: CoreConfig): MethodologyParams {
+  const card = (g: string) => c.scorecards[g];
+  const sat = c.sector_satellite;
+  return {
+    maxTilt: { l1: card("l1")?.tilt_cap ?? 0, equity: card("equity")?.tilt_cap ?? 0, debt: card("debt")?.tilt_cap ?? 0, metals: card("metals")?.tilt_cap ?? 0 },
+    sector: { sleeveCap: sat?.sleeve_cap ?? 0, maxSectors: sat?.max_sectors ?? 0, threshold: sat?.qualify_threshold ?? 0, maxConsecutiveQuarters: sat?.max_quarters_held ?? 0 },
+    signalWeights: {
+      l1: weightsOf(card("l1")?.signals),
+      equity: weightsOf(card("equity")?.signals),
+      debt: weightsOf(card("debt")?.signals),
+      metals: weightsOf(card("metals")?.signals),
+      sector: weightsOf(sat?.signals),
+    },
+  };
+}
+
+export function MethodologyView() {
+  const [params, setParams] = useState<MethodologyParams | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    coreFetch<{ config: CoreConfig }>("/v1/draft")
+      .then((d) => setParams(toParams(d.config)))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+  }, []);
+  if (error) return <p className="mt-8 text-[13px] text-danger-500">Failed to load the model parameters: {error}</p>;
+  if (!params) return <div className="mt-8 h-40 w-full animate-pulse bg-paper-2" />;
 
   return (
     <div className="mx-auto w-full max-w-[1600px] px-6 py-8">
@@ -391,7 +440,7 @@ export function MethodologyView({ snapshot }: { snapshot: Snapshot }) {
             <StatRow label="Forced exit" value={`After ${params.sector.maxConsecutiveQuarters} quarters`} />
           </div>
           {WEIGHT_GROUPS.map((groupDef) => {
-            const weights = params.signalWeights[groupDef.key] as Record<string, number>;
+            const weights = params.signalWeights[groupDef.key] ?? {};
             return (
               <div key={groupDef.key}>
                 <h3 className="mb-3 border-b border-line pb-2 text-[11px] font-bold uppercase tracking-eyebrow text-muted">

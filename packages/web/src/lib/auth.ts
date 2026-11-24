@@ -1,28 +1,10 @@
-import { API_BASE_URL } from "./constants.js";
 import { CoreApiError, coreAuth } from "./coreApi.js";
 
 // Sign-in is core-jobs-service's (/v1/auth/login): an HttpOnly session
 // cookie, checked with GET /v1/me. That session decides whether the app is
-// signed in.
-//
-// Screens not yet moved to /v1 still write to the legacy server, which wants
-// its own bearer token. Signing in also fetches that token with the same
-// credentials, best effort: if it fails, the /v1 screens work as normal and
-// legacy writes report that their session is missing (see apiFetch).
-//
-// The legacy token lives in localStorage (that server is cross-origin, so a
-// cookie is unreliable). The tradeoff is XSS exposure; this app loads no
-// third-party scripts and renders no user HTML.
-const TOKEN_KEY = "core.session.token";
+// signed in. Only the user's email is kept locally, for display.
+const LEGACY_TOKEN_KEY = "core.session.token"; // from the retired legacy server; cleared on sign-out
 const EMAIL_KEY = "core.session.email";
-
-export function getToken(): string | null {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-}
 
 /** The signed-in user's email (from core), for display. */
 export function getEmail(): string | null {
@@ -41,31 +23,13 @@ function setItem(key: string, value: string): void {
   }
 }
 
-/** Drops the legacy token (and the cached email). */
+/** Drops the cached email (and any legacy token left behind). */
 export function clearSession(): void {
   try {
-    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
     localStorage.removeItem(EMAIL_KEY);
   } catch {
     /* nothing to clear */
-  }
-}
-
-/** Fetches the legacy server's token. Never throws; false when it failed. */
-async function legacyLogin(email: string, password: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!res.ok) return false;
-    const body = (await res.json()) as { token?: string };
-    if (!body.token) return false;
-    setItem(TOKEN_KEY, body.token);
-    return true;
-  } catch {
-    return false;
   }
 }
 
@@ -80,11 +44,10 @@ export async function login(email: string, password: string): Promise<{ ok: true
     return { ok: false, error: "Could not reach the server. Check your connection and try again." };
   }
   setItem(EMAIL_KEY, user.email);
-  await legacyLogin(email.trim(), password);
   return { ok: true };
 }
 
-/** Signs out of core and drops the legacy token. */
+/** Signs out of core. */
 export async function logout(): Promise<void> {
   clearSession();
   await coreAuth.logout().catch(() => undefined);

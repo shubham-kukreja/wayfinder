@@ -1,6 +1,11 @@
-import type { Snapshot } from "@wayfinder/engine";
-import { API_BASE_URL } from "./constants.js";
-import { apiFetch, apiFetchJson } from "./apiFetch.js";
+import type { Allocation } from "@wayfinder/engine";
+import { coreFetch, CoreApiError } from "./coreApi.js";
+import { toAllocation, type PortfolioAllocation } from "./portfolioApi.js";
+
+// Saved reviews and published versions on core-jobs-service: /v1/versions
+// (list, save, publish, delete, revert) and /v1/versions/compare. The types
+// are the ones the governance screens were built on; this module maps
+// core's records onto them.
 
 export interface ReviewListItem {
   id: string;
@@ -13,96 +18,171 @@ export interface ReviewListItem {
   reason: string | null;
 }
 
-export async function listReviews(): Promise<ReviewListItem[]> {
-  const res = await fetch(`${API_BASE_URL}/api/snapshots`);
-  if (!res.ok) throw new Error(`Failed to list reviews: ${res.status}`);
-  return res.json();
+interface CoreVersion {
+  id: string;
+  kind: "review" | "published";
+  status: "active" | "superseded" | "saved";
+  label: string | null;
+  reason: string | null;
+  as_of: string;
+  created_by: { id: string; name: string } | null;
+  created_at: string;
+  published_at: string | null;
 }
 
-export async function saveReview(
-  label: string | null,
-  reason?: string
-): Promise<{ id: string; label: string | null; createdAt: string }> {
-  const res = await apiFetchJson("/api/snapshots", "POST", { label: label ?? undefined, reason });
-  if (!res.ok) throw new Error(`Failed to save review: ${res.status}`);
-  return res.json();
+interface CoreCreated {
+  id: string;
+  kind: "review" | "published";
+  status: string;
+  frozen_inputs?: number;
+  superseded?: string | null;
+}
+
+type Value = number | boolean | string | null;
+
+interface CoreComparison {
+  totals: { changes: number; scores: number; vetoes: number; parameters: number };
+  allocation_moves: Array<{ node: string; from: number; to: number; delta: number }>;
+  inputs: Array<{ key: string; kind: "score" | "veto" | "parameter"; source?: string; from?: Value; to?: Value }>;
+}
+
+const toItem = (v: CoreVersion): ReviewListItem => ({
+  id: v.id,
+  label: v.label,
+  createdAt: v.created_at,
+  isReview: v.kind === "review",
+  parentId: null,
+  published: v.kind === "published",
+  actor: v.created_by?.name ?? null,
+  reason: v.reason,
+});
+
+export async function listReviews(): Promise<ReviewListItem[]> {
+  const res = await coreFetch<{ data: CoreVersion[] }>("/v1/versions?limit=100");
+  return res.data.map(toItem);
+}
+
+const json = (body: unknown): RequestInit => ({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+export async function saveReview(label: string | null, reason?: string): Promise<{ id: string; label: string | null; createdAt: string }> {
+  const res = await coreFetch<CoreCreated>("/v1/versions", json({ kind: "review", label: label ?? undefined, reason }));
+  return { id: res.id, label, createdAt: new Date().toISOString() };
+}
+
+export interface DiffSummary {
+  totalChanges: number;
+  changedScores: Array<{ id: string; before: number | null; after: number; provenance: string }>;
+  changedVetoes: Array<{ id: string; before: boolean | null; after: boolean }>;
+  paramsChanged: boolean;
+}
+
+function toDiff(c: CoreComparison): DiffSummary {
+  const scores: DiffSummary["changedScores"] = [];
+  const vetoes: DiffSummary["changedVetoes"] = [];
+  for (const i of c.inputs) {
+    if (i.kind === "score" && typeof i.to === "number") {
+      scores.push({ id: i.key, before: typeof i.from === "number" ? i.from : null, after: i.to, provenance: i.source ?? "auto" });
+    } else if (i.kind === "veto") {
+      vetoes.push({ id: i.key, before: typeof i.from === "boolean" ? i.from : null, after: i.to === true });
+    }
+  }
+  return { totalChanges: c.totals.changes, changedScores: scores, changedVetoes: vetoes, paramsChanged: c.totals.parameters > 0 };
+}
+
+async function compare(a: string, b: string): Promise<CoreComparison> {
+  return coreFetch<CoreComparison>(`/v1/versions/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
+}
+
+// Nothing published yet: everything is compared against neutral.
+async function compareWithPublished(b: string): Promise<{ hasPublished: boolean; c: CoreComparison }> {
+  try {
+    return { hasPublished: true, c: await compare("published", b) };
+  } catch (err) {
+    if (!(err instanceof CoreApiError && err.status === 404)) throw err;
+    return { hasPublished: false, c: await compare("neutral", b) };
+  }
 }
 
 // `fromSnapshotId` promotes an existing saved review to published, freezing
-// exactly the state that was reviewed. Omitted, it publishes current state.
-export async function publishReview(label: string | null, reason?: string, fromSnapshotId?: string): Promise<{
-  id: string;
-  label: string | null;
-  parentId: string | null;
-  actor: string;
-  createdAt: string;
-  reason: string | null;
-  diff: { totalChanges: number; changedScores: unknown[]; changedVetoes: unknown[]; paramsChanged: boolean };
-}> {
-  const res = await apiFetchJson("/api/snapshots/publish", "POST", { label: label ?? undefined, reason, fromSnapshotId });
-  if (!res.ok) throw new Error(`Failed to publish review: ${res.status}`);
-  return res.json();
+// exactly the state that was reviewed. Omitted, it publishes the draft.
+export async function publishReview(
+  label: string | null,
+  reason?: string,
+  fromSnapshotId?: string,
+): Promise<{ id: string; label: string | null; diff: DiffSummary }> {
+  const { c } = await compareWithPublished(fromSnapshotId ?? "draft");
+  const res = fromSnapshotId
+    ? await coreFetch<CoreCreated>(`/v1/versions/${encodeURIComponent(fromSnapshotId)}/publish`, { method: "POST" })
+    : await coreFetch<CoreCreated>("/v1/versions", json({ kind: "published", label: label ?? undefined, reason }));
+  return { id: res.id, label, diff: toDiff(c) };
 }
 
 export interface DraftStatus {
   hasPublishedVersion: boolean;
   latestPublishedId: string | null;
   draftAsOf: string;
-  diff: { totalChanges: number; changedScores: Array<{ id: string; before: number | null; after: number; provenance: string }>; changedVetoes: Array<{ id: string; before: boolean | null; after: boolean }>; paramsChanged: boolean };
+  diff: DiffSummary;
 }
 
 export async function getDraftStatus(): Promise<DraftStatus> {
-  const res = await fetch(`${API_BASE_URL}/api/snapshots/draft-status`);
-  if (!res.ok) throw new Error(`Failed to load draft status: ${res.status}`);
-  return res.json();
+  const { hasPublished, c } = await compareWithPublished("draft");
+  return { hasPublishedVersion: hasPublished, latestPublishedId: null, draftAsOf: new Date().toISOString().slice(0, 10), diff: toDiff(c) };
 }
 
 export interface SnapshotDiff {
   from: string | null;
   to: string;
-  diff: DraftStatus["diff"];
-  // Enough of each snapshot to recompute its allocation locally, so the
-  // comparison can show what the changed inputs did to the portfolio and
-  // not just which inputs moved.
-  before: Pick<Snapshot, "asOf" | "scores" | "vetoes" | "params"> | null;
-  after: Pick<Snapshot, "asOf" | "scores" | "vetoes" | "params">;
+  diff: DiffSummary;
+  /** False when `from` is nothing (a first publish): no allocation moves. */
+  hasBefore: boolean;
+  /** The `to` side's allocation. */
+  after: Allocation;
+  /** Sleeve weight moves from `from` to `to`, as 0–1 fractions. */
+  moves: Array<{ id: string; before: number; after: number; delta: number }>;
 }
 
-// Diffs any two saved entries. Either id may be the literal "draft" to
-// compare against the current unsaved state; `from` may be omitted to
-// diff an entry against nothing.
+async function allocationOf(ref: string): Promise<PortfolioAllocation> {
+  return coreFetch<PortfolioAllocation>(`/v1/portfolios/core/allocation?version=${encodeURIComponent(ref)}`);
+}
+
+// Diffs any two entries. Either id may be "draft" (the current unsaved
+// state); `from` may be omitted to diff an entry against nothing.
 export async function getSnapshotDiff(to: string, from?: string | null): Promise<SnapshotDiff> {
-  const params = new URLSearchParams({ to });
-  if (from) params.set("from", from);
-  const res = await fetch(`${API_BASE_URL}/api/snapshots/diff?${params}`);
-  if (!res.ok) throw new Error(`Failed to compare versions: ${res.status}`);
-  return res.json();
+  const [c, after] = await Promise.all([compare(from ?? "neutral", to), allocationOf(to)]);
+  return {
+    from: from ?? null,
+    to,
+    diff: toDiff(c),
+    hasBefore: Boolean(from),
+    after: toAllocation(after),
+    moves: c.allocation_moves.map((m) => ({ id: m.node, before: m.from, after: m.to, delta: m.delta })),
+  };
 }
 
-// "Load" a review means viewing its frozen state read-only — reviews
-// are immutable by design, so this never mutates the live/draft state.
-export async function getReview(id: string): Promise<Snapshot> {
-  const res = await fetch(`${API_BASE_URL}/api/snapshots/${id}`);
-  if (!res.ok) throw new Error(`Failed to load review: ${res.status}`);
-  return res.json();
+export interface FrozenReview {
+  allocation: Allocation;
+  vetoes: Array<{ node: string; source: string }>;
 }
 
-// Restores the draft to a saved entry's authored inputs — params and manual
-// overrides. Auto-derived scores are re-derived from the stored observations
-// rather than written back, and observations themselves are untouched.
-export async function revertToSnapshot(id: string): Promise<{
-  revertedTo: string;
-  restoredManualScores: number;
-  restoredManualVetoes: number;
-}> {
-  const res = await apiFetchJson(`/api/snapshots/${id}/revert`, "POST", {});
-  if (!res.ok) throw new Error(`Failed to revert: ${res.status}`);
-  return res.json();
+// "Load" a review means viewing its frozen state read-only — versions are
+// immutable, so this never touches the draft.
+export async function getReview(id: string): Promise<FrozenReview> {
+  const data = await allocationOf(id);
+  return { allocation: toAllocation(data), vetoes: data.vetoes };
 }
 
-// Any saved entry (review or published version) can be deleted, per
-// this project's own decision — no special-casing published rows.
+// Restores the draft to a saved entry's parameters and manual scores;
+// auto-fetched scores stay live.
+export async function revertToSnapshot(id: string): Promise<{ revertedTo: string; restoredManualScores: number; restoredManualVetoes: number }> {
+  const res = await coreFetch<{ rev: number; compare: CoreComparison }>(`/v1/versions/${encodeURIComponent(id)}/revert`, json({ mode: "manual_and_params" }));
+  return { revertedTo: id, restoredManualScores: res.compare.totals.scores, restoredManualVetoes: res.compare.totals.vetoes };
+}
+
+// Any saved entry can be deleted except the active published version.
 export async function deleteReview(id: string): Promise<void> {
-  const res = await apiFetch(`/api/snapshots/${id}`, { method: "DELETE" });
-  if (!res.ok && res.status !== 404) throw new Error(`Failed to delete review: ${res.status}`);
+  try {
+    await coreFetch(`/v1/versions/${encodeURIComponent(id)}`, { method: "DELETE" });
+  } catch (err) {
+    if (!(err instanceof CoreApiError && err.status === 404)) throw err;
+  }
 }

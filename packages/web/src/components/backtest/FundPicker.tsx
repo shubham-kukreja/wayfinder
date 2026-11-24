@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { SearchableSelect, type SearchableSelectOption } from "../ui/SearchableSelect.js";
 import { searchSchemes, type SchemeSearchResult } from "../../lib/backtestApi.js";
 
-// A typeahead over /api/schemes/search — the same endpoint the tracked-
+// A typeahead over core's /v1/funds/search — the same fund list the tracked-
 // schemes admin flow already hits — built on the shared SearchableSelect
 // so a fund row reads like every other dropdown in the app (bordered
 // pill/input, same chevron, same listbox styling) instead of its own
