@@ -12,6 +12,7 @@ import { OverridesView } from "./views/OverridesView.js";
 import { HistoryView } from "./views/HistoryView.js";
 import { NotesView } from "./views/NotesView.js";
 import { NoteEditorView } from "./views/NoteEditorView.js";
+import { FundRankingsView } from "./views/funds/FundRankingsView.js";
 import { Sidebar } from "./components/shell/Sidebar.js";
 import { TopBar } from "./components/shell/TopBar.js";
 import { MobileNav } from "./components/shell/MobileNav.js";
@@ -38,6 +39,12 @@ export default function App() {
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
         <MobileNav />
+        {/* Fund rankings read core-jobs-service, not the legacy snapshot, so
+            they render without waiting for it (or failing with it). */}
+        {location.pathname.startsWith("/funds") ? (
+          <FundRankingsView />
+        ) : (
+          <>
         {loading && <div className="px-6 py-10 text-sm text-muted">Loading…</div>}
         {error && (
           <div className="px-6 py-10">
@@ -74,6 +81,8 @@ export default function App() {
             <Route path="/notes/:id" element={<NoteEditorView />} />
             <Route path="*" element={<Navigate to="/overview" replace />} />
           </Routes>
+        )}
+          </>
         )}
       </div>
     </div>

@@ -5,6 +5,10 @@
 // "Workspace" holding the answer, the docs and the publish gate at once.
 export const ALLOCATION_ROUTES: Array<{ path: string; label: string }> = [{ path: "/overview", label: "Overview" }];
 
+// Fund research, served by core-jobs-service (/v1) rather than the legacy
+// server: category rankings of mutual funds from the fund-scoring model.
+export const FUNDS_ROUTES: Array<{ path: string; label: string }> = [{ path: "/funds", label: "Fund Rankings" }];
+
 // Its own group, not folded into Allocation: this isn't a state of the
 // published/draft model, it's a separate workspace with its own queue of
 // runs — a "what you're testing" surface, distinct from "what you hold"
