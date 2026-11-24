@@ -48,6 +48,12 @@ export default function App() {
           <CoreSessionGate>
             <FundRankingsView />
           </CoreSessionGate>
+        ) : location.pathname === "/" ? (
+          <Navigate to="/overview" replace />
+        ) : location.pathname === "/overview" ? (
+          <CoreSessionGate>
+            <OverviewView />
+          </CoreSessionGate>
         ) : (
           <>
         {loading && <div className="px-6 py-10 text-sm text-muted">Loading…</div>}
@@ -65,7 +71,6 @@ export default function App() {
         {snapshot && (
           <Routes>
             <Route path="/" element={<Navigate to="/overview" replace />} />
-            <Route path="/overview" element={<OverviewView snapshot={snapshot} />} />
             <Route path="/backtest" element={<Navigate to="/backtest/runs" replace />} />
             <Route path="/backtest/new" element={<NewBacktestView />} />
             <Route path="/backtest/runs" element={<BacktestRunsView />} />

@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import type { Snapshot } from "@wayfinder/engine";
-import { L1_SIGNALS, NODE_LABELS, TILT_GROUP_NODES, computeAllocation } from "@wayfinder/engine";
+import { L1_SIGNALS, NODE_LABELS, TILT_GROUP_NODES } from "@wayfinder/engine";
 import { AllocationBar, segmentSwatchStyle, type AllocationDepth, type CompareBasis } from "../components/AllocationBar.js";
 import { CalculationInspector } from "../components/CalculationInspector.js";
 import { SignalHeatmap } from "../components/SignalHeatmap.js";
 import { TabRow } from "../components/ui/TabRow.js";
 import { InfoPopover } from "../components/ui/InfoPopover.js";
-import { listReviews, type ReviewListItem } from "../lib/reviewsApi.js";
-import { scoresFromSnapshot, vetoesFromSnapshot } from "../hooks/useLocalAllocation.js";
+import { inspectorSnapshot, loadPortfolioAllocation, scoresFrom, toAllocation, type PortfolioAllocation } from "../lib/portfolioApi.js";
 import { formatPct, formatSignedPct } from "../lib/format.js";
 
 const SIGNAL_LABELS: Record<string, string> = {
@@ -108,21 +106,38 @@ const COMPARE_LABELS: Record<CompareBasis, string> = {
   neutral: "Neutral",
 };
 
-export function OverviewView({ snapshot }: { snapshot: Snapshot }) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  // The newest published entry is the one this page is serving.
-  const [activeVersion, setActiveVersion] = useState<ReviewListItem | null>(null);
+// Overview shows core-jobs-service's allocation: the published run, or the
+// newest run while nothing is published (GET /v1/portfolios/core/allocation).
+export function OverviewView() {
+  const [state, setState] = useState<{ data: PortfolioAllocation; fallbackUsed: boolean } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    listReviews()
-      .then((rows) => setActiveVersion(rows.find((r) => r.published) ?? null))
-      .catch(() => setActiveVersion(null));
+    loadPortfolioAllocation()
+      .then(setState)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
   }, []);
+  if (error) return <p className="px-6 py-10 text-sm text-danger-500">Failed to load the allocation: {error}</p>;
+  if (!state) return <div className="px-6 py-10 text-sm text-muted">Loading…</div>;
+  return (
+    <>
+      {state.fallbackUsed && (
+        <div className="border-b border-warn-200 bg-warn-50 px-6 py-2 text-center text-xs text-warn-800">
+          Nothing is published yet; showing the newest model run.
+        </div>
+      )}
+      <OverviewBody data={state.data} />
+    </>
+  );
+}
+
+function OverviewBody({ data }: { data: PortfolioAllocation }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const snapshot = useMemo(() => inspectorSnapshot(data), [data]);
   const depth = depthFromSearch(searchParams.get("depth"));
   const compare = compareFromSearch(searchParams.get("compare"));
   const selectedNode = searchParams.get("node");
-  const scores = useMemo(() => scoresFromSnapshot(snapshot.scores), [snapshot.scores]);
-  const vetoes = useMemo(() => vetoesFromSnapshot(snapshot.vetoes), [snapshot.vetoes]);
-  const allocation = useMemo(() => computeAllocation(scores, vetoes, snapshot.params), [scores, vetoes, snapshot.params]);
+  const scores = useMemo(() => scoresFrom(data), [data]);
+  const allocation = useMemo(() => toAllocation(data), [data]);
 
   const l1Rows = L1_NODE_IDS.map((nodeId) => {
     const node = allocation.groups.l1.nodes[nodeId]!;
@@ -136,7 +151,7 @@ export function OverviewView({ snapshot }: { snapshot: Snapshot }) {
     };
   });
 
-  const activeVetoes = Object.entries(snapshot.vetoes).filter(([, veto]) => veto.active);
+  const activeVetoes = data.vetoes.map((v) => [v.node, { detail: v.source === "override" ? "set by override" : "triggered by a rule" }] as const);
 
   const compositesByNode = useMemo(() => {
     const entries: Record<string, number> = {};
@@ -205,50 +220,45 @@ export function OverviewView({ snapshot }: { snapshot: Snapshot }) {
                     so the exact version behind these numbers is worth being
                     able to check without leaving the page. */}
                 <InfoPopover label="Which version is this?" title="Published version">
-                  {activeVersion ? (
+                  {data.version.kind === "published" ? (
                     <>
                       <p>
-                        <strong className="font-semibold text-ink">{activeVersion.label ?? "Unlabelled"}</strong>
+                        <strong className="font-semibold text-ink">Published model run</strong>
                       </p>
                       <dl className="space-y-1.5 border-t border-line pt-2.5 text-[12px]">
+                        {data.version.published_at && (
+                          <div className="flex justify-between gap-4">
+                            <dt className="text-muted">Published</dt>
+                            <dd className="text-right text-ink">{formatPublishedAt(data.version.published_at)}</dd>
+                          </div>
+                        )}
                         <div className="flex justify-between gap-4">
-                          <dt className="text-muted">Published</dt>
-                          <dd className="text-right text-ink">{formatPublishedAt(activeVersion.createdAt)}</dd>
+                          <dt className="text-muted">Run id</dt>
+                          <dd className="text-right font-mono text-ink">{data.version.run_id.slice(0, 8)}</dd>
                         </div>
                         <div className="flex justify-between gap-4">
-                          <dt className="text-muted">Version id</dt>
-                          <dd className="text-right font-mono text-ink">{activeVersion.id.slice(0, 8)}</dd>
+                          <dt className="text-muted">Model config</dt>
+                          <dd className="text-right text-ink">v{data.version.config_version}</dd>
                         </div>
                         <div className="flex justify-between gap-4">
-                          <dt className="text-muted">Published by</dt>
-                          <dd className="text-right text-ink">{activeVersion.actor ?? "unknown"}</dd>
-                        </div>
-                        <div className="flex justify-between gap-4">
-                          <dt className="text-muted">Snapshot as of</dt>
-                          <dd className="text-right text-ink">{formatPublishedAt(snapshot.asOf)}</dd>
+                          <dt className="text-muted">Data as of</dt>
+                          <dd className="text-right text-ink">{formatPublishedAt(data.version.as_of)}</dd>
                         </div>
                       </dl>
-                      {activeVersion.reason && (
-                        <p className="border-t border-line pt-2.5">
-                          <span className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Reason</span>
-                          <br />
-                          {activeVersion.reason}
-                        </p>
-                      )}
                       <p className="border-t border-line pt-2.5 text-[12px] text-muted">
                         This allocation is frozen at publish time. Tuning the model does not change it until you publish again.
                       </p>
                     </>
                   ) : (
                     <p>
-                      Nothing has been published yet, so this shows the current draft. Publish a version from Governance to fix
-                      an allocation of record.
+                      Nothing has been published yet, so this shows the newest model run (run {data.version.run_id.slice(0, 8)}, config v
+                      {data.version.config_version}).
                     </p>
                   )}
                 </InfoPopover>
               </div>
               <div className="mt-1 flex h-8 items-center text-sm font-semibold tabular-nums text-ink">
-                {formatAsOf(snapshot.asOf)}
+                {formatAsOf(data.version.as_of)}
               </div>
             </div>
             <div>
