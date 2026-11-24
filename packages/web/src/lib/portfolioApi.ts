@@ -14,7 +14,10 @@ export interface PortfolioAllocation {
   portfolio: string;
   version: {
     id: string | null;
-    run_id: string;
+    /** The model run; absent for a live evaluation of the draft. */
+    run_id?: string;
+    /** The draft revision, for a live evaluation of the draft. */
+    rev?: number;
     kind: "published" | "review" | "draft";
     as_of: string;
     published_at: string | null;

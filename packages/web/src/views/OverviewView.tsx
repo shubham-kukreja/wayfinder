@@ -122,7 +122,7 @@ export function OverviewView() {
     <>
       {state.fallbackUsed && (
         <div className="border-b border-warn-200 bg-warn-50 px-6 py-2 text-center text-xs text-warn-800">
-          Nothing is published yet; showing the newest model run.
+          Nothing is published yet; showing the shared draft on today’s data.
         </div>
       )}
       <OverviewBody data={state.data} />
@@ -234,7 +234,7 @@ function OverviewBody({ data }: { data: PortfolioAllocation }) {
                         )}
                         <div className="flex justify-between gap-4">
                           <dt className="text-muted">Run id</dt>
-                          <dd className="text-right font-mono text-ink">{data.version.run_id.slice(0, 8)}</dd>
+                          <dd className="text-right font-mono text-ink">{data.version.run_id?.slice(0, 8) ?? "—"}</dd>
                         </div>
                         <div className="flex justify-between gap-4">
                           <dt className="text-muted">Model config</dt>
@@ -251,8 +251,8 @@ function OverviewBody({ data }: { data: PortfolioAllocation }) {
                     </>
                   ) : (
                     <p>
-                      Nothing has been published yet, so this shows the newest model run (run {data.version.run_id.slice(0, 8)}, config v
-                      {data.version.config_version}).
+                      Nothing has been published yet, so this shows the shared draft evaluated on today&rsquo;s data
+                      {data.version.rev ? ` (draft revision ${data.version.rev})` : ""}.
                     </p>
                   )}
                 </InfoPopover>
