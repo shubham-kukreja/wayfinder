@@ -1,8 +1,6 @@
-import type { Snapshot } from "@wayfinder/engine";
-import { computeAllocation } from "@wayfinder/engine";
 import type { NoteEntityType } from "./notesApi.js";
 import { segmentColor } from "../components/AllocationBar.js";
-import { scoresFromSnapshot, vetoesFromSnapshot } from "../hooks/useLocalAllocation.js";
+import { scoresFrom, toAllocation, type PortfolioAllocation } from "./portfolioApi.js";
 import { listReviews } from "./reviewsApi.js";
 
 export interface MentionCandidate {
@@ -30,17 +28,18 @@ const GROUP_LABEL: Record<string, string> = {
 // stale relative to the scores/params in the same payload (the same reason
 // OverviewView and the note widgets both call computeAllocation themselves
 // instead of reading it off the snapshot).
-export function buildSnapshotCandidates(snapshot: Snapshot): MentionCandidate[] {
+/** The "/" palette's data points, sleeves and asset classes, from core's allocation. */
+export function buildCoreCandidates(portfolio: PortfolioAllocation): MentionCandidate[] {
   const out: MentionCandidate[] = [];
-  const allocation = computeAllocation(scoresFromSnapshot(snapshot.scores), vetoesFromSnapshot(snapshot.vetoes), snapshot.params);
+  const allocation = toAllocation(portfolio);
 
-  for (const [id, state] of Object.entries(snapshot.scores)) {
+  for (const [id, value] of Object.entries(scoresFrom(portfolio))) {
     out.push({
       entityType: "datapoint",
       entityId: id,
       label: id,
-      meta: `Data point · score ${state.value.toFixed(1)}`,
-      value: state.value.toFixed(1),
+      meta: `Data point · score ${value.toFixed(1)}`,
+      value: value.toFixed(1),
       color: "#7B86F4",
     });
   }

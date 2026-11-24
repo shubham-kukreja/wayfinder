@@ -66,6 +66,13 @@ export default function App() {
           <CoreSessionGate>
             <DataPointControlCenterView />
           </CoreSessionGate>
+        ) : location.pathname.startsWith("/notes") ? (
+          <CoreSessionGate>
+            <Routes>
+              <Route path="/notes" element={<NotesView />} />
+              <Route path="/notes/:id" element={<NoteEditorView />} />
+            </Routes>
+          </CoreSessionGate>
         ) : location.pathname.startsWith("/backtest") ? (
           <CoreSessionGate>
             <Routes>
@@ -105,8 +112,6 @@ export default function App() {
             <Route path="/reviews/decide" element={<HistoryView snapshot={snapshot} section="decide" />} />
             <Route path="/reviews/history" element={<HistoryView snapshot={snapshot} section="history" />} />
             <Route path="/reviews/cadence" element={<HistoryView snapshot={snapshot} section="cadence" />} />
-            <Route path="/notes" element={<CoreSessionGate><NotesView /></CoreSessionGate>} />
-            <Route path="/notes/:id" element={<CoreSessionGate><NoteEditorView /></CoreSessionGate>} />
             <Route path="*" element={<Navigate to="/overview" replace />} />
           </Routes>
         )}

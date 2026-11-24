@@ -1,22 +1,16 @@
-import { useMemo } from "react";
-import { computeAllocation } from "@wayfinder/engine";
 import { AllocationTable } from "../AllocationTable.js";
-import { useSnapshot } from "../../hooks/useSnapshot.js";
-import { scoresFromSnapshot, vetoesFromSnapshot } from "../../hooks/useLocalAllocation.js";
-import { PUBLISHED_SNAPSHOT_URL, CURRENT_SNAPSHOT_URL } from "../../lib/constants.js";
+import { useCoreAllocation } from "../../hooks/useCoreAllocation.js";
 
 // A plain sleeve/weight table — the scannable alternative to the allocation
 // bar for a note meant to be read as a report rather than skimmed visually.
 // Live the same way every other note widget is: recomputed on each view,
 // never frozen at insert time.
 export function AllocationTableWidget() {
-  const { snapshot, loading } = useSnapshot(PUBLISHED_SNAPSHOT_URL, CURRENT_SNAPSHOT_URL);
-  const allocation = useMemo(() => {
-    if (!snapshot) return null;
-    return computeAllocation(scoresFromSnapshot(snapshot.scores), vetoesFromSnapshot(snapshot.vetoes), snapshot.params);
-  }, [snapshot]);
+  // Core's allocation (published, else the draft), live on every view.
+  const { allocation, loading, error } = useCoreAllocation();
 
-  if (loading || !snapshot || !allocation) {
+  if (error) return <p className="rounded-sm bg-paper-2 px-3 py-2 text-xs text-muted">Allocation unavailable: {error}</p>;
+  if (loading || !allocation) {
     return <div className="h-40 w-full animate-pulse bg-paper-2" />;
   }
 

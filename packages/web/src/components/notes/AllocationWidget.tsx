@@ -1,9 +1,5 @@
-import { useMemo } from "react";
-import { computeAllocation } from "@wayfinder/engine";
 import { AllocationBar } from "../AllocationBar.js";
-import { useSnapshot } from "../../hooks/useSnapshot.js";
-import { scoresFromSnapshot, vetoesFromSnapshot } from "../../hooks/useLocalAllocation.js";
-import { PUBLISHED_SNAPSHOT_URL, CURRENT_SNAPSHOT_URL } from "../../lib/constants.js";
+import { useCoreAllocation } from "../../hooks/useCoreAllocation.js";
 import type { NoteWidgetSize } from "../../lib/notesApi.js";
 
 // Dropped into a note, this stays live the same way the Overview bar is
@@ -15,13 +11,11 @@ import type { NoteWidgetSize } from "../../lib/notesApi.js";
 // useLocalAllocation, which would need to run before the snapshot has
 // loaded and throw on an empty params stand-in.
 export function AllocationWidget({ size }: { size: NoteWidgetSize }) {
-  const { snapshot, loading } = useSnapshot(PUBLISHED_SNAPSHOT_URL, CURRENT_SNAPSHOT_URL);
-  const allocation = useMemo(() => {
-    if (!snapshot) return null;
-    return computeAllocation(scoresFromSnapshot(snapshot.scores), vetoesFromSnapshot(snapshot.vetoes), snapshot.params);
-  }, [snapshot]);
+  // Core's allocation (published, else the draft), live on every view.
+  const { allocation, loading, error } = useCoreAllocation();
 
-  if (loading || !snapshot || !allocation) {
+  if (error) return <p className="rounded-sm bg-paper-2 px-3 py-2 text-xs text-muted">Allocation unavailable: {error}</p>;
+  if (loading || !allocation) {
     return <div className="h-7 w-full animate-pulse bg-paper-2" />;
   }
 

@@ -3,9 +3,9 @@ import { BlockNoteView } from "@blocknote/mantine";
 import { useCreateBlockNote, SuggestionMenuController, type DefaultReactSuggestionItem } from "@blocknote/react";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
-import type { Snapshot } from "@wayfinder/engine";
+import type { PortfolioAllocation } from "../../lib/portfolioApi.js";
 import { noteSchema, mentionInlineContent, type NoteBlock } from "./blocknoteSchema.js";
-import { buildSnapshotCandidates, fetchSnapshotVersionCandidates, filterCandidates, type MentionCandidate } from "../../lib/mentionIndex.js";
+import { buildCoreCandidates, fetchSnapshotVersionCandidates, filterCandidates, type MentionCandidate } from "../../lib/mentionIndex.js";
 import { legacyBodyToBlocks } from "../../lib/legacyNoteMigration.js";
 import { WIDGET_TITLES } from "./NoteWidgetBlock.js";
 
@@ -46,17 +46,18 @@ function parseNoteBody(body: string, candidateById: Map<string, MentionCandidate
 export function NoteEditor({
   body,
   onChange,
-  snapshot,
+  portfolio,
   placeholder,
   autoFocus,
 }: {
   body: string;
   onChange: (body: string) => void;
-  snapshot: Snapshot | null;
+  /** Core's allocation, for the "/" palette's data points and sleeves. */
+  portfolio: PortfolioAllocation | null;
   placeholder: string;
   autoFocus?: boolean;
 }) {
-  const localCandidates = useMemo(() => (snapshot ? buildSnapshotCandidates(snapshot) : []), [snapshot]);
+  const localCandidates = useMemo(() => (portfolio ? buildCoreCandidates(portfolio) : []), [portfolio]);
   const [versionCandidates, setVersionCandidates] = useState<MentionCandidate[]>([]);
   useEffect(() => {
     fetchSnapshotVersionCandidates().then(setVersionCandidates).catch(() => {});

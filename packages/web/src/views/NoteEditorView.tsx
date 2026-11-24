@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { Snapshot } from "@wayfinder/engine";
+import type { PortfolioAllocation } from "../lib/portfolioApi.js";
 import { NoteEditor } from "../components/notes/NoteEditor.js";
 import { ReferenceRail } from "../components/notes/ReferenceRail.js";
 import { deleteNote, getNote, updateNote, type Note } from "../lib/notesApi.js";
 import { extractRefsFromBody } from "../lib/noteRefs.js";
-import { buildSnapshotCandidates, type MentionCandidate } from "../lib/mentionIndex.js";
-import { useSnapshot } from "../hooks/useSnapshot.js";
-import { PUBLISHED_SNAPSHOT_URL, CURRENT_SNAPSHOT_URL } from "../lib/constants.js";
+import { buildCoreCandidates, type MentionCandidate } from "../lib/mentionIndex.js";
+import { useCoreAllocation } from "../hooks/useCoreAllocation.js";
 
 type SaveState = "saved" | "saving" | "unsaved";
 
@@ -27,7 +26,7 @@ type SaveState = "saved" | "saving" | "unsaved";
 export function NoteEditorView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { snapshot } = useSnapshot(PUBLISHED_SNAPSHOT_URL, CURRENT_SNAPSHOT_URL);
+  const { data: portfolio } = useCoreAllocation();
 
   const [note, setNote] = useState<Note | null>(null);
   const [title, setTitle] = useState("");
@@ -83,7 +82,7 @@ export function NoteEditorView() {
     }
   }
 
-  const referenced = useMemo(() => resolveReferences(body, snapshot), [body, snapshot]);
+  const referenced = useMemo(() => resolveReferences(body, portfolio), [body, portfolio]);
 
   if (!note) {
     return <div className="px-6 py-10 text-sm text-muted">Loading…</div>;
@@ -126,7 +125,7 @@ export function NoteEditorView() {
           </p>
 
           <div className="mt-6">
-            <NoteEditor key={id} body={body} onChange={handleBodyChange} snapshot={snapshot} placeholder='Write freely. Type "/" to reference a data point, sleeve, version — or add a widget.' autoFocus />
+            <NoteEditor key={id} body={body} onChange={handleBodyChange} portfolio={portfolio} placeholder='Write freely. Type "/" to reference a data point, sleeve, version — or add a widget.' autoFocus />
           </div>
         </div>
       </main>
@@ -205,10 +204,10 @@ function SaveIndicator({ state }: { state: SaveState }) {
   );
 }
 
-function resolveReferences(body: string, snapshot: Snapshot | null): MentionCandidate[] {
+function resolveReferences(body: string, portfolio: PortfolioAllocation | null): MentionCandidate[] {
   const refs = extractRefsFromBody(body);
   if (refs.length === 0) return [];
-  const candidates = snapshot ? buildSnapshotCandidates(snapshot) : [];
+  const candidates = portfolio ? buildCoreCandidates(portfolio) : [];
   const byId = new Map(candidates.map((c) => [`${c.entityType}:${c.entityId}`, c]));
   const seen = new Set<string>();
   const out: MentionCandidate[] = [];
