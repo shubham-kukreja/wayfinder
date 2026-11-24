@@ -1,15 +1,32 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { Snapshot } from "@wayfinder/engine";
-import { TILT_GROUP_NODES, L1_SIGNALS, EQUITY_SIGNALS, DEBT_SIGNALS, METALS_SIGNALS, computeAllocation } from "@wayfinder/engine";
-import { scoresFromSnapshot, vetoesFromSnapshot } from "../hooks/useLocalAllocation.js";
-import { useLatestReview } from "../hooks/useLatestReview.js";
+import { NODE_LABELS, TILT_GROUP_NODES, L1_SIGNALS, EQUITY_SIGNALS, DEBT_SIGNALS, METALS_SIGNALS } from "@wayfinder/engine";
 import { SignalMatrix } from "../components/SignalMatrix.js";
 import { TabRow } from "../components/ui/TabRow.js";
 import { CalculationInspector } from "../components/CalculationInspector.js";
-import { computeSensitivity } from "../lib/sensitivity.js";
-import { attributeChanges } from "../lib/attribution.js";
 import { formatPct } from "../lib/format.js";
+import { coreFetch } from "../lib/coreApi.js";
+import { inspectorSnapshot, scoresFrom, toAllocation, type PortfolioAllocation } from "../lib/portfolioApi.js";
+
+// Signals reads core-jobs-service: the shared draft evaluated now
+// (GET /v1/portfolios/core/allocation?version=draft), and the draft's
+// signal analytics (GET /v1/signals/attribution, /v1/signals/sensitivity).
+
+interface AttributionResponse {
+  draft_rev: number;
+  baseline_run: string | null;
+  rows: Array<{ node: string; from: number; to: number; delta: number }>;
+}
+interface SensitivityResponse {
+  draft_rev: number;
+  bump: number;
+  rows: Array<{ key: string; impact_pp: number }>;
+}
+interface SignalsData {
+  draft: PortfolioAllocation;
+  attribution: AttributionResponse;
+  sensitivity: SensitivityResponse;
+}
 
 const TILT_GROUPS = ["l1", "equity", "debt", "metals"] as const;
 
@@ -66,14 +83,30 @@ const SIGNAL_PANELS: ReadonlyArray<{
   },
 ];
 
-export function DriversView({ snapshot }: { snapshot: Snapshot }) {
+export function DriversView() {
+  const [data, setData] = useState<SignalsData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    Promise.all([
+      coreFetch<PortfolioAllocation>("/v1/portfolios/core/allocation?version=draft"),
+      coreFetch<AttributionResponse>("/v1/signals/attribution"),
+      coreFetch<SensitivityResponse>("/v1/signals/sensitivity?limit=10"),
+    ])
+      .then(([draft, attribution, sensitivity]) => setData({ draft, attribution, sensitivity }))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+  }, []);
+  if (error) return <p className="px-6 py-10 text-sm text-danger-500">Failed to load signals: {error}</p>;
+  if (!data) return <div className="px-6 py-10 text-sm text-muted">Loading…</div>;
+  return <DriversBody data={data} />;
+}
+
+function DriversBody({ data }: { data: SignalsData }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedNode = searchParams.get("node");
-  const scores = scoresFromSnapshot(snapshot.scores);
-  const vetoes = vetoesFromSnapshot(snapshot.vetoes);
-  const { review, loading: reviewLoading } = useLatestReview();
-
-  const allocation = useMemo(() => computeAllocation(scores, vetoes, snapshot.params), [scores, vetoes, snapshot.params]);
+  const snapshot = useMemo(() => inspectorSnapshot(data.draft), [data.draft]);
+  const scores = useMemo(() => scoresFrom(data.draft), [data.draft]);
+  const allocation = useMemo(() => toAllocation(data.draft), [data.draft]);
+  const review = data.attribution.baseline_run;
 
   function selectNode(id: string) {
     const next = new URLSearchParams(searchParams);
@@ -88,7 +121,10 @@ export function DriversView({ snapshot }: { snapshot: Snapshot }) {
   }
 
   const group = groupFromSearch(searchParams.get("group"));
-  const activePanel = SIGNAL_PANELS.find((panel) => panel.group === group) ?? SIGNAL_PANELS[0]!;
+  const basePanel = SIGNAL_PANELS.find((panel) => panel.group === group) ?? SIGNAL_PANELS[0]!;
+  // The scorecard core evaluated decides the signals, nodes and weights.
+  const card = data.draft.scorecards[basePanel.group];
+  const activePanel = card ? { ...basePanel, signals: card.signals.map((x) => x.key), nodes: card.buckets } : basePanel;
 
   function setGroup(nextGroup: (typeof TILT_GROUPS)[number]) {
     const next = new URLSearchParams(searchParams);
@@ -97,34 +133,24 @@ export function DriversView({ snapshot }: { snapshot: Snapshot }) {
     setSearchParams(next);
   }
 
-  function weightsFor(group: (typeof TILT_GROUPS)[number]): Record<string, number> {
-    return (snapshot.params.signalWeights as Record<string, Record<string, number>>)[group] ?? {};
+  function weightsFor(g: (typeof TILT_GROUPS)[number]): Record<string, number> {
+    return Object.fromEntries((data.draft.scorecards[g]?.signals ?? []).map((x) => [x.key, x.weight]));
   }
 
-  function compositesFor(group: (typeof TILT_GROUPS)[number]): Record<string, number> {
-    return Object.fromEntries(
-      TILT_GROUP_NODES[group].map((id) => [id, allocation.groups[group].nodes[id]!.composite]),
-    );
+  function compositesFor(g: (typeof TILT_GROUPS)[number]): Record<string, number> {
+    return Object.fromEntries(activePanel.nodes.map((id) => [id, allocation.groups[g].nodes[id]?.composite ?? 0]));
   }
 
-  const sensitivity = useMemo(() => computeSensitivity(scores, vetoes, snapshot.params).slice(0, 10), [scores, vetoes, snapshot.params]);
-
-  // §12.5 principle 4: distinguish looking from deciding — attribution
-  // compares against the last SAVED review, not just whatever the
-  // current live snapshot happens to be. Falls back to an all-neutral
-  // (score=50) baseline when no review has been saved yet, so the
-  // surface is still informative on first use rather than empty.
-  const baselineScores = review ? scoresFromSnapshot(review.scores) : Object.fromEntries(Object.keys(scores).map((k) => [k, 50]));
-  const baselineVetoes = review ? vetoesFromSnapshot(review.vetoes) : {};
-
-  const attribution = useMemo(() => {
-    const baselineAllocation = computeAllocation(baselineScores, baselineVetoes, snapshot.params);
-    const scoreDeltas = Object.fromEntries(Object.keys(scores).map((k) => [k, scores[k]! - (baselineScores[k] ?? 50)]));
-    return attributeChanges(baselineAllocation, allocation, scoreDeltas)
-      .filter((r) => Math.abs(r.delta) > 0.001)
-      .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
-      .slice(0, 8);
-  }, [scores, baselineScores, baselineVetoes, allocation, snapshot.params]);
+  const sensitivity = data.sensitivity.rows.map((r) => ({ scoreKey: r.key, impact: r.impact_pp / 100 }));
+  const reviewLoading = false;
+  const attribution = data.attribution.rows.slice(0, 8).map((r) => ({
+    rollupId: r.node,
+    label: NODE_LABELS[r.node as keyof typeof NODE_LABELS] ?? r.node,
+    before: r.from,
+    after: r.to,
+    delta: r.delta,
+    explanation: "",
+  }));
 
   return (
     <div className="mx-auto w-full max-w-[1600px] px-6 py-8">
@@ -170,13 +196,15 @@ export function DriversView({ snapshot }: { snapshot: Snapshot }) {
           <div className="mb-6">
             <h2 className="text-lg font-semibold text-ink">Change attribution</h2>
             <p className="mt-0.5 text-[13px] text-muted">
-              {review ? "Versus the last saved review" : "Versus a neutral baseline — no review saved yet"}
+              {review ? "Versus the published allocation" : "Nothing is published yet, so there is nothing to compare against"}
             </p>
           </div>
           {reviewLoading ? (
             <p className="text-[13px] text-muted">Loading baseline…</p>
           ) : attribution.length === 0 ? (
-            <p className="text-[13px] text-muted">No line item differs from the baseline by more than 0.1pp.</p>
+            <p className="text-[13px] text-muted">
+              {review ? "No line item differs from the published allocation by more than 0.1pp." : "Publish a run to compare the draft against it."}
+            </p>
           ) : (
             <div>
               {attribution.map((row) => (

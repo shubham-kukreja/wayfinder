@@ -54,6 +54,10 @@ export default function App() {
           <CoreSessionGate>
             <OverviewView />
           </CoreSessionGate>
+        ) : location.pathname === "/model/signals" ? (
+          <CoreSessionGate>
+            <DriversView />
+          </CoreSessionGate>
         ) : (
           <>
         {loading && <div className="px-6 py-10 text-sm text-muted">Loading…</div>}
@@ -76,7 +80,6 @@ export default function App() {
             <Route path="/backtest/runs" element={<BacktestRunsView />} />
             <Route path="/backtest/runs/:id" element={<BacktestReportView />} />
             <Route path="/model" element={<Navigate to="/model/signals" replace />} />
-            <Route path="/model/signals" element={<DriversView snapshot={snapshot} />} />
             <Route path="/model/datapoints" element={<CoreSessionGate><DataPointControlCenterView snapshot={snapshot} /></CoreSessionGate>} />
             <Route path="/methodology" element={<MethodologyView snapshot={snapshot} />} />
             <Route path="/model/methodology" element={<Navigate to="/methodology" replace />} />
