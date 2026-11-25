@@ -10,7 +10,7 @@ export interface Client {
   name: string;
   /** Total net worth, ₹. */
   netWorth: number;
-  /** The amount to put to work under the model, ₹ (editable on the page). */
+  /** The suggested amount for the next investment, ₹. */
   investable: number;
   /** Core risk profile key. */
   basket: string;
@@ -19,8 +19,8 @@ export interface Client {
 }
 
 export const CLIENTS: Client[] = [
-  { id: "demo-aarav", name: "Aarav Mehta", netWorth: 1_20_00_000, investable: 50_00_000, basket: "balanced", basketName: "Balanced", since: "2026-04-01" },
-  { id: "demo-priya", name: "Priya Nair", netWorth: 45_00_000, investable: 15_00_000, basket: "balanced", basketName: "Balanced", since: "2026-08-15" },
+  { id: "demo-aarav", name: "Aarav Mehta", netWorth: 1_20_00_000, investable: 10_00_000, basket: "balanced", basketName: "Balanced", since: "2026-04-01" },
+  { id: "demo-priya", name: "Priya Nair", netWorth: 45_00_000, investable: 5_00_000, basket: "balanced", basketName: "Balanced", since: "2026-08-15" },
 ];
 
 export const clientById = (id: string | undefined) => CLIENTS.find((c) => c.id === id) ?? null;
@@ -104,4 +104,104 @@ export function planLines(allocation: Allocation, investable: number, color: (id
   const diff = investable - lines.reduce((s, l) => s + l.amount, 0);
   if (lines[0]) lines[0].amount += diff;
   return lines;
+}
+
+// ---- orders and holdings (demo: kept in this browser) --------------------------
+
+export interface OrderLine {
+  sleeve: string;
+  label: string;
+  schemeCode: string;
+  schemeName: string;
+  amount: number;
+}
+
+export interface Order {
+  id: string;
+  date: string; // ISO date
+  amount: number;
+  lines: OrderLine[];
+  /** True for the fixture's opening order. */
+  seed?: boolean;
+}
+
+// Aarav's opening investment, so "invest more" has holdings to add to.
+const SEED_ORDERS: Record<string, Order[]> = {
+  "demo-aarav": [
+    {
+      id: "seed-1",
+      date: "2026-04-01",
+      amount: 30_00_000,
+      seed: true,
+      lines: [
+        { sleeve: "equity.large", label: "Large Cap", schemeCode: "119018", schemeName: "HDFC Large Cap Fund", amount: 7_50_000 },
+        { sleeve: "debt.liquid", label: "Liquid", schemeCode: "118701", schemeName: "Nippon India Liquid Fund", amount: 4_50_000 },
+        { sleeve: "debt.corporate", label: "Corporate", schemeCode: "133791", schemeName: "Kotak Corporate Bond Fund", amount: 4_00_000 },
+        { sleeve: "equity.mid", label: "Mid Cap", schemeCode: "118668", schemeName: "Nippon India Growth Mid Cap Fund", amount: 3_50_000 },
+        { sleeve: "debt.gilt", label: "Gilt", schemeCode: "120520", schemeName: "Invesco India Gilt Fund", amount: 3_00_000 },
+        { sleeve: "equity.small", label: "Small Cap", schemeCode: "119589", schemeName: "Sundaram Small Cap Fund", amount: 2_50_000 },
+        { sleeve: "equity.intl", label: "International", schemeCode: "119517", schemeName: "Aditya Birla Sun Life International Equity Fund", amount: 2_50_000 },
+        { sleeve: "metals.gold", label: "Gold", schemeCode: "119781", schemeName: "Kotak Gold Fund", amount: 2_50_000 },
+      ],
+    },
+  ],
+};
+
+const ordersKey = (id: string) => `core.clients.${id}.orders`;
+
+export function loadOrders(clientId: string): Order[] {
+  let placed: Order[] = [];
+  try {
+    const raw = localStorage.getItem(ordersKey(clientId));
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) placed = parsed as Order[];
+  } catch {
+    placed = [];
+  }
+  return [...placed, ...(SEED_ORDERS[clientId] ?? [])].sort((a, b) => b.date.localeCompare(a.date));
+}
+
+export function placeOrder(clientId: string, order: Order): void {
+  const placed = loadOrders(clientId).filter((o) => !o.seed);
+  try {
+    localStorage.setItem(ordersKey(clientId), JSON.stringify([order, ...placed]));
+  } catch {
+    // Private mode or blocked storage: the order is not kept.
+  }
+}
+
+export function resetOrders(clientId: string): void {
+  try {
+    localStorage.removeItem(ordersKey(clientId));
+  } catch {
+    /* nothing to clear */
+  }
+}
+
+export interface Holding {
+  schemeCode: string;
+  schemeName: string;
+  sleeve: string;
+  label: string;
+  invested: number;
+}
+
+/** Invested amount per fund across all orders, largest first. */
+export function holdingsOf(orders: Order[]): Holding[] {
+  const by = new Map<string, Holding>();
+  for (const o of orders) {
+    for (const l of o.lines) {
+      const h = by.get(l.schemeCode) ?? { schemeCode: l.schemeCode, schemeName: l.schemeName, sleeve: l.sleeve, label: l.label, invested: 0 };
+      h.invested += l.amount;
+      by.set(l.schemeCode, h);
+    }
+  }
+  return [...by.values()].sort((a, b) => b.invested - a.invested);
+}
+
+/** The asset class a sleeve belongs to (sector sleeves sit in equity). */
+export function assetClassOf(sleeve: string): "equity" | "debt" | "metals" {
+  if (sleeve.startsWith("debt.")) return "debt";
+  if (sleeve.startsWith("metals.")) return "metals";
+  return "equity";
 }

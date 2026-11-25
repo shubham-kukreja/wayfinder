@@ -103,9 +103,15 @@ export default {
           "0%": { transform: "translateX(-100%)" },
           "100%": { transform: "translateX(400%)" },
         },
+        // A plan line arriving: rises 6px and fades in.
+        "rise-in": {
+          "0%": { opacity: "0", transform: "translateY(6px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         "indeterminate-sweep": "indeterminate-sweep 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite",
+        "rise-in": "rise-in 320ms cubic-bezier(0.4, 0, 0.2, 1) backwards",
       },
       maxWidth: {
         measure: "65ch",
