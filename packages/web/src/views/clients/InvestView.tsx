@@ -1,17 +1,37 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { AllocationBar, type AllocationDepth } from "../../components/AllocationBar.js";
+import {
+  AllocationBar,
+  type AllocationDepth,
+} from "../../components/AllocationBar.js";
 import { TabRow } from "../../components/ui/TabRow.js";
 import { FundPickerPanel } from "../../components/clients/FundPickerPanel.js";
 import { OrderHandoff } from "../../components/clients/OrderHandoff.js";
+import { Preparing } from "../../components/clients/Preparing.js";
 import { RebalanceIcon } from "../../components/clients/icons.js";
-import { Breadcrumb, PrimaryButton, SecondaryButton } from "../../components/clients/ui.js";
-import { SleeveAllocation, type SleeveFilter } from "../../components/SleeveAllocation.js";
+import {
+  Breadcrumb,
+  PrimaryButton,
+  SecondaryButton,
+} from "../../components/clients/ui.js";
+import {
+  SleeveAllocation,
+  type SleeveFilter,
+} from "../../components/SleeveAllocation.js";
 import { Slider } from "../../components/ui/Slider.js";
-import { useInvestmentPlan, type FundSlot, type PlannedLine } from "../../hooks/useInvestmentPlan.js";
+import {
+  useInvestmentPlan,
+  type FundSlot,
+  type PlannedLine,
+} from "../../hooks/useInvestmentPlan.js";
 import { formatRupees, formatRupeesCompact } from "../../lib/backtestFormat.js";
 import { basketById } from "../../lib/baskets.js";
-import { assetClassOf, clientById, placeOrder, type FundChoice } from "../../lib/clients.js";
+import {
+  assetClassOf,
+  clientById,
+  placeOrder,
+  type FundChoice,
+} from "../../lib/clients.js";
 import { formatPct } from "../../lib/format.js";
 
 // Invest more for a client: the amount; the model's sleeves (the Overview
@@ -35,10 +55,19 @@ const toAmount = (pos: number) => {
   const step = raw < 1_00_000 ? 1_000 : raw < 10_00_000 ? 10_000 : 1_00_000;
   return Math.min(MAX_AMOUNT, Math.round(raw / step) * step);
 };
-const toPos = (amount: number) => (1000 * Math.log(Math.max(MIN_AMOUNT, Math.min(MAX_AMOUNT, amount)) / MIN_AMOUNT)) / Math.log(MAX_AMOUNT / MIN_AMOUNT);
+const toPos = (amount: number) =>
+  (1000 *
+    Math.log(Math.max(MIN_AMOUNT, Math.min(MAX_AMOUNT, amount)) / MIN_AMOUNT)) /
+  Math.log(MAX_AMOUNT / MIN_AMOUNT);
 
-const presetLabel = (v: number) => (v >= 1_00_00_000 ? `₹${v / 1_00_00_000} Cr` : `₹${v / 1_00_000}L`);
-const fmtDay = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+const presetLabel = (v: number) =>
+  v >= 1_00_00_000 ? `₹${v / 1_00_00_000} Cr` : `₹${v / 1_00_000}L`;
+const fmtDay = (iso: string) =>
+  new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 
 interface Buy {
   sleeve: string;
@@ -64,19 +93,39 @@ export function InvestView() {
   const [filter, setFilter] = useState<SleeveFilter>("all");
   const [depth, setDepth] = useState<AllocationDepth>("overview");
   const [sending, setSending] = useState(false);
+  // After the amount is chosen, the funds step first plays a short moment
+  // while the sleeves fill in, then shows the plan.
+  const [preparing, setPreparing] = useState(false);
   const [platform, setPlatform] = useState<string | null>(null);
-  const [choosing, setChoosing] = useState<{ sleeve: string; slot: number } | null>(null);
+  const [choosing, setChoosing] = useState<{
+    sleeve: string;
+    slot: number;
+  } | null>(null);
   const plan = useInvestmentPlan(amount);
-  const bySleeve = useMemo(() => new Map(plan.lines.map((l) => [l.sleeve, l])), [plan.lines]);
+  const bySleeve = useMemo(
+    () => new Map(plan.lines.map((l) => [l.sleeve, l])),
+    [plan.lines],
+  );
   const buys: Buy[] = useMemo(
-    () => plan.lines.flatMap((l) => l.funds.map((slot) => ({ sleeve: l.sleeve, label: l.label, color: l.color, slot }))),
+    () =>
+      plan.lines.flatMap((l) =>
+        l.funds.map((slot) => ({
+          sleeve: l.sleeve,
+          label: l.label,
+          color: l.color,
+          slot,
+        })),
+      ),
     [plan.lines],
   );
 
   if (!client) {
     return (
       <div className="mx-auto w-full max-w-[1440px] px-8 py-8 text-sm text-muted">
-        No such client. <Link to="/clients" className="font-semibold text-ink underline">Clients</Link>
+        No such client.{" "}
+        <Link to="/clients" className="font-semibold text-ink underline">
+          Clients
+        </Link>
       </div>
     );
   }
@@ -84,7 +133,9 @@ export function InvestView() {
   const total = plan.lines.reduce((s, l) => s + l.amount, 0);
   const missing = buys.filter((b) => !b.slot.fund).length;
   const ordered = [...buys].sort((a, b) => b.slot.amount - a.slot.amount);
-  const choosingLine = choosing ? bySleeve.get(choosing.sleeve) ?? null : null;
+  const choosingLine = choosing
+    ? (bySleeve.get(choosing.sleeve) ?? null)
+    : null;
   const choosingSlot = choosingLine?.funds[choosing!.slot] ?? null;
 
   function confirm() {
@@ -95,19 +146,36 @@ export function InvestView() {
       kind: "invest",
       lines: buys
         .filter((b) => b.slot.fund)
-        .map((b) => ({ sleeve: b.sleeve, label: b.label, schemeCode: b.slot.fund!.schemeCode, schemeName: b.slot.fund!.schemeName, amount: b.slot.amount })),
+        .map((b) => ({
+          sleeve: b.sleeve,
+          label: b.label,
+          schemeCode: b.slot.fund!.schemeCode,
+          schemeName: b.slot.fund!.schemeName,
+          amount: b.slot.amount,
+        })),
     });
   }
 
   return (
     <div className="mx-auto w-full max-w-[1440px] px-8 py-8">
-      <Breadcrumb items={[{ label: "Clients", to: "/clients" }, { label: client.name, to: `/clients/${client.id}` }, { label: "Invest more" }]} />
+      <Breadcrumb
+        items={[
+          { label: "Clients", to: "/clients" },
+          { label: client.name, to: `/clients/${client.id}` },
+          { label: "Invest more" },
+        ]}
+      />
       <header className="mt-4 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-[28px] leading-tight text-ink">Invest more for {first}</h1>
+          <h1 className="font-display text-[28px] leading-tight text-ink">
+            Invest more for {first}
+          </h1>
           <p className="mt-1 text-[13px] text-muted">
             {basket ? (
-              <Link to={`/baskets/${basket.id}`} className="underline decoration-line underline-offset-4 transition-colors duration-150 ease-out hover:text-ink">
+              <Link
+                to={`/baskets/${basket.id}`}
+                className="underline decoration-line underline-offset-4 transition-colors duration-150 ease-out hover:text-ink"
+              >
                 {basket.code} · {basket.name}
               </Link>
             ) : (
@@ -116,17 +184,28 @@ export function InvestView() {
             · the model portfolio, split into funds from Fund Rankings
           </p>
         </div>
-        {step < 3 && <Stepper step={step} onGo={(s) => s < step && setStep(s)} />}
+        {step < 3 && (
+          <Stepper step={step} onGo={(s) => s < step && setStep(s)} />
+        )}
       </header>
 
-      {plan.error && <p className="mt-6 text-[13px] text-danger-500">Failed to load the model allocation: {plan.error}</p>}
+      {plan.error && (
+        <p className="mt-6 text-[13px] text-danger-500">
+          Failed to load the model allocation: {plan.error}
+        </p>
+      )}
 
       {step === 0 && (
         <section className="mt-8 rounded-xl border border-line bg-paper p-6 animate-rise-in">
-          <label htmlFor="invest-amount" className="text-[15px] font-semibold text-ink">
+          <label
+            htmlFor="invest-amount"
+            className="text-[15px] font-semibold text-ink"
+          >
             How much is {first} investing?
           </label>
-          <p className="mt-3 text-[32px] font-semibold leading-tight tabular-nums text-ink">{formatRupees(amount)}</p>
+          <p className="mt-3 text-[32px] font-semibold leading-tight tabular-nums text-ink">
+            {formatRupees(amount)}
+          </p>
           <Slider
             id="invest-amount"
             min={0}
@@ -153,7 +232,9 @@ export function InvestView() {
                 onClick={() => setAmount(p)}
                 aria-pressed={amount === p}
                 className={`h-9 rounded-md border px-3 text-[13px] font-semibold tabular-nums transition-colors duration-150 ease-out ${
-                  amount === p ? "border-ink bg-ink text-paper" : "border-line text-ink hover:bg-paper-2"
+                  amount === p
+                    ? "border-ink bg-ink text-paper"
+                    : "border-line text-ink hover:bg-paper-2"
                 }`}
               >
                 {presetLabel(p)}
@@ -163,21 +244,46 @@ export function InvestView() {
           {plan.allocation ? (
             <div className="mt-8 border-t border-line pt-6">
               {/* The same allocation display as Overview's top card. */}
-              <TabRow options={DEPTH_OPTIONS} value={depth} onChange={setDepth} className="mb-5" />
+              <TabRow
+                options={DEPTH_OPTIONS}
+                value={depth}
+                onChange={setDepth}
+                className="mb-5"
+              />
               <AllocationBar allocation={plan.allocation} depth={depth} />
             </div>
           ) : (
-            <p className="mt-4 text-[13px] text-muted">Loading the model allocation…</p>
+            <p className="mt-4 text-[13px] text-muted">
+              Loading the model allocation…
+            </p>
           )}
           <div className="mt-8 flex justify-end">
-            <PrimaryButton disabled={amount < 1000 || plan.lines.length === 0} onClick={() => setStep(1)}>
+            <PrimaryButton
+              disabled={amount < 1000 || plan.lines.length === 0}
+              onClick={() => {
+                setPreparing(true);
+                setStep(1);
+              }}
+            >
               Show funds
             </PrimaryButton>
           </div>
         </section>
       )}
 
-      {step === 1 && plan.allocation && (
+      {step === 1 && plan.allocation && preparing && (
+        <Preparing
+          className="mt-8"
+          lines={[
+            "Reading the model allocation",
+            `Ranking funds in ${plan.lines.length} sleeves`,
+            `Picking the best funds for ${first}`,
+          ]}
+          onDone={() => setPreparing(false)}
+        />
+      )}
+
+      {step === 1 && plan.allocation && !preparing && (
         <div className="mt-8 animate-rise-in">
           <SleeveAllocation
             allocation={plan.allocation}
@@ -186,7 +292,8 @@ export function InvestView() {
             title={`${formatRupees(total)} across ${plan.lines.length} sleeves`}
             subtitle={
               <>
-                {buys.length} funds · model {plan.version?.kind === "draft" ? "draft" : "published"}
+                {buys.length} funds · model{" "}
+                {plan.version?.kind === "draft" ? "draft" : "published"}
                 {plan.version ? `, ${fmtDay(plan.version.as_of)}` : ""}
               </>
             }
@@ -194,24 +301,43 @@ export function InvestView() {
               const line = bySleeve.get(sleeve);
               return (
                 <>
-                  <span className="mr-3 text-[13px] font-normal text-muted">{formatPct(weight, 1)}</span>
+                  <span className="mr-3 text-[13px] font-normal text-muted">
+                    {formatPct(weight, 1)}
+                  </span>
                   {line ? formatRupees(line.amount) : formatPct(weight, 1)}
                 </>
               );
             }}
             renderDetail={(sleeve) => {
               const line = bySleeve.get(sleeve);
-              return line ? <FundRows line={line} loading={plan.loading} onChange={(slot) => setChoosing({ sleeve, slot })} /> : null;
+              return line ? (
+                <FundRows
+                  line={line}
+                  loading={plan.loading}
+                  onChange={(slot) => setChoosing({ sleeve, slot })}
+                />
+              ) : null;
             }}
           />
 
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-            <button type="button" onClick={() => setStep(0)} className="text-[13px] font-semibold text-muted transition-colors duration-150 ease-out hover:text-ink">
+            <button
+              type="button"
+              onClick={() => setStep(0)}
+              className="text-[13px] font-semibold text-muted transition-colors duration-150 ease-out hover:text-ink"
+            >
               Change amount
             </button>
             <div className="flex items-center gap-3">
-              {missing > 0 && <span className="text-[12px] text-danger-500">{missing} without a fund</span>}
-              <PrimaryButton disabled={plan.loading || missing > 0} onClick={() => setStep(2)}>
+              {missing > 0 && (
+                <span className="text-[12px] text-danger-500">
+                  {missing} without a fund
+                </span>
+              )}
+              <PrimaryButton
+                disabled={plan.loading || missing > 0}
+                onClick={() => setStep(2)}
+              >
                 Review order
               </PrimaryButton>
             </div>
@@ -222,31 +348,57 @@ export function InvestView() {
       {step === 2 && (
         <section className="mt-8 rounded-xl border border-line bg-paper animate-rise-in">
           <div className="flex flex-wrap items-baseline justify-between gap-2 px-6 pb-3 pt-5">
-            <h2 className="text-lg font-semibold text-ink">Order for {client.name}</h2>
-            <p className="text-[13px] text-muted">{buys.length} purchases, largest first</p>
+            <h2 className="text-lg font-semibold text-ink">
+              Order for {client.name}
+            </h2>
+            <p className="text-[13px] text-muted">
+              {buys.length} purchases, largest first
+            </p>
           </div>
           <ol className="divide-y divide-line border-t border-line">
             {ordered.map((b, i) => (
-              <li key={`${b.sleeve}:${b.slot.slot}`} className="grid grid-cols-[24px_12px_minmax(0,1fr)_auto] items-center gap-x-3 px-6 py-3">
-                <span className="text-[13px] tabular-nums text-muted">{i + 1}</span>
-                <span className="h-2.5 w-2.5" style={{ backgroundColor: b.color }} aria-hidden="true" />
+              <li
+                key={`${b.sleeve}:${b.slot.slot}`}
+                className="grid grid-cols-[24px_12px_minmax(0,1fr)_auto] items-center gap-x-3 px-6 py-3"
+              >
+                <span className="text-[13px] tabular-nums text-muted">
+                  {i + 1}
+                </span>
+                <span
+                  className="h-2.5 w-2.5"
+                  style={{ backgroundColor: b.color }}
+                  aria-hidden="true"
+                />
                 <span className="min-w-0">
-                  <span className="block truncate text-[14px] text-ink">{b.slot.fund?.schemeName ?? "No fund picked"}</span>
+                  <span className="block truncate text-[14px] text-ink">
+                    {b.slot.fund?.schemeName ?? "No fund picked"}
+                  </span>
                   <span className="text-[12px] text-muted">{b.label}</span>
                 </span>
-                <span className="text-[14px] font-semibold tabular-nums text-ink">{formatRupees(b.slot.amount)}</span>
+                <span className="text-[14px] font-semibold tabular-nums text-ink">
+                  {formatRupees(b.slot.amount)}
+                </span>
               </li>
             ))}
           </ol>
           <div className="flex items-center justify-between border-t border-line px-6 py-4">
             <span className="text-[14px] text-ink-2">Total</span>
-            <span className="text-[22px] font-semibold tabular-nums text-ink">{formatRupees(total)}</span>
+            <span className="text-[22px] font-semibold tabular-nums text-ink">
+              {formatRupees(total)}
+            </span>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-6 py-4">
-            <button type="button" onClick={() => setStep(1)} className="text-[13px] font-semibold text-muted transition-colors duration-150 ease-out hover:text-ink">
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className="text-[13px] font-semibold text-muted transition-colors duration-150 ease-out hover:text-ink"
+            >
               Back to funds
             </button>
-            <PrimaryButton disabled={missing > 0} onClick={() => setSending(true)}>
+            <PrimaryButton
+              disabled={missing > 0}
+              onClick={() => setSending(true)}
+            >
               Confirm investment
             </PrimaryButton>
           </div>
@@ -255,13 +407,22 @@ export function InvestView() {
 
       {step === 3 && (
         <section className="mt-8 rounded-xl border border-line bg-paper px-6 py-12 text-center animate-rise-in">
-          <h2 className="text-[22px] font-semibold tabular-nums text-ink">{formatRupees(total)} invested for {first}</h2>
+          <h2 className="text-[22px] font-semibold tabular-nums text-ink">
+            {formatRupees(total)} invested for {first}
+          </h2>
           <p className="mt-2 text-[13px] text-muted">
-            {buys.length} funds across {plan.lines.length} sleeves{platform ? `, sent through ${platform} for ${first}'s approval` : ""}
+            {buys.length} funds across {plan.lines.length} sleeves
+            {platform
+              ? `, sent through ${platform} for ${first}'s approval`
+              : ""}
           </p>
           <div className="mt-6 flex justify-center gap-3">
-            <PrimaryButton onClick={() => navigate(`/clients/${client.id}`)}>Back to {first}</PrimaryButton>
-            <SecondaryButton onClick={() => setStep(0)}>Invest more</SecondaryButton>
+            <PrimaryButton onClick={() => navigate(`/clients/${client.id}`)}>
+              Back to {first}
+            </PrimaryButton>
+            <SecondaryButton onClick={() => setStep(0)}>
+              Invest more
+            </SecondaryButton>
           </div>
         </section>
       )}
@@ -284,14 +445,23 @@ export function InvestView() {
 
       {choosingLine && choosingSlot && (
         <FundPickerPanel
-          sleeveLabel={choosingLine.funds.length > 1 ? `${choosingLine.label}, fund ${choosingSlot.slot + 1} of ${choosingLine.funds.length}` : choosingLine.label}
-          weight={choosingLine.weight * (choosingSlot.amount / Math.max(1, choosingLine.amount))}
+          sleeveLabel={
+            choosingLine.funds.length > 1
+              ? `${choosingLine.label}, fund ${choosingSlot.slot + 1} of ${choosingLine.funds.length}`
+              : choosingLine.label
+          }
+          weight={
+            choosingLine.weight *
+            (choosingSlot.amount / Math.max(1, choosingLine.amount))
+          }
           amount={choosingSlot.amount}
           ranking={plan.rankingFor(choosingLine.sleeve)}
           current={choosingSlot.fund}
           fallback={choosingLine.fallback}
           overridden={choosingSlot.overridden}
-          onPick={(f: FundChoice) => plan.pick(choosingLine.sleeve, choosingSlot.slot, f)}
+          onPick={(f: FundChoice) =>
+            plan.pick(choosingLine.sleeve, choosingSlot.slot, f)
+          }
           onReset={() => plan.reset(choosingLine.sleeve, choosingSlot.slot)}
           onClose={() => setChoosing(null)}
         />
@@ -301,29 +471,58 @@ export function InvestView() {
 }
 
 function meta(f: FundChoice): string {
-  if (f.source !== "ranking") return f.source === "default" ? "Default for this sleeve" : "Picked by search";
+  if (f.source !== "ranking")
+    return f.source === "default"
+      ? "Default for this sleeve"
+      : "Picked by search";
   if (f.status === "incomplete") return "Not scored, under 10 years";
   return `#${f.rank ?? "–"} of ${f.rankedOf ?? "–"}${f.composite != null ? ` · score ${Math.round(f.composite)}` : ""}`;
 }
 
-function FundRows({ line, loading, onChange }: { line: PlannedLine; loading: boolean; onChange: (slot: number) => void }) {
+function FundRows({
+  line,
+  loading,
+  onChange,
+}: {
+  line: PlannedLine;
+  loading: boolean;
+  onChange: (slot: number) => void;
+}) {
   return (
     <ul className="border-l border-line">
       {line.funds.map((s) => {
         const share = line.amount > 0 ? s.amount / line.amount : 1;
-        const score = s.fund?.source === "ranking" && s.fund.composite != null ? s.fund.composite : null;
+        const score =
+          s.fund?.source === "ranking" && s.fund.composite != null
+            ? s.fund.composite
+            : null;
         return (
-          <li key={s.slot} className="grid grid-cols-[48px_minmax(0,1fr)_auto_auto] items-center gap-x-4 py-2 pl-4">
-            <span className="text-[13px] tabular-nums text-muted">{line.funds.length > 1 ? `${Math.round(share * 100)}%` : "All"}</span>
+          <li
+            key={s.slot}
+            className="grid grid-cols-[48px_minmax(0,1fr)_auto_auto] items-center gap-x-4 py-2 pl-4"
+          >
+            <span className="text-[13px] tabular-nums text-muted">
+              {line.funds.length > 1 ? `${Math.round(share * 100)}%` : "All"}
+            </span>
             <span className="min-w-0">
-              <span className="block truncate text-[14px] text-ink" title={s.fund?.schemeName}>
-                {s.fund?.schemeName ?? (loading ? "Finding a fund…" : "No fund available")}
+              <span
+                className="block truncate text-[14px] text-ink"
+                title={s.fund?.schemeName}
+              >
+                {s.fund?.schemeName ??
+                  (loading ? "Finding a fund…" : "No fund available")}
               </span>
               {s.fund && (
                 <span className="mt-1 flex items-center gap-2 text-[12px] tabular-nums text-muted">
                   {score != null && (
-                    <span className="h-1 w-16 overflow-hidden rounded-full bg-paper-2" aria-hidden="true">
-                      <span className="block h-full rounded-full bg-[#2BAB48]" style={{ width: `${score}%` }} />
+                    <span
+                      className="h-1 w-16 overflow-hidden rounded-full bg-paper-2"
+                      aria-hidden="true"
+                    >
+                      <span
+                        className="block h-full rounded-full bg-[#2BAB48]"
+                        style={{ width: `${score}%` }}
+                      />
                     </span>
                   )}
                   {meta(s.fund)}
@@ -331,7 +530,9 @@ function FundRows({ line, loading, onChange }: { line: PlannedLine; loading: boo
                 </span>
               )}
             </span>
-            <span className="text-[14px] font-semibold tabular-nums text-ink">{formatRupees(s.amount)}</span>
+            <span className="text-[14px] font-semibold tabular-nums text-ink">
+              {formatRupees(s.amount)}
+            </span>
             <button
               type="button"
               onClick={() => onChange(s.slot)}
@@ -349,7 +550,10 @@ function FundRows({ line, loading, onChange }: { line: PlannedLine; loading: boo
 
 function Stepper({ step, onGo }: { step: Step; onGo: (s: Step) => void }) {
   return (
-    <ol className="flex flex-wrap items-center gap-x-3 gap-y-2" aria-label="Steps">
+    <ol
+      className="flex flex-wrap items-center gap-x-3 gap-y-2"
+      aria-label="Steps"
+    >
       {STEPS.map((label, i) => {
         const state = i < step ? "done" : i === step ? "current" : "next";
         return (
@@ -363,14 +567,20 @@ function Stepper({ step, onGo }: { step: Step; onGo: (s: Step) => void }) {
             >
               <span
                 className={`flex h-6 w-6 items-center justify-center rounded-full text-[12px] tabular-nums ${
-                  state === "current" ? "bg-ink text-paper" : state === "done" ? "bg-paper-2 text-ink" : "border border-line text-muted"
+                  state === "current"
+                    ? "bg-ink text-paper"
+                    : state === "done"
+                      ? "bg-paper-2 text-ink"
+                      : "border border-line text-muted"
                 }`}
               >
                 {i + 1}
               </span>
               {label}
             </button>
-            {i < STEPS.length - 1 && <span className="h-px w-6 bg-line" aria-hidden="true" />}
+            {i < STEPS.length - 1 && (
+              <span className="h-px w-6 bg-line" aria-hidden="true" />
+            )}
           </li>
         );
       })}

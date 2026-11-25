@@ -2,15 +2,15 @@ import { useEffect, useState } from "react";
 import { segmentColor } from "../AllocationBar.js";
 import { useCoreAllocation } from "../../hooks/useCoreAllocation.js";
 
-// A short moment between clicking Invest more or Rebalance and the next
-// page: the model's sleeves fill in one by one, in their own colours, while
-// a line says what is being worked out. About 3.6s, or a short fade when the
-// viewer prefers reduced motion.
+// A short moment in place of a section that is being worked out (the funds
+// for an amount, the trades for a rebalance): the model's sleeves fill in
+// one by one, in their own colours, while a line says what is happening.
+// About 3.6s, or a short fade when the viewer prefers reduced motion.
 
 const TOTAL_MS = 3600;
 const REDUCED_MS = 800;
 
-export function PrepareOverlay({ lines, onDone }: { lines: string[]; onDone: () => void }) {
+export function Preparing({ lines, onDone, className = "" }: { lines: string[]; onDone: () => void; className?: string }) {
   const { allocation } = useCoreAllocation();
   const reduced = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   const [line, setLine] = useState(0);
@@ -32,7 +32,7 @@ export function PrepareOverlay({ lines, onDone }: { lines: string[]; onDone: () 
   const step = rows.length > 0 ? (TOTAL_MS * 0.85) / rows.length : 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-paper/90 backdrop-blur-[2px]" role="status" aria-live="polite">
+    <div className={`flex min-h-[360px] items-center justify-center rounded-xl border border-line bg-paper ${className}`} role="status" aria-live="polite">
       <div className="w-full max-w-md px-8">
         <div className="flex h-1.5 w-full gap-px bg-paper-2">
           {rows.map((r, i) => (
