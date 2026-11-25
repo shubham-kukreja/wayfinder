@@ -28,14 +28,17 @@ export function FundSwitcher({
   overridden,
   onPick,
   onReset,
+  startOpen = false,
 }: {
   options: FundChoice[];
   fallback: FundChoice | null;
   overridden: boolean;
   onPick: (f: FundChoice) => void;
   onReset: () => void;
+  /** Open with the search focused (and no Cancel). */
+  startOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(startOpen);
   const [query, setQuery] = useState("");
   const [remote, setRemote] = useState<FundChoice[]>([]);
   const [searching, setSearching] = useState(false);
@@ -72,7 +75,7 @@ export function FundSwitcher({
   const selectOptions: SearchableSelectOption[] = pool.slice(0, 40).map((p) => ({ id: p.schemeCode, label: p.schemeName, sublabel: detail(p) }));
 
   const close = () => {
-    setOpen(false);
+    setOpen(startOpen);
     setQuery("");
   };
 
@@ -93,9 +96,11 @@ export function FundSwitcher({
             close();
           }}
         />
-        <button type="button" onClick={close} className="px-1 text-[12px] font-semibold text-muted hover:text-ink">
-          Cancel
-        </button>
+        {!startOpen && (
+          <button type="button" onClick={close} className="px-1 text-[12px] font-semibold text-muted hover:text-ink">
+            Cancel
+          </button>
+        )}
       </div>
     );
   }

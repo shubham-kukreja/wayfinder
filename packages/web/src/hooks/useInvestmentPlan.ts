@@ -3,7 +3,7 @@ import type { Allocation } from "@wayfinder/engine";
 import { segmentColor } from "../components/AllocationBar.js";
 import { listDefaultFunds } from "../lib/backtestApi.js";
 import { candidatesFor, planLines, sleeveCategory, type FundChoice, type PlanLine } from "../lib/clients.js";
-import { fundScoresApi, type FundScore } from "../lib/coreApi.js";
+import { fundScoresApi, type FundScoreRanking } from "../lib/coreApi.js";
 import { useCoreAllocation } from "./useCoreAllocation.js";
 
 export interface PlannedLine extends PlanLine {
@@ -18,11 +18,11 @@ export interface PlannedLine extends PlanLine {
 /**
  * An amount split over the model allocation (published, else the draft), one
  * fund per sleeve: the top of the sleeve's Fund Rankings shortlist unless
- * the user picked another. Lines come largest amount first.
+ * the user picked another. Lines come in the model's sleeve order.
  */
 export function useInvestmentPlan(amount: number) {
   const { data, allocation, loading, error } = useCoreAllocation();
-  const [rankings, setRankings] = useState<Record<string, FundScore[]>>({});
+  const [rankings, setRankings] = useState<Record<string, FundScoreRanking | null>>({});
   const [defaults, setDefaults] = useState<Record<string, FundChoice>>({});
   const [fundsLoading, setFundsLoading] = useState(true);
   const [picks, setPicks] = useState<Record<string, FundChoice>>({});
@@ -38,8 +38,8 @@ export function useInvestmentPlan(amount: number) {
         categoryKeys.map((k) =>
           fundScoresApi
             .category(k, ac.signal)
-            .then((r) => [k, r.funds] as const)
-            .catch(() => [k, [] as FundScore[]] as const),
+            .then((r) => [k, r] as const)
+            .catch(() => [k, null] as const),
         ),
       ),
       listDefaultFunds().catch(() => []),
@@ -56,7 +56,7 @@ export function useInvestmentPlan(amount: number) {
     if (!allocation) return [];
     return planLines(allocation, amount, (id) => segmentColor(id, allocation)).map((l) => {
       const cat = sleeveCategory(l.sleeve);
-      const options = cat ? candidatesFor(l.sleeve, rankings[cat.category] ?? []) : [];
+      const options = cat ? candidatesFor(l.sleeve, rankings[cat.category]?.funds ?? []) : [];
       const fallback = defaults[l.sleeve] ?? null;
       const pick = picks[l.sleeve];
       return { ...l, options, fallback, fund: pick ?? options[0] ?? fallback, overridden: !!pick };
@@ -69,6 +69,13 @@ export function useInvestmentPlan(amount: number) {
     lines,
     loading: loading || (!!allocation && fundsLoading),
     error,
+    /** The sleeve's category ranking, narrowed to the sleeve (e.g. gold only). */
+    rankingFor: (sleeve: string): FundScoreRanking | null => {
+      const cat = sleeveCategory(sleeve);
+      const r = cat ? rankings[cat.category] : null;
+      if (!r || !cat) return null;
+      return cat.match ? { ...r, funds: r.funds.filter((f) => cat.match!.test(f.name)) } : r;
+    },
     pick: (sleeve: string, f: FundChoice) => setPicks((p) => ({ ...p, [sleeve]: f })),
     reset: (sleeve: string) =>
       setPicks((p) => {

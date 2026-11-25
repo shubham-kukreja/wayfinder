@@ -54,6 +54,7 @@ export function pathKey(key: string): string {
 
 export interface CoreUser {
   email: string;
+  name?: string;
   role: string;
 }
 

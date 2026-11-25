@@ -4,6 +4,7 @@ import { L1_SIGNALS, NODE_LABELS, TILT_GROUP_NODES } from "@wayfinder/engine";
 import { AllocationBar, segmentSwatchStyle, type AllocationDepth, type CompareBasis } from "../components/AllocationBar.js";
 import { CalculationInspector } from "../components/CalculationInspector.js";
 import { SignalHeatmap } from "../components/SignalHeatmap.js";
+import { SleeveAllocation, sleeveFilterFromSearch, type SleeveFilter } from "../components/SleeveAllocation.js";
 import { TabRow } from "../components/ui/TabRow.js";
 import { InfoPopover } from "../components/ui/InfoPopover.js";
 import { inspectorSnapshot, loadPortfolioAllocation, scoresFrom, toAllocation, type PortfolioAllocation } from "../lib/portfolioApi.js";
@@ -27,55 +28,11 @@ const HEATMAP_NODE_LABELS: Record<string, string> = {
   "l1.metals": "Metals",
 };
 
-type SleeveFilter = "all" | "equity" | "debt" | "metals";
-
-const SLEEVE_FILTERS: Array<{ id: SleeveFilter; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "equity", label: "Equity" },
-  { id: "debt", label: "Debt" },
-  { id: "metals", label: "Metals" },
-];
-
-// Which asset class each rollup row belongs to, used both to filter the list
-// and as the row's descriptive second line. Sector sleeves are carved out of
-// equity, so they filter under it.
-const ROLLUP_GROUP: Record<string, SleeveFilter> = {
-  "equity.large": "equity",
-  "equity.mid": "equity",
-  "equity.small": "equity",
-  "equity.intl": "equity",
-  "debt.liquid": "debt",
-  "debt.corporate": "debt",
-  "debt.gilt": "debt",
-  "metals.gold": "metals",
-  "metals.silver": "metals",
-};
-
-const GROUP_LABEL_BY_ROLLUP: Record<string, string> = {
-  "equity.large": "Equity · Large cap",
-  "equity.mid": "Equity · Mid cap",
-  "equity.small": "Equity · Small cap",
-  "equity.intl": "Equity · International",
-  "debt.liquid": "Debt · Liquid",
-  "debt.corporate": "Debt · Corporate",
-  "debt.gilt": "Debt · Gilt",
-  "metals.gold": "Precious metals · Gold",
-  "metals.silver": "Precious metals · Silver",
-};
-
-function rollupGroup(id: string): SleeveFilter {
-  if (id.startsWith("sleeve.")) return "equity";
-  return ROLLUP_GROUP[id] ?? "all";
-}
-
 // Veto keys arrive as plain strings, so the label map needs a widened lookup.
 function nodeLabel(nodeId: string): string {
   return (NODE_LABELS as Record<string, string>)[nodeId] ?? nodeId;
 }
 
-function sleeveFilterFromSearch(value: string | null): SleeveFilter {
-  return value === "equity" || value === "debt" || value === "metals" ? value : "all";
-}
 
 function formatPublishedAt(iso: string): string {
   return new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -162,9 +119,6 @@ function OverviewBody({ data }: { data: PortfolioAllocation }) {
   }, [allocation]);
 
   const sleeveFilter = sleeveFilterFromSearch(searchParams.get("sleeve"));
-  const visibleRollup =
-    sleeveFilter === "all" ? allocation.rollup : allocation.rollup.filter((row) => rollupGroup(row.id) === sleeveFilter);
-  const visibleWeight = visibleRollup.reduce((sum, row) => sum + row.portfolioWeight, 0);
 
   function setDepth(nextDepth: AllocationDepth) {
     const next = new URLSearchParams(searchParams);
@@ -302,17 +256,12 @@ function OverviewBody({ data }: { data: PortfolioAllocation }) {
       </section>
 
       <section className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.35fr_1fr]">
-        {/* Sleeve list: filter tabs over a two-line row per sleeve — swatch,
-            name and status on the first line; the class descriptor, the
-            within-group share and the neutral comparison on the second. */}
-        <div className="rounded-lg border border-line bg-paper p-5">
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-ink">Sleeve allocation</h2>
-              <p className="mt-0.5 text-[13px] text-muted">
-                {visibleRollup.length} sleeve{visibleRollup.length === 1 ? "" : "s"} · {formatPct(visibleWeight, 1)} of portfolio
-              </p>
-            </div>
+        <SleeveAllocation
+          allocation={allocation}
+          filter={sleeveFilter}
+          onFilter={setSleeveFilter}
+          onSelect={selectNode}
+          action={
             <Link
               to="/model/overrides"
               className="inline-flex shrink-0 items-center gap-2 rounded-sm border border-line px-3 py-2 text-[13px] font-semibold text-ink transition-colors duration-100 ease-in hover:bg-paper-2"
@@ -320,62 +269,8 @@ function OverviewBody({ data }: { data: PortfolioAllocation }) {
               Manage weights
               <span aria-hidden="true">›</span>
             </Link>
-          </div>
-
-          <TabRow options={SLEEVE_FILTERS} value={sleeveFilter} onChange={setSleeveFilter} className="mb-1" />
-
-          <div>
-            {visibleRollup.map((row) => {
-              const node =
-                allocation.groups.equity.nodes[row.id] ??
-                allocation.groups.debt.nodes[row.id] ??
-                allocation.groups.metals.nodes[row.id];
-              const isVetoed = !!node?.vetoActive;
-              const delta = node ? node.vsNeutralFinal : null;
-              const capped = node ? Math.abs(node.rawTilt - node.tilt) > 0.0005 : false;
-              return (
-                <button
-                  key={row.id}
-                  type="button"
-                  onClick={() => selectNode(row.id)}
-                  className="w-full border-b border-line py-3 text-left last:border-0 hover:bg-paper-2"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      <span className="h-3.5 w-3.5 shrink-0" style={segmentSwatchStyle(row.id, allocation)} />
-                      <span className="truncate text-[15px] text-ink">{row.label}</span>
-                      {row.id.startsWith("sleeve.") && (
-                        <span className="shrink-0 rounded-sm bg-lilac px-2 py-0.5 text-[11px] font-bold text-ink">Sleeve</span>
-                      )}
-                      {isVetoed && (
-                        <span className="shrink-0 rounded-sm bg-warn-50 px-2 py-0.5 text-[11px] font-bold text-warn-800">Veto</span>
-                      )}
-                      {capped && (
-                        <span className="shrink-0 rounded-sm bg-paper-2 px-2 py-0.5 text-[11px] font-bold text-ink-2" title="Tilt limited by the group cap">
-                          Capped
-                        </span>
-                      )}
-                    </div>
-                    <span className="shrink-0 text-[15px] font-semibold tabular-nums text-ink">
-                      {formatPct(row.portfolioWeight, 1)}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex items-baseline justify-between gap-4 pl-6">
-                    <span className="truncate text-[13px] text-muted">
-                      {GROUP_LABEL_BY_ROLLUP[row.id] ?? "Equity · Sector sleeve"} · {formatPct(row.withinGroup, 1)} of group
-                    </span>
-                    {delta !== null && (
-                      <span className="shrink-0 text-[13px] tabular-nums text-muted">
-                        Neutral: {formatPct(row.portfolioWeight - delta, 1)}{" "}
-                        <span className={delta >= 0 ? "text-brand-800" : "text-danger-500"}>{formatSignedPct(delta, 2)}</span>
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+          }
+        />
 
         {/* Drivers: for each class, the composite, the tilt it produced, and
             the signal contributions that built it — so a weight traces back to

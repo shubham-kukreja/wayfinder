@@ -10,8 +10,8 @@ export const ALLOCATION_ROUTES: Array<{ path: string; label: string }> = [{ path
 export const FUNDS_ROUTES: Array<{ path: string; label: string }> = [{ path: "/funds", label: "Fund Rankings" }];
 
 // Client plans: the model allocation applied to a client's money, fund by
-// fund. Clients are a demo fixture for now (lib/clients.ts).
-export const CLIENTS_ROUTES: Array<{ path: string; label: string }> = [{ path: "/clients", label: "All Clients" }];
+// fund. Clients are a frontend fixture for now (lib/clients.ts).
+export const CLIENTS_ROUTES: Array<{ path: string; label: string }> = [{ path: "/clients", label: "Dashboard" }];
 
 // Its own group, not folded into Allocation: this isn't a state of the
 // published/draft model, it's a separate workspace with its own queue of

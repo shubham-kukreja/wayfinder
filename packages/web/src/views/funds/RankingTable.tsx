@@ -116,6 +116,8 @@ export function RankingTable({
   shortlistOnly,
   onSelect,
   selectedCode,
+  showSave = true,
+  maxHeight = "max-h-[calc(100vh-260px)]",
 }: {
   ranking: FundScoreRanking;
   saved: Set<string>;
@@ -123,6 +125,9 @@ export function RankingTable({
   shortlistOnly: boolean;
   onSelect: (f: FundScore) => void;
   selectedCode: string | null;
+  /** Bookmarks: off where the table is used to pick a fund. */
+  showSave?: boolean;
+  maxHeight?: string;
 }) {
   const [sort, setSort] = useState<{ key: string; dir: Dir }>({ key: "rank", dir: "asc" });
   const columns = useMemo(() => buildColumns(ranking.funds), [ranking.funds]);
@@ -155,7 +160,7 @@ export function RankingTable({
     `whitespace-nowrap text-[11px] font-bold uppercase tracking-eyebrow transition-colors duration-100 ease-in ${active ? "text-ink" : "text-muted hover:text-ink"}`;
 
   return (
-    <div className="max-h-[calc(100vh-260px)] min-h-[320px] overflow-auto">
+    <div className={`${maxHeight} min-h-[320px] overflow-auto`}>
       <table className="w-full border-separate border-spacing-0 text-[13px]">
         <thead className="sticky top-0 z-20">
           <tr>
@@ -209,7 +214,7 @@ export function RankingTable({
               <tr
                 key={f.scheme_code}
                 onClick={() => onSelect(f)}
-                className={`group cursor-pointer ${isSelected ? "[&>td:first-child]:bg-paper-2" : ""}`}
+                className={`group cursor-pointer ${isSelected ? "[&>td:first-child]:bg-paper-2 [&>td:first-child]:shadow-[inset_3px_0_0_#0A0A0A]" : ""}`}
               >
                 <td
                   className={`sticky left-0 z-10 border-b border-r border-line px-3 py-1.5 ${
@@ -217,6 +222,7 @@ export function RankingTable({
                   } group-hover:bg-paper-2`}
                 >
                   <div className="flex items-start gap-2">
+                    {showSave && (
                     <button
                       type="button"
                       onClick={(e) => {
@@ -229,6 +235,7 @@ export function RankingTable({
                     >
                       <BookmarkIcon filled={isSaved} />
                     </button>
+                    )}
                     <div className="min-w-0">
                       {isSaved && <div className="text-[11px] font-bold uppercase leading-tight tracking-eyebrow text-muted">Saved</div>}
                       <div className="line-clamp-2 text-[12px] leading-snug text-ink sm:text-[13px]" title={`${f.name} · ${f.amc}`}>

@@ -1,7 +1,7 @@
 import type { Allocation } from "@wayfinder/engine";
 import type { FundScore } from "./coreApi.js";
 
-// Clients, for now a frontend fixture: demo people, each in a basket (a
+// Clients, for now a frontend fixture: people, each in a basket (a
 // core risk profile). Their plan is derived live from the model allocation
 // and Fund Rankings; nothing about a client is stored server-side yet.
 
@@ -16,11 +16,20 @@ export interface Client {
   basket: string;
   basketName: string;
   since: string;
+  city: string;
 }
 
+const balanced = { basket: "balanced", basketName: "Balanced" };
+
 export const CLIENTS: Client[] = [
-  { id: "demo-aarav", name: "Aarav Mehta", netWorth: 1_20_00_000, investable: 10_00_000, basket: "balanced", basketName: "Balanced", since: "2026-04-01" },
-  { id: "demo-priya", name: "Priya Nair", netWorth: 45_00_000, investable: 5_00_000, basket: "balanced", basketName: "Balanced", since: "2026-08-15" },
+  { id: "aarav-mehta", name: "Aarav Mehta", netWorth: 3_40_00_000, investable: 10_00_000, since: "2024-02-12", city: "Mumbai", ...balanced },
+  { id: "priya-nair", name: "Priya Nair", netWorth: 1_10_00_000, investable: 5_00_000, since: "2024-06-03", city: "Bengaluru", ...balanced },
+  { id: "rohan-kapoor", name: "Rohan Kapoor", netWorth: 6_75_00_000, investable: 25_00_000, since: "2024-03-18", city: "Delhi", ...balanced },
+  { id: "ananya-iyer", name: "Ananya Iyer", netWorth: 85_00_000, investable: 3_00_000, since: "2025-01-20", city: "Chennai", ...balanced },
+  { id: "vikram-singh", name: "Vikram Singh", netWorth: 2_20_00_000, investable: 10_00_000, since: "2024-09-09", city: "Jaipur", ...balanced },
+  { id: "meera-joshi", name: "Meera Joshi", netWorth: 1_60_00_000, investable: 5_00_000, since: "2025-04-14", city: "Pune", ...balanced },
+  { id: "karan-malhotra", name: "Karan Malhotra", netWorth: 4_10_00_000, investable: 15_00_000, since: "2025-07-07", city: "Gurugram", ...balanced },
+  { id: "sneha-reddy", name: "Sneha Reddy", netWorth: 70_00_000, investable: 2_00_000, since: "2026-08-25", city: "Hyderabad", ...balanced },
 ];
 
 export const clientById = (id: string | undefined) => CLIENTS.find((c) => c.id === id) ?? null;
@@ -89,9 +98,9 @@ export interface PlanLine {
 }
 
 /**
- * Splits the investable amount over the allocation's sleeves (rounded to
- * ₹100, the remainder on the largest line so the total is exact), largest
- * amount first.
+ * Splits the investable amount over the allocation's sleeves, in the model's
+ * order, rounded to ₹100 with the remainder on the largest line so the total
+ * is exact.
  */
 export function planLines(allocation: Allocation, investable: number, color: (id: string) => string): PlanLine[] {
   const rows = allocation.rollup.filter((r) => r.portfolioWeight > 0.0005);
@@ -100,13 +109,13 @@ export function planLines(allocation: Allocation, investable: number, color: (id
     const weight = r.portfolioWeight / total;
     return { sleeve: r.id, label: r.label, weight, amount: Math.round((weight * investable) / 100) * 100, color: color(r.id) };
   });
-  lines.sort((a, b) => b.amount - a.amount || a.label.localeCompare(b.label));
   const diff = investable - lines.reduce((s, l) => s + l.amount, 0);
-  if (lines[0]) lines[0].amount += diff;
+  const largest = lines.reduce<PlanLine | null>((m, l) => (!m || l.amount > m.amount ? l : m), null);
+  if (largest) largest.amount += diff;
   return lines;
 }
 
-// ---- orders and holdings (demo: kept in this browser) --------------------------
+// ---- orders and holdings (kept in this browser) ---------------------------------
 
 export interface OrderLine {
   sleeve: string;
@@ -121,30 +130,44 @@ export interface Order {
   date: string; // ISO date
   amount: number;
   lines: OrderLine[];
-  /** True for the fixture's opening order. */
+  /** A past investment from the client records (not placed here). */
   seed?: boolean;
 }
 
-// Aarav's opening investment, so "invest more" has holdings to add to.
+// Past investments, split across one fund per sleeve in roughly the model's
+// weights. Values over time come from real NAVs.
+const TEMPLATE: Array<Omit<OrderLine, "amount"> & { share: number }> = [
+  { sleeve: "equity.large", label: "Large Cap", schemeCode: "119018", schemeName: "HDFC Large Cap Fund", share: 0.25 },
+  { sleeve: "equity.mid", label: "Mid Cap", schemeCode: "118668", schemeName: "Nippon India Growth Mid Cap Fund", share: 0.12 },
+  { sleeve: "equity.small", label: "Small Cap", schemeCode: "119589", schemeName: "Sundaram Small Cap Fund", share: 0.08 },
+  { sleeve: "equity.intl", label: "International", schemeCode: "119517", schemeName: "Aditya Birla Sun Life International Equity Fund", share: 0.1 },
+  { sleeve: "debt.liquid", label: "Liquid", schemeCode: "118701", schemeName: "Nippon India Liquid Fund", share: 0.14 },
+  { sleeve: "debt.corporate", label: "Corporate", schemeCode: "133791", schemeName: "Kotak Corporate Bond Fund", share: 0.12 },
+  { sleeve: "debt.gilt", label: "Gilt", schemeCode: "120520", schemeName: "Invesco India Gilt Fund", share: 0.09 },
+  { sleeve: "metals.gold", label: "Gold", schemeCode: "119781", schemeName: "Kotak Gold Fund", share: 0.07 },
+  { sleeve: "metals.silver", label: "Silver", schemeCode: "150615", schemeName: "Axis Silver Fund of Fund", share: 0.03 },
+];
+const NIPPON_LARGE = { schemeCode: "118632", schemeName: "Nippon India Large Cap Fund" };
+
+function seedOrder(id: string, date: string, amount: number, altLarge = false): Order {
+  const lines = TEMPLATE.map(({ share, ...l }) => ({
+    ...l,
+    ...(altLarge && l.sleeve === "equity.large" ? NIPPON_LARGE : {}),
+    amount: Math.round((amount * share) / 100) * 100,
+  }));
+  lines[0]!.amount += amount - lines.reduce((s, l) => s + l.amount, 0);
+  return { id, date, amount, lines, seed: true };
+}
+
 const SEED_ORDERS: Record<string, Order[]> = {
-  "demo-aarav": [
-    {
-      id: "seed-1",
-      date: "2026-04-01",
-      amount: 30_00_000,
-      seed: true,
-      lines: [
-        { sleeve: "equity.large", label: "Large Cap", schemeCode: "119018", schemeName: "HDFC Large Cap Fund", amount: 7_50_000 },
-        { sleeve: "debt.liquid", label: "Liquid", schemeCode: "118701", schemeName: "Nippon India Liquid Fund", amount: 4_50_000 },
-        { sleeve: "debt.corporate", label: "Corporate", schemeCode: "133791", schemeName: "Kotak Corporate Bond Fund", amount: 4_00_000 },
-        { sleeve: "equity.mid", label: "Mid Cap", schemeCode: "118668", schemeName: "Nippon India Growth Mid Cap Fund", amount: 3_50_000 },
-        { sleeve: "debt.gilt", label: "Gilt", schemeCode: "120520", schemeName: "Invesco India Gilt Fund", amount: 3_00_000 },
-        { sleeve: "equity.small", label: "Small Cap", schemeCode: "119589", schemeName: "Sundaram Small Cap Fund", amount: 2_50_000 },
-        { sleeve: "equity.intl", label: "International", schemeCode: "119517", schemeName: "Aditya Birla Sun Life International Equity Fund", amount: 2_50_000 },
-        { sleeve: "metals.gold", label: "Gold", schemeCode: "119781", schemeName: "Kotak Gold Fund", amount: 2_50_000 },
-      ],
-    },
-  ],
+  "aarav-mehta": [seedOrder("a1", "2024-02-12", 60_00_000), seedOrder("a2", "2025-03-10", 25_00_000)],
+  "priya-nair": [seedOrder("p1", "2024-06-03", 30_00_000, true)],
+  "rohan-kapoor": [seedOrder("r1", "2024-03-18", 1_50_00_000), seedOrder("r2", "2025-06-16", 40_00_000), seedOrder("r3", "2026-05-11", 20_00_000)],
+  "ananya-iyer": [seedOrder("n1", "2025-01-20", 18_00_000, true)],
+  "vikram-singh": [seedOrder("v1", "2024-09-09", 55_00_000), seedOrder("v2", "2026-02-02", 12_00_000)],
+  "meera-joshi": [seedOrder("m1", "2025-04-14", 35_00_000, true)],
+  "karan-malhotra": [seedOrder("k1", "2025-07-07", 90_00_000), seedOrder("k2", "2026-09-14", 15_00_000)],
+  "sneha-reddy": [seedOrder("s1", "2026-08-25", 12_00_000, true)],
 };
 
 const ordersKey = (id: string) => `core.clients.${id}.orders`;
