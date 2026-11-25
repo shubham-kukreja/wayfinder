@@ -4,13 +4,13 @@ import { CoreApiError, fundScoresApi, type FundScore, type FundScoreOverview, ty
 import { resetCoreSession } from "../../components/CoreSessionGate.js";
 import { FundDetailPanel } from "./FundDetailPanel.js";
 import { RankingTable } from "./RankingTable.js";
-import { CategoryIcon } from "./fundIcons.js";
 import { formatDate } from "./fundFormat.js";
 
 // Fund Rankings: every Direct Growth plan ranked within its category by the
-// fund-scoring model (core-jobs-service docs/fund-scoring.md). Laid out after
-// Powerup's "Power Select" table: category tabs, then one row per fund with
-// rank and status, percentile scores, and rolling and trailing returns.
+// fund-scoring model (core-jobs-service docs/fund-scoring.md): category tabs,
+// then one row per fund with rank and status, percentile scores, and rolling
+// and trailing returns. Styled like the rest of the app: underlined tabs,
+// square bordered sections, the Model drivers heat bands and status pills.
 
 const SAVED_KEY = "core.funds.saved";
 
@@ -120,36 +120,44 @@ export function FundRankingsView() {
   const shortlisted = funds.filter((f) => f.status === "shortlist").length;
 
   return (
-    <div className="min-w-0 flex-1 bg-[#EEF4FB] px-4 pb-24 pt-6 lg:px-8">
-      <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
+    <div className="mx-auto w-full min-w-0 max-w-[1600px] px-6 py-8">
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-eyebrow text-muted">Funds</p>
-          <h1 className="font-display text-[28px] font-semibold tracking-display text-ink">Fund Rankings</h1>
-          <p className="mt-1 max-w-measure text-[13px] text-ink-2">
+          <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Funds</p>
+          <h1 className="mt-1 font-display text-2xl text-ink">Fund Rankings</h1>
+          <p className="mt-2 max-w-3xl text-[13px] text-muted">
             Direct Growth plans ranked within their category.
             {run && <> Scored {formatDate(run.as_of)}.</>}
           </p>
         </div>
-        {weights.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-2">
-            <span className="text-muted">Score =</span>
-            {weights.map((m, i) => (
-              <span key={m.id} className="flex items-center gap-1.5">
-                {i > 0 && <span className="text-muted">+</span>}
-                <span className="rounded-full border border-line bg-paper px-2 py-0.5">
-                  {m.id.startsWith("rolling") ? "Rolling return 10Y" : m.id.startsWith("sharpe") ? "Sharpe" : "Expense"}{" "}
-                  <span className="font-mono font-semibold">{Math.round(m.share * 100)}%</span>
-                </span>
-              </span>
-            ))}
-            <span className="text-muted">· shortlist at {ranking?.category.cutoff ?? 75}+</span>
-          </div>
+        {ranking && shortlisted > 0 && (
+          <button
+            type="button"
+            onClick={() => setShortlistOnly((v) => !v)}
+            aria-pressed={shortlistOnly}
+            className="inline-flex shrink-0 items-center gap-2 rounded-sm border border-line px-3 py-2 text-[13px] font-semibold text-ink transition-colors duration-100 ease-in hover:bg-paper-2"
+          >
+            {shortlistOnly ? `Show all ${funds.length}` : `View shortlist (${shortlisted})`}
+          </button>
         )}
       </header>
 
-      <div className="overflow-hidden rounded-lg border border-line bg-paper shadow-md">
-        {/* Category tabs */}
-        <nav className="flex overflow-x-auto border-b border-line" aria-label="Fund categories">
+      {weights.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-[13px] text-ink-2">
+          <span className="text-muted">Score</span>
+          {weights.map((m) => (
+            <span key={m.id} className="inline-flex items-center gap-2 bg-paper-2 px-2.5 py-1.5 text-[13px] font-semibold text-ink">
+              {m.id.startsWith("rolling") ? "Rolling return 10Y" : m.id.startsWith("sharpe") ? "Sharpe" : "Expense"}
+              <span className="font-normal tabular-nums text-muted">{Math.round(m.share * 100)}%</span>
+            </span>
+          ))}
+          <span className="text-muted">· shortlist at {ranking?.category.cutoff ?? 75}+</span>
+        </div>
+      )}
+
+      <section className="border border-line bg-paper">
+        {/* Category tabs, the app's underlined tab row (components/ui/TabRow) */}
+        <nav className="flex gap-[22px] overflow-x-auto border-b border-line px-5 pt-4 text-[13px] font-semibold" aria-label="Fund categories">
           {overview?.categories.map((c) => {
             const active = c.key === categoryKey;
             return (
@@ -158,18 +166,15 @@ export function FundRankingsView() {
                 type="button"
                 onClick={() => selectCategory(c.key)}
                 aria-current={active ? "page" : undefined}
-                className={`flex min-w-[88px] shrink-0 flex-col items-center gap-1 border-b-2 px-3 pb-2.5 pt-3 text-xs transition-colors duration-100 ease-in ${
-                  active ? "border-ink font-semibold text-ink" : "border-transparent text-muted hover:text-ink"
+                className={`-mb-px shrink-0 whitespace-nowrap border-b-2 pb-2.5 transition-colors duration-100 ease-in ${
+                  active ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"
                 }`}
               >
-                <CategoryIcon categoryKey={c.key} />
-                <span className="max-w-[110px] truncate" title={c.name}>
-                  {c.name}
-                </span>
+                {c.name}
               </button>
             );
           })}
-          {!overview && !overviewError && <div className="px-4 py-4 text-xs text-muted">Loading categories…</div>}
+          {!overview && !overviewError && <div className="pb-2.5 text-xs font-normal text-muted">Loading categories…</div>}
         </nav>
 
         {overviewError && <p className="px-5 py-6 text-sm text-danger-500">{overviewError}</p>}
@@ -199,22 +204,7 @@ export function FundRankingsView() {
             <span>{counts.by_status.incomplete ?? 0} not scored (under 10 years of history, or data missing)</span>
           </footer>
         )}
-      </div>
-
-      {ranking && shortlisted > 0 && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-20 flex justify-center lg:pl-60">
-          <button
-            type="button"
-            onClick={() => setShortlistOnly((v) => !v)}
-            className="pointer-events-auto flex items-center gap-2 rounded-full bg-ink px-4 py-2.5 text-[13px] font-semibold text-paper shadow-xl transition-transform duration-100 ease-cta hover:scale-[1.02]"
-          >
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-              <path d={shortlistOnly ? "M5 12h14" : "M7 13l5-5 5 5M7 18l5-5 5 5"} />
-            </svg>
-            {shortlistOnly ? `Show all ${funds.length}` : `View shortlist (${shortlisted})`}
-          </button>
-        </div>
-      )}
+      </section>
 
       {selected && ranking && (
         <FundDetailPanel fund={selected} ranking={ranking} saved={saved.has(selected.scheme_code)} onToggleSaved={toggleSaved} onClose={() => setSelected(null)} />

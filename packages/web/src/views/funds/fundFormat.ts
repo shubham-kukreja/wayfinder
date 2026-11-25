@@ -57,23 +57,24 @@ export const FILTER_LABEL: Record<string, string> = {
   manager_change: "Manager continuity",
 };
 
-// Heat scale, 0-100 with 100 best, in the reference's tiles: deep green at
-// the top, through pale green, to peach and then pink at the bottom.
+// Heat scale, 0-100 with 100 best: the same five green bands as the Model
+// drivers heatmap (components/SignalHeatmap.tsx), so a score reads the same
+// everywhere in the app.
 export function heatClass(p: number | null | undefined): string {
   if (p == null) return "bg-paper-2 text-muted";
-  if (p >= 80) return "bg-[#CDEFD6] text-[#14532D]";
-  if (p >= 60) return "bg-[#DFF5E5] text-[#166534]";
-  if (p >= 40) return "bg-[#EEF9F1] text-ink-2";
-  if (p >= 20) return "bg-[#FFEEDF] text-[#9A3412]";
-  return "bg-[#FDE1DD] text-[#B42318]";
+  if (p >= 70) return "bg-[#2BAB48] text-ink";
+  if (p >= 58) return "bg-[#4BD26A] text-ink";
+  if (p >= 43) return "bg-[#8DE2A0] text-ink";
+  if (p >= 30) return "bg-[#C6F1D0] text-ink";
+  return "bg-[#EBFAEE] text-ink-2";
 }
 
-// Row tint for the rank and status tiles, by status.
-export const STATUS_TILE: Record<FundScoreStatus, string> = {
-  shortlist: "bg-[#DFF5E5] text-[#166534]",
-  below_cutoff: "bg-[#EEF9F1] text-ink-2",
-  filtered_out: "bg-[#FFEEDF] text-[#9A3412]",
-  incomplete: "bg-paper-2 text-muted",
+// Status as the app's pills (components/ui/Pill.tsx).
+export const STATUS_TONE: Record<FundScoreStatus, "green" | "neutral" | "danger"> = {
+  shortlist: "green",
+  below_cutoff: "neutral",
+  filtered_out: "danger",
+  incomplete: "neutral",
 };
 
 /** Percentile (0-100, 100 best) of each fund's value among those with one. */

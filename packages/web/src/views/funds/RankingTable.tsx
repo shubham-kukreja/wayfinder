@@ -1,7 +1,8 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import type { FundScore, FundScoreRanking } from "../../lib/coreApi.js";
-import { BookmarkIcon, LaurelRank, SortIcon, StatusGlyph } from "./fundIcons.js";
-import { STATUS_LABEL, STATUS_TILE, columnPercentiles, formatAum, formatPct, heatClass } from "./fundFormat.js";
+import { Pill } from "../../components/ui/Pill.js";
+import { BookmarkIcon, SortIcon } from "./fundIcons.js";
+import { STATUS_LABEL, STATUS_TONE, columnPercentiles, formatAum, formatPct, heatClass } from "./fundFormat.js";
 
 type Dir = "asc" | "desc";
 
@@ -61,7 +62,7 @@ function buildColumns(funds: FundScore[]): Column[] {
         {pctTile(f.percentiles[metric])}
         {f.fallbacks[metric] != null && (
           <sup
-            className="absolute -right-4 -top-1 font-sans text-[9px] font-semibold text-indigo"
+            className="absolute -right-4 -top-1 text-[9px] font-semibold text-ink-2"
             title={`No ${metric.replace(/.*_/, "")} value from the vendor; the ${f.fallbacks[metric]}-year figure is used`}
           >
             {f.fallbacks[metric]}Y
@@ -150,6 +151,8 @@ export function RankingTable({
 
   const groups = GROUP_ORDER.map((g) => ({ name: g, cols: columns.filter((c) => c.group === g) }));
   const th = "border-b border-line bg-paper px-1 text-center font-normal";
+  const sortLabel = (active: boolean) =>
+    `whitespace-nowrap text-[11px] font-bold uppercase tracking-eyebrow transition-colors duration-100 ease-in ${active ? "text-ink" : "text-muted hover:text-ink"}`;
 
   return (
     <div className="max-h-[calc(100vh-260px)] min-h-[320px] overflow-auto">
@@ -158,7 +161,7 @@ export function RankingTable({
           <tr>
             <th rowSpan={2} className={`${th} sticky left-0 z-30 w-[220px] min-w-[132px] border-r px-3 sm:min-w-[200px] sm:px-4 py-2 text-left align-top`}>
               <div className="font-semibold text-ink">{ranking.funds.length} funds</div>
-              <div className="text-xs text-muted underline decoration-line underline-offset-2">{ranking.category.name}</div>
+              <div className="text-xs text-muted">{ranking.category.name}</div>
             </th>
             <th colSpan={2} className={`${th} border-r pt-3 text-[13px] font-semibold text-ink`}>
               Rank &amp; Status
@@ -171,13 +174,8 @@ export function RankingTable({
           </tr>
           <tr>
             <th colSpan={2} className={`${th} border-r pb-2 pt-1`}>
-              <button
-                type="button"
-                onClick={() => toggle("rank")}
-                className="text-[11px] font-semibold text-indigo hover:underline"
-                title="Sort by rank in category"
-              >
-                {sort.key === "rank" && sort.dir === "desc" ? "Low to high" : "High to low"}
+              <button type="button" onClick={() => toggle("rank")} className={sortLabel(sort.key === "rank")} title="Sort by rank in category">
+                Rank
                 <SortIcon dir={sort.key === "rank" ? sort.dir : null} />
               </button>
             </th>
@@ -191,9 +189,7 @@ export function RankingTable({
                         type="button"
                         onClick={() => toggle(c.key)}
                         title={c.title}
-                        className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] transition-colors duration-100 ${
-                          active ? "bg-paper-2 font-semibold text-ink ring-1 ring-line" : "text-muted hover:text-ink"
-                        }`}
+                        className={sortLabel(active)}
                       >
                         {c.label}
                         <SortIcon dir={active ? sort.dir : null} />
@@ -209,16 +205,15 @@ export function RankingTable({
           {rows.map((f) => {
             const isSaved = saved.has(f.scheme_code);
             const isSelected = f.scheme_code === selectedCode;
-            const tile = STATUS_TILE[f.status];
             return (
               <tr
                 key={f.scheme_code}
                 onClick={() => onSelect(f)}
-                className={`group cursor-pointer ${isSelected ? "[&>td]:bg-lilac/40" : ""}`}
+                className={`group cursor-pointer ${isSelected ? "[&>td:first-child]:bg-paper-2" : ""}`}
               >
                 <td
                   className={`sticky left-0 z-10 border-b border-r border-line px-3 py-1.5 ${
-                    isSaved ? "bg-[#F2F5FF]" : "bg-paper"
+                    isSaved ? "bg-paper-2" : "bg-paper"
                   } group-hover:bg-paper-2`}
                 >
                   <div className="flex items-start gap-2">
@@ -230,38 +225,32 @@ export function RankingTable({
                       }}
                       aria-pressed={isSaved}
                       aria-label={isSaved ? `Remove ${f.name} from saved` : `Save ${f.name}`}
-                      className={`mt-0.5 shrink-0 ${isSaved ? "text-indigo" : "text-muted hover:text-ink"}`}
+                      className={`mt-0.5 shrink-0 ${isSaved ? "text-ink" : "text-muted hover:text-ink"}`}
                     >
                       <BookmarkIcon filled={isSaved} />
                     </button>
                     <div className="min-w-0">
-                      {isSaved && <div className="text-[11px] font-semibold leading-tight text-indigo">Saved</div>}
+                      {isSaved && <div className="text-[11px] font-bold uppercase leading-tight tracking-eyebrow text-muted">Saved</div>}
                       <div className="line-clamp-2 text-[12px] leading-snug text-ink sm:text-[13px]" title={`${f.name} · ${f.amc}`}>
                         {f.name}
                       </div>
                     </div>
                   </div>
                 </td>
-                <td className="border-b border-line p-[2px]">
-                  <div className={`flex h-12 min-w-[64px] items-center justify-center rounded-sm ${tile}`}>
-                    <LaurelRank rank={f.rank} />
-                  </div>
+                <td className="border-b border-line px-2 text-center">
+                  <span className="text-[15px] font-semibold tabular-nums text-ink">{f.rank ?? "–"}</span>
                 </td>
-                <td className="border-b border-r border-line p-[2px]">
-                  <div
-                    className={`flex h-12 min-w-[118px] items-center justify-center gap-1.5 rounded-sm px-2 text-[12px] font-semibold ${tile}`}
-                    title={statusTitle(f)}
-                  >
-                    <StatusGlyph status={f.status} />
+                <td className="border-b border-r border-line px-2 text-center" title={statusTitle(f)}>
+                  <Pill tone={STATUS_TONE[f.status]} className="whitespace-nowrap">
                     {STATUS_LABEL[f.status]}
-                  </div>
+                  </Pill>
                 </td>
                 {groups.map((g) => (
                   <Fragment key={g.name}>
                     {g.cols.map((c, i) => (
                       <td key={c.key} className={`border-b border-line p-[2px] ${i === g.cols.length - 1 ? "border-r last:border-r-0" : ""}`}>
                         <div
-                          className={`flex h-12 min-w-[58px] items-center justify-center rounded-sm px-1.5 font-mono text-[12.5px] tabular-nums ${
+                          className={`flex h-12 min-w-[58px] items-center justify-center px-1.5 text-[13px] font-semibold tabular-nums ${
                             c.heat ? heatClass(c.heat(f)) : "bg-paper-2 text-ink-2"
                           }`}
                         >

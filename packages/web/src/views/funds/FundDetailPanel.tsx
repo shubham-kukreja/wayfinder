@@ -1,15 +1,15 @@
 import { useEffect } from "react";
 import type { FundScore, FundScoreRanking } from "../../lib/coreApi.js";
-import { BookmarkIcon, CheckIcon, CloseIcon, LaurelRank, StatusGlyph } from "./fundIcons.js";
+import { Pill } from "../../components/ui/Pill.js";
+import { BookmarkIcon, CheckIcon, CloseIcon } from "./fundIcons.js";
 import {
   FILTER_LABEL,
   STATUS_LABEL,
-  STATUS_TILE,
+  STATUS_TONE,
   formatAum,
   formatDate,
   formatMetric,
   formatPct,
-  heatClass,
   metricLabel,
 } from "./fundFormat.js";
 
@@ -56,7 +56,7 @@ export function FundDetailPanel({
             onClick={() => onToggleSaved(fund.scheme_code)}
             aria-pressed={saved}
             aria-label={saved ? "Remove from saved" : "Save fund"}
-            className={`rounded-sm p-1.5 hover:bg-paper-2 ${saved ? "text-indigo" : "text-muted"}`}
+            className={`rounded-sm p-1.5 hover:bg-paper-2 ${saved ? "text-ink" : "text-muted"}`}
           >
             <BookmarkIcon filled={saved} />
           </button>
@@ -67,18 +67,22 @@ export function FundDetailPanel({
 
         <div className="space-y-6 px-5 py-5">
           {/* Headline */}
-          <div className="grid grid-cols-3 gap-[2px]">
-            <div className={`flex flex-col items-center justify-center rounded-sm py-3 ${STATUS_TILE[fund.status]}`}>
-              <LaurelRank rank={fund.rank} />
-              <span className="mt-1 text-[11px]">{fund.ranked_of ? `of ${fund.ranked_of} ranked` : "unranked"}</span>
+          <div className="grid grid-cols-3 divide-x divide-line border border-line">
+            <div className="px-3 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Rank</p>
+              <p className="mt-1 font-display text-2xl tabular-nums text-ink">{fund.rank ?? "–"}</p>
+              <p className="text-[11px] text-muted">{fund.ranked_of ? `of ${fund.ranked_of} ranked` : "unranked"}</p>
             </div>
-            <div className={`flex flex-col items-center justify-center gap-1 rounded-sm py-3 text-[12px] font-semibold ${STATUS_TILE[fund.status]}`}>
-              <StatusGlyph status={fund.status} />
-              {STATUS_LABEL[fund.status]}
+            <div className="px-3 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Score</p>
+              <p className="mt-1 font-display text-2xl tabular-nums text-ink">{fund.composite == null ? "–" : fund.composite.toFixed(1)}</p>
+              <p className="text-[11px] text-muted">cutoff {ranking.category.cutoff}</p>
             </div>
-            <div className={`flex flex-col items-center justify-center rounded-sm py-3 ${heatClass(fund.composite)}`}>
-              <span className="font-mono text-xl font-semibold tabular-nums">{fund.composite == null ? "–" : fund.composite.toFixed(1)}</span>
-              <span className="text-[11px]">score · cutoff {ranking.category.cutoff}</span>
+            <div className="px-3 py-3">
+              <p className="text-[11px] font-bold uppercase tracking-eyebrow text-muted">Status</p>
+              <Pill tone={STATUS_TONE[fund.status]} className="mt-2 whitespace-nowrap">
+                {STATUS_LABEL[fund.status]}
+              </Pill>
             </div>
           </div>
 
@@ -92,7 +96,7 @@ export function FundDetailPanel({
           {/* Hard filters */}
           <section>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-eyebrow text-muted">Hard filters</h3>
-            <ul className="divide-y divide-line rounded-sm border border-line">
+            <ul className="divide-y divide-line border border-line">
               {fund.filters.map((fl) => (
                 <li key={fl.name} className="flex gap-2.5 px-3 py-2">
                   <span className={`mt-0.5 ${fl.ok ? "text-brand-700" : "text-danger-500"}`}>
@@ -121,16 +125,16 @@ export function FundDetailPanel({
                         {metricLabel(m.id)}
                         <span className="ml-1.5 text-xs text-muted">{Math.round((m.weight / total) * 100)}% weight</span>
                       </span>
-                      <span className="font-mono tabular-nums text-ink-2">{formatMetric(m.id, fund.metrics[m.id])}</span>
+                      <span className="tabular-nums text-ink-2">{formatMetric(m.id, fund.metrics[m.id])}</span>
                     </div>
                     <div className="mt-1 flex items-center gap-2">
-                      <div className="h-1.5 flex-1 rounded-full bg-paper-3">
-                        <div className="h-full rounded-full bg-brand-500" style={{ width: `${p ?? 0}%` }} />
+                      <div className="h-1.5 flex-1 bg-paper-3">
+                        <div className="h-full bg-brand-500" style={{ width: `${p ?? 0}%` }} />
                       </div>
-                      <span className="w-14 text-right font-mono text-xs tabular-nums text-muted">{p == null ? "–" : `${Math.round(p)} pctl`}</span>
+                      <span className="w-14 text-right text-xs tabular-nums text-muted">{p == null ? "–" : `${Math.round(p)} pctl`}</span>
                     </div>
                     {fb != null && (
-                      <p className="mt-1 text-xs text-indigo">
+                      <p className="mt-1 text-xs text-ink-2">
                         The vendor has no {m.years}-year figure; the {fb}-year one is used.
                       </p>
                     )}
@@ -147,7 +151,7 @@ export function FundDetailPanel({
               {shown.map((m) => (
                 <div key={m.id} className="flex items-baseline justify-between gap-2 border-b border-line pb-1">
                   <dt className="text-ink-2">{metricLabel(m.id)}</dt>
-                  <dd className="font-mono tabular-nums text-ink">{formatMetric(m.id, fund.metrics[m.id])}</dd>
+                  <dd className="tabular-nums text-ink">{formatMetric(m.id, fund.metrics[m.id])}</dd>
                 </div>
               ))}
             </dl>
@@ -181,7 +185,7 @@ function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-2 border-b border-line pb-1">
       <dt className="text-ink-2">{label}</dt>
-      <dd className="font-mono tabular-nums text-ink">{value}</dd>
+      <dd className="tabular-nums text-ink">{value}</dd>
     </div>
   );
 }
