@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { segmentColor } from "../../components/AllocationBar.js";
 import { AumChart } from "../../components/clients/AumChart.js";
 import {
@@ -19,6 +19,7 @@ import { formatPct, formatSignedPct } from "../../lib/format.js";
 import { shortFundName } from "./ClientsView.js";
 import { ClientHarvest, ClientPnl } from "./ClientTax.js";
 import { PlusIcon, RebalanceIcon } from "../../components/clients/icons.js";
+import { PrepareOverlay } from "../../components/clients/PrepareOverlay.js";
 
 // A client: value and returns over a chosen period, value over time, mix
 // against the model, holdings and activity, with Invest more and Rebalance
@@ -59,6 +60,8 @@ export function ClientView() {
   const [tab, setTab] = useState<Tab>("overview");
   const [period, setPeriod] = useState<Period>("1Y");
   const [version, setVersion] = useState(0);
+  const [preparing, setPreparing] = useState<"invest" | "rebalance" | null>(null);
+  const navigate = useNavigate();
   const one = useMemo(() => (client ? [client] : []), [client]);
   const book = useBook(one, toRange(period), version);
   const { allocation } = useCoreAllocation();
@@ -101,6 +104,16 @@ export function ClientView() {
 
   return (
     <div className="mx-auto w-full max-w-[1440px] px-8 py-8">
+      {preparing && (
+        <PrepareOverlay
+          lines={
+            preparing === "invest"
+              ? ["Reading the model allocation", "Ranking funds in every sleeve", `Picking the best funds for ${client.name.split(" ")[0]}`]
+              : [`Valuing ${client.name.split(" ")[0]}'s holdings`, "Comparing with the model", "Working out the trades"]
+          }
+          onDone={() => navigate(`/clients/${client.id}/${preparing}`)}
+        />
+      )}
       <Breadcrumb
         items={[{ label: "Clients", to: "/clients" }, { label: client.name }]}
       />
@@ -124,20 +137,14 @@ export function ClientView() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link
-            to={`/clients/${client.id}/rebalance`}
-            className={`${secondaryClass} gap-2`}
-          >
+          <button type="button" onClick={() => setPreparing("rebalance")} className={`${secondaryClass} gap-2`}>
             <RebalanceIcon />
             Rebalance
-          </Link>
-          <Link
-            to={`/clients/${client.id}/invest`}
-            className={`${primaryClass} gap-2`}
-          >
+          </button>
+          <button type="button" onClick={() => setPreparing("invest")} className={`${primaryClass} gap-2`}>
             <PlusIcon />
             Invest more
-          </Link>
+          </button>
         </div>
       </header>
 
@@ -235,12 +242,13 @@ export function ClientView() {
                 <h2 className="text-[15px] font-semibold text-ink">
                   Mix vs model
                 </h2>
-                <Link
-                  to={`/clients/${client.id}/rebalance`}
+                <button
+                  type="button"
+                  onClick={() => setPreparing("rebalance")}
                   className="text-[13px] text-muted underline decoration-line underline-offset-4 transition-colors duration-150 ease-out hover:text-ink"
                 >
                   Rebalance
-                </Link>
+                </button>
               </div>
               <ul className="mt-4 space-y-4">
                 {byClass.map((c) => (

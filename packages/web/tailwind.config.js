@@ -103,6 +103,11 @@ export default {
           "0%": { transform: "translateX(-100%)" },
           "100%": { transform: "translateX(400%)" },
         },
+        // A sleeve segment filling in, left to right.
+        "fill-x": {
+          "0%": { transform: "scaleX(0)" },
+          "100%": { transform: "scaleX(1)" },
+        },
         // A plan line arriving: rises 6px and fades in.
         "rise-in": {
           "0%": { opacity: "0", transform: "translateY(6px)" },
@@ -112,6 +117,7 @@ export default {
       animation: {
         "indeterminate-sweep": "indeterminate-sweep 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite",
         "rise-in": "rise-in 320ms cubic-bezier(0.4, 0, 0.2, 1) backwards",
+        "fill-x": "fill-x 360ms cubic-bezier(0.4, 0, 0.2, 1) backwards",
       },
       maxWidth: {
         measure: "65ch",
