@@ -144,38 +144,63 @@ export interface Order {
 
 // Past investments, split across one fund per sleeve in roughly the model's
 // weights. Values over time come from real NAVs.
-const TEMPLATE: Array<Omit<OrderLine, "amount"> & { share: number }> = [
-  { sleeve: "equity.large", label: "Large Cap", schemeCode: "119018", schemeName: "HDFC Large Cap Fund", share: 0.25 },
-  { sleeve: "equity.mid", label: "Mid Cap", schemeCode: "118668", schemeName: "Nippon India Growth Mid Cap Fund", share: 0.12 },
-  { sleeve: "equity.small", label: "Small Cap", schemeCode: "119589", schemeName: "Sundaram Small Cap Fund", share: 0.08 },
-  { sleeve: "equity.intl", label: "International", schemeCode: "119517", schemeName: "Aditya Birla Sun Life International Equity Fund", share: 0.1 },
-  { sleeve: "debt.liquid", label: "Liquid", schemeCode: "118701", schemeName: "Nippon India Liquid Fund", share: 0.14 },
-  { sleeve: "debt.corporate", label: "Corporate", schemeCode: "133791", schemeName: "Kotak Corporate Bond Fund", share: 0.12 },
-  { sleeve: "debt.gilt", label: "Gilt", schemeCode: "120520", schemeName: "Invesco India Gilt Fund", share: 0.09 },
-  { sleeve: "metals.gold", label: "Gold", schemeCode: "119781", schemeName: "Kotak Gold Fund", share: 0.07 },
-  { sleeve: "metals.silver", label: "Silver", schemeCode: "150615", schemeName: "Axis Silver Fund of Fund", share: 0.03 },
-];
-const NIPPON_LARGE = { schemeCode: "118632", schemeName: "Nippon India Large Cap Fund" };
+type Seed = Omit<OrderLine, "amount"> & { share: number };
+const L = (sleeve: string, label: string, schemeCode: string, schemeName: string, share: number): Seed => ({ sleeve, label, schemeCode, schemeName, share });
 
-function seedOrder(id: string, date: string, amount: number, altLarge = false): Order {
-  const lines = TEMPLATE.map(({ share, ...l }) => ({
-    ...l,
-    ...(altLarge && l.sleeve === "equity.large" ? NIPPON_LARGE : {}),
-    amount: Math.round((amount * share) / 100) * 100,
-  }));
+// Three line-ups of real funds (from Fund Rankings and fund search), so the
+// book holds a spread of funds rather than one set.
+const LINEUPS: Record<"a" | "b" | "c", Seed[]> = {
+  a: [
+    L("equity.large", "Large Cap", "119018", "HDFC Large Cap Fund", 0.25),
+    L("equity.mid", "Mid Cap", "118668", "Nippon India Growth Mid Cap Fund", 0.12),
+    L("equity.small", "Small Cap", "119589", "Sundaram Small Cap Fund", 0.08),
+    L("equity.intl", "International", "119517", "Aditya Birla Sun Life International Equity Fund", 0.1),
+    L("debt.liquid", "Liquid", "118701", "Nippon India Liquid Fund", 0.14),
+    L("debt.corporate", "Corporate", "133791", "Kotak Corporate Bond Fund", 0.12),
+    L("debt.gilt", "Gilt", "120520", "Invesco India Gilt Fund", 0.09),
+    L("metals.gold", "Gold", "119781", "Kotak Gold Fund", 0.07),
+    L("metals.silver", "Silver", "150615", "Axis Silver Fund of Fund", 0.03),
+  ],
+  b: [
+    L("equity.large", "Large Cap", "118632", "Nippon India Large Cap Fund", 0.15),
+    L("equity.large", "Large Cap", "118269", "Canara Robeco Large Cap Fund", 0.1),
+    L("equity.mid", "Mid Cap", "120403", "Invesco India Mid Cap Fund", 0.12),
+    L("equity.small", "Small Cap", "118778", "Nippon India Small Cap Fund", 0.08),
+    L("equity.intl", "International", "118551", "Franklin U. S. Opportunities Equity Active Fund of Funds", 0.1),
+    L("debt.liquid", "Liquid", "119091", "HDFC Liquid Fund", 0.14),
+    L("debt.corporate", "Corporate", "120692", "ICICI Prudential Corporate Bond Fund", 0.12),
+    L("debt.gilt", "Gilt", "120520", "Invesco India Gilt Fund", 0.09),
+    L("metals.gold", "Gold", "119132", "HDFC Gold ETF Fund of Fund", 0.07),
+    L("metals.silver", "Silver", "149775", "ICICI Prudential Silver ETF FOF", 0.03),
+  ],
+  c: [
+    L("equity.large", "Large Cap", "118825", "Mirae Asset Large Cap Fund", 0.25),
+    L("equity.mid", "Mid Cap", "118989", "HDFC Mid Cap Fund", 0.12),
+    L("equity.small", "Small Cap", "125354", "Axis Small Cap Fund", 0.08),
+    L("equity.intl", "International", "119517", "Aditya Birla Sun Life International Equity Fund", 0.1),
+    L("debt.liquid", "Liquid", "118701", "Nippon India Liquid Fund", 0.14),
+    L("debt.corporate", "Corporate", "133791", "Kotak Corporate Bond Fund", 0.12),
+    L("debt.gilt", "Gilt", "120520", "Invesco India Gilt Fund", 0.09),
+    L("metals.gold", "Gold", "118663", "Nippon India Gold Savings Fund", 0.07),
+    L("metals.silver", "Silver", "150615", "Axis Silver Fund of Fund", 0.03),
+  ],
+};
+
+function seedOrder(id: string, date: string, amount: number, lineup: keyof typeof LINEUPS = "a"): Order {
+  const lines = LINEUPS[lineup].map(({ share, ...l }) => ({ ...l, amount: Math.round((amount * share) / 100) * 100 }));
   lines[0]!.amount += amount - lines.reduce((s, l) => s + l.amount, 0);
   return { id, date, amount, lines, seed: true };
 }
 
 const SEED_ORDERS: Record<string, Order[]> = {
-  "hrishikesh-patwardhan": [seedOrder("a1", "2024-02-12", 60_00_000), seedOrder("a2", "2025-03-10", 25_00_000)],
-  "devika-ramaswamy": [seedOrder("p1", "2024-06-03", 30_00_000, true)],
-  "kabir-sethi": [seedOrder("r1", "2024-03-18", 1_50_00_000), seedOrder("r2", "2025-06-16", 40_00_000), seedOrder("r3", "2026-05-11", 20_00_000)],
-  "nandini-chaturvedi": [seedOrder("n1", "2025-01-20", 18_00_000, true)],
-  "arjun-venkataraman": [seedOrder("v1", "2024-09-09", 55_00_000), seedOrder("v2", "2026-02-02", 12_00_000)],
-  "ritika-bhattacharjee": [seedOrder("m1", "2025-04-14", 35_00_000, true)],
-  "zoya-merchant": [seedOrder("k1", "2025-07-07", 90_00_000), seedOrder("k2", "2026-09-14", 15_00_000)],
-  "parth-oberoi": [seedOrder("s1", "2026-08-25", 12_00_000, true)],
+  "hrishikesh-patwardhan": [seedOrder("a1", "2024-02-12", 60_00_000, "a"), seedOrder("a2", "2025-03-10", 25_00_000, "c")],
+  "devika-ramaswamy": [seedOrder("p1", "2024-06-03", 30_00_000, "b")],
+  "kabir-sethi": [seedOrder("r1", "2024-03-18", 1_50_00_000, "a"), seedOrder("r2", "2025-06-16", 40_00_000, "b"), seedOrder("r3", "2026-05-11", 20_00_000, "c")],
+  "nandini-chaturvedi": [seedOrder("n1", "2025-01-20", 18_00_000, "b")],
+  "arjun-venkataraman": [seedOrder("v1", "2024-09-09", 55_00_000, "c"), seedOrder("v2", "2026-02-02", 12_00_000, "a")],
+  "ritika-bhattacharjee": [seedOrder("m1", "2025-04-14", 35_00_000, "b")],
+  "zoya-merchant": [seedOrder("k1", "2025-07-07", 90_00_000, "c"), seedOrder("k2", "2026-09-14", 15_00_000, "b")],
+  "parth-oberoi": [seedOrder("s1", "2026-08-25", 12_00_000, "c")],
 };
 
 const ordersKey = (id: string) => `core.clients.${id}.orders`;

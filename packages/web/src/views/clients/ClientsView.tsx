@@ -36,6 +36,7 @@ export function ClientsView() {
   const navigate = useNavigate();
   const [range, setRange] = useState<Range>("1Y");
   const [tab, setTab] = useState<Tab>("all");
+  const [showAll, setShowAll] = useState(false);
   const [name, setName] = useState<string | null>(null);
   const book = useBook(CLIENTS, range);
   const { allocation } = useCoreAllocation();
@@ -138,7 +139,7 @@ export function ClientsView() {
         <aside className="overflow-hidden rounded-xl border border-line bg-paper lg:self-start">
           <h2 className="px-5 pb-3 pt-5 text-lg font-semibold text-ink">Top Holdings</h2>
           <ul className="divide-y divide-line border-t border-line">
-            {book.holdings.slice(0, 10).map((h) => (
+            {book.holdings.slice(0, showAll ? undefined : 12).map((h) => (
               <li key={h.schemeCode} className="flex items-center justify-between gap-3 px-5 py-3">
                 <span className="flex min-w-0 items-center gap-2.5">
                   <span className="h-2.5 w-2.5 shrink-0" style={{ backgroundColor: segmentColor(h.sleeve, allocation ?? undefined) }} aria-hidden="true" />
@@ -160,6 +161,15 @@ export function ClientsView() {
             ))}
             {book.loading && <li className="px-5 py-6 text-[13px] text-muted">Loading holdings…</li>}
           </ul>
+          {book.holdings.length > 12 && (
+            <button
+              type="button"
+              onClick={() => setShowAll((v) => !v)}
+              className="w-full border-t border-line px-5 py-3 text-left text-[13px] text-muted transition-colors duration-150 ease-out hover:text-ink"
+            >
+              {showAll ? "Show top 12" : `Show all ${book.holdings.length}`}
+            </button>
+          )}
         </aside>
       </div>
     </div>
