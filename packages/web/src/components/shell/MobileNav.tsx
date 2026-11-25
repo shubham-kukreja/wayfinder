@@ -7,7 +7,7 @@ import { ALLOCATION_ROUTES, BACKTESTING_ROUTES, CLIENTS_ROUTES, FUNDS_ROUTES, GO
 // hairline separators rather than headings — a heading per group would cost
 // more width than the labels themselves, but running all six together would
 // lose the structure entirely.
-const SECTIONS = [ALLOCATION_ROUTES, FUNDS_ROUTES, CLIENTS_ROUTES, MODEL_ROUTES, BACKTESTING_ROUTES, GOVERNANCE_ROUTES, [NOTES_ROUTE], REFERENCE_ROUTES];
+const SECTIONS = [CLIENTS_ROUTES, ALLOCATION_ROUTES, FUNDS_ROUTES, MODEL_ROUTES, BACKTESTING_ROUTES, GOVERNANCE_ROUTES, [NOTES_ROUTE], REFERENCE_ROUTES];
 
 export function MobileNav() {
   return (

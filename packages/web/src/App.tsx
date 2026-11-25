@@ -37,7 +37,7 @@ export default function App() {
         <CoreSessionGate>
           {location.pathname.startsWith("/model/") && <DraftStatusBanner />}
           <Routes>
-            <Route path="/" element={<Navigate to="/overview" replace />} />
+            <Route path="/" element={<Navigate to="/clients" replace />} />
             <Route path="/overview" element={<OverviewView />} />
             <Route path="/funds/*" element={<FundRankingsView />} />
             <Route path="/clients" element={<ClientsView />} />
@@ -64,7 +64,7 @@ export default function App() {
             <Route path="/backtest/new" element={<NewBacktestView />} />
             <Route path="/backtest/runs" element={<BacktestRunsView />} />
             <Route path="/backtest/runs/:id" element={<BacktestReportView />} />
-            <Route path="*" element={<Navigate to="/overview" replace />} />
+            <Route path="*" element={<Navigate to="/clients" replace />} />
           </Routes>
         </CoreSessionGate>
       </div>

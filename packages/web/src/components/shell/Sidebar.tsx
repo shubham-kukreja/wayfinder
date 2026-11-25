@@ -12,9 +12,9 @@ import { ALLOCATION_ROUTES, BACKTESTING_ROUTES, CLIENTS_ROUTES, FUNDS_ROUTES, GO
 // what-if workspace with its own run queue, Governance is the gate between
 // draft and published. Methodology sits outside them as reference.
 const GROUPS: Array<{ id: string; label: string; routes: readonly { path: string; label: string }[] }> = [
+  { id: "clients", label: "Clients", routes: CLIENTS_ROUTES },
   { id: "allocation", label: "Allocation", routes: ALLOCATION_ROUTES },
   { id: "funds", label: "Funds", routes: FUNDS_ROUTES },
-  { id: "clients", label: "Clients", routes: CLIENTS_ROUTES },
   { id: "model", label: "Model", routes: MODEL_ROUTES },
   { id: "backtesting", label: "Backtesting", routes: BACKTESTING_ROUTES },
   { id: "governance", label: "Governance", routes: GOVERNANCE_ROUTES },
@@ -51,7 +51,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
     >
       <div className={`flex h-[77px] items-center ${collapsed ? "justify-center border-b border-line" : "justify-between px-5"}`}>
         {!collapsed && (
-          <NavLink to="/overview" className="font-display text-lg font-extrabold tracking-display text-ink">
+          <NavLink to="/clients" className="font-display text-lg font-extrabold tracking-display text-ink">
             CORE.
           </NavLink>
         )}
