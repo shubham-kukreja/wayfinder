@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AumChart } from "../../components/clients/AumChart.js";
 import { useBook, type ClientBook } from "../../hooks/useBook.js";
@@ -6,7 +6,6 @@ import { segmentColor } from "../../components/AllocationBar.js";
 import type { Range } from "../../lib/aum.js";
 import { formatRupees } from "../../lib/backtestFormat.js";
 import { CLIENTS } from "../../lib/clients.js";
-import { coreAuth } from "../../lib/coreApi.js";
 import { useCoreAllocation } from "../../hooks/useCoreAllocation.js";
 import { formatSignedPct } from "../../lib/format.js";
 
@@ -32,21 +31,13 @@ export function shortFundName(name: string): string {
 
 type Tab = "all" | "recent" | "largest";
 
-export function ClientsView() {
+export function ClientsView({ name }: { name: string }) {
   const navigate = useNavigate();
   const [range, setRange] = useState<Range>("1Y");
   const [tab, setTab] = useState<Tab>("all");
   const [showAll, setShowAll] = useState(false);
-  const [name, setName] = useState<string | null>(null);
   const book = useBook(CLIENTS, range);
   const { allocation } = useCoreAllocation();
-
-  useEffect(() => {
-    coreAuth
-      .me()
-      .then((u) => setName(u.name ?? u.email.split("@")[0] ?? null))
-      .catch(() => setName(null));
-  }, []);
 
   const rows = useMemo(() => {
     const list = [...book.clients];
@@ -60,12 +51,12 @@ export function ClientsView() {
   return (
     <div className="mx-auto w-full max-w-[1440px] px-8 py-8">
       <header className="flex flex-wrap items-start justify-between gap-6">
-        <h1 className="font-display text-[28px] leading-tight text-ink">
+        <h1 className="font-display text-[28px] leading-tight text-ink motion-safe:animate-rise-in">
           {greeting()}
           <br />
-          <span className="text-muted">{name ?? " "}</span>
+          <span className="text-muted">{name}</span>
         </h1>
-        <dl className="flex flex-wrap items-start gap-x-10 gap-y-3">
+        <dl className="flex flex-wrap items-start gap-x-10 gap-y-3 motion-safe:animate-rise-in motion-safe:[animation-delay:300ms]">
           <HeadStat label="Clients" value={String(CLIENTS.length)} />
           <HeadStat label="Total AUM" value={book.loading ? "…" : formatRupees(Math.round(book.total))} title="Current value of every client's holdings, at the latest NAVs" />
           <HeadStat
@@ -79,7 +70,7 @@ export function ClientsView() {
 
       {book.error && <p className="mt-4 text-[13px] text-danger-500">Failed to load NAVs: {book.error}</p>}
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px] motion-safe:animate-rise-in motion-safe:[animation-delay:360ms] motion-safe:focus-within:animate-none">
         <div className="min-w-0 space-y-6">
           <section className="overflow-hidden rounded-xl border border-line bg-paper">
             <AumChart points={book.points} range={range} onRange={setRange} loading={book.loading} />

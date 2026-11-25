@@ -1,0 +1,21 @@
+[build]
+  base = "."
+  command = "pnpm install --frozen-lockfile --filter @wayfinder/web... && pnpm --filter @wayfinder/web build"
+  publish = "packages/web/dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  PNPM_VERSION = "9.15.4"
+  VITE_CORE_API_BASE_URL = ""
+
+# Keep the API on the dashboard's origin for session and CSRF cookies.
+[[redirects]]
+  from = "/v1/*"
+  to = "https://api-production-46e19536.up.railway.app/v1/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
