@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { stickyClassTotals } from "../../components/AllocationBar.js";
+import { AllocationBar, type AllocationDepth } from "../../components/AllocationBar.js";
+import { TabRow } from "../../components/ui/TabRow.js";
 import { FundPickerPanel } from "../../components/clients/FundPickerPanel.js";
+import { OrderHandoff } from "../../components/clients/OrderHandoff.js";
+import { RebalanceIcon } from "../../components/clients/icons.js";
 import { Breadcrumb, PrimaryButton, SecondaryButton } from "../../components/clients/ui.js";
 import { SleeveAllocation, type SleeveFilter } from "../../components/SleeveAllocation.js";
 import { Slider } from "../../components/ui/Slider.js";
@@ -15,6 +18,10 @@ import { formatPct } from "../../lib/format.js";
 // widget, in the model's order) with one or two funds and the rupees for
 // each; and the order, largest amount first, to confirm.
 
+const DEPTH_OPTIONS: ReadonlyArray<{ id: AllocationDepth; label: string }> = [
+  { id: "overview", label: "Asset classes" },
+  { id: "detail", label: "Sleeves" },
+];
 const PRESETS = [1_00_000, 5_00_000, 10_00_000, 25_00_000];
 const STEPS = ["Amount", "Funds", "Review"] as const;
 type Step = 0 | 1 | 2 | 3; // 3: placed
@@ -55,6 +62,9 @@ export function InvestView() {
   };
   const [step, setStep] = useState<Step>(0);
   const [filter, setFilter] = useState<SleeveFilter>("all");
+  const [depth, setDepth] = useState<AllocationDepth>("overview");
+  const [sending, setSending] = useState(false);
+  const [platform, setPlatform] = useState<string | null>(null);
   const [choosing, setChoosing] = useState<{ sleeve: string; slot: number } | null>(null);
   const plan = useInvestmentPlan(amount);
   const bySleeve = useMemo(() => new Map(plan.lines.map((l) => [l.sleeve, l])), [plan.lines]);
@@ -70,7 +80,7 @@ export function InvestView() {
       </div>
     );
   }
-  const first = client.name.split(" ")[0];
+  const first = client.name.split(" ")[0] ?? client.name;
   const total = plan.lines.reduce((s, l) => s + l.amount, 0);
   const missing = buys.filter((b) => !b.slot.fund).length;
   const ordered = [...buys].sort((a, b) => b.slot.amount - a.slot.amount);
@@ -87,7 +97,6 @@ export function InvestView() {
         .filter((b) => b.slot.fund)
         .map((b) => ({ sleeve: b.sleeve, label: b.label, schemeCode: b.slot.fund!.schemeCode, schemeName: b.slot.fund!.schemeName, amount: b.slot.amount })),
     });
-    setStep(3);
   }
 
   return (
@@ -151,21 +160,11 @@ export function InvestView() {
               </button>
             ))}
           </div>
-          {plan.allocation && plan.lines.length > 0 ? (
-            <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-3">
-              {stickyClassTotals(plan.allocation).map((c) => {
-                const amt = plan.lines.filter((l) => assetClassOf(l.sleeve) === c.id).reduce((s, l) => s + l.amount, 0);
-                return (
-                  <div key={c.id} className="flex items-center justify-between gap-3 rounded-md bg-paper-2 px-4 py-3">
-                    <span className="flex items-center gap-2 text-[13px] text-ink-2">
-                      <span className="h-2.5 w-2.5" style={{ backgroundColor: c.color }} aria-hidden="true" />
-                      {c.label.replace(" Segments", "").replace(" Buckets", "")}
-                      <span className="tabular-nums text-muted">{formatPct(c.weight, 1)}</span>
-                    </span>
-                    <span className="text-[15px] font-semibold tabular-nums text-ink">{formatRupeesCompact(amt)}</span>
-                  </div>
-                );
-              })}
+          {plan.allocation ? (
+            <div className="mt-8 border-t border-line pt-6">
+              {/* The same allocation display as Overview's top card. */}
+              <TabRow options={DEPTH_OPTIONS} value={depth} onChange={setDepth} className="mb-5" />
+              <AllocationBar allocation={plan.allocation} depth={depth} />
             </div>
           ) : (
             <p className="mt-4 text-[13px] text-muted">Loading the model allocation…</p>
@@ -247,7 +246,7 @@ export function InvestView() {
             <button type="button" onClick={() => setStep(1)} className="text-[13px] font-semibold text-muted transition-colors duration-150 ease-out hover:text-ink">
               Back to funds
             </button>
-            <PrimaryButton disabled={missing > 0} onClick={confirm}>
+            <PrimaryButton disabled={missing > 0} onClick={() => setSending(true)}>
               Confirm investment
             </PrimaryButton>
           </div>
@@ -258,13 +257,29 @@ export function InvestView() {
         <section className="mt-8 rounded-xl border border-line bg-paper px-6 py-12 text-center animate-rise-in">
           <h2 className="text-[22px] font-semibold tabular-nums text-ink">{formatRupees(total)} invested for {first}</h2>
           <p className="mt-2 text-[13px] text-muted">
-            {buys.length} funds across {plan.lines.length} sleeves. Now in {first}'s holdings and activity
+            {buys.length} funds across {plan.lines.length} sleeves{platform ? `, sent through ${platform} for ${first}'s approval` : ""}
           </p>
           <div className="mt-6 flex justify-center gap-3">
             <PrimaryButton onClick={() => navigate(`/clients/${client.id}`)}>Back to {first}</PrimaryButton>
             <SecondaryButton onClick={() => setStep(0)}>Invest more</SecondaryButton>
           </div>
         </section>
+      )}
+
+      {sending && (
+        <OrderHandoff
+          clientFirstName={first}
+          amount={total}
+          funds={buys.length}
+          onPlaced={(p) => {
+            confirm();
+            setPlatform(p);
+          }}
+          onClose={() => {
+            setSending(false);
+            if (platform) setStep(3);
+          }}
+        />
       )}
 
       {choosingLine && choosingSlot && (
@@ -293,30 +308,41 @@ function meta(f: FundChoice): string {
 
 function FundRows({ line, loading, onChange }: { line: PlannedLine; loading: boolean; onChange: (slot: number) => void }) {
   return (
-    <ul className="divide-y divide-line rounded-md border border-line">
-      {line.funds.map((s) => (
-        <li key={s.slot} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 px-4 py-2.5">
-          <span className="min-w-0">
-            <span className="block truncate text-[14px] text-ink" title={s.fund?.schemeName}>
-              {s.fund?.schemeName ?? (loading ? "Finding a fund…" : "No fund available")}
-            </span>
-            {s.fund && (
-              <span className="text-[12px] tabular-nums text-muted">
-                {meta(s.fund)}
-                {s.overridden && " · chosen by you"}
+    <ul className="border-l border-line">
+      {line.funds.map((s) => {
+        const share = line.amount > 0 ? s.amount / line.amount : 1;
+        const score = s.fund?.source === "ranking" && s.fund.composite != null ? s.fund.composite : null;
+        return (
+          <li key={s.slot} className="grid grid-cols-[48px_minmax(0,1fr)_auto_auto] items-center gap-x-4 py-2 pl-4">
+            <span className="text-[13px] tabular-nums text-muted">{line.funds.length > 1 ? `${Math.round(share * 100)}%` : "All"}</span>
+            <span className="min-w-0">
+              <span className="block truncate text-[14px] text-ink" title={s.fund?.schemeName}>
+                {s.fund?.schemeName ?? (loading ? "Finding a fund…" : "No fund available")}
               </span>
-            )}
-          </span>
-          <span className="text-[14px] tabular-nums text-ink-2">{formatRupees(s.amount)}</span>
-          <button
-            type="button"
-            onClick={() => onChange(s.slot)}
-            className="text-[13px] font-semibold text-muted underline decoration-line underline-offset-4 transition-colors duration-150 ease-out hover:text-ink"
-          >
-            Change
-          </button>
-        </li>
-      ))}
+              {s.fund && (
+                <span className="mt-1 flex items-center gap-2 text-[12px] tabular-nums text-muted">
+                  {score != null && (
+                    <span className="h-1 w-16 overflow-hidden rounded-full bg-paper-2" aria-hidden="true">
+                      <span className="block h-full rounded-full bg-[#2BAB48]" style={{ width: `${score}%` }} />
+                    </span>
+                  )}
+                  {meta(s.fund)}
+                  {s.overridden && " · chosen by you"}
+                </span>
+              )}
+            </span>
+            <span className="text-[14px] font-semibold tabular-nums text-ink">{formatRupees(s.amount)}</span>
+            <button
+              type="button"
+              onClick={() => onChange(s.slot)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line px-2.5 text-[12px] font-semibold text-ink-2 transition-colors duration-150 ease-out hover:bg-paper-2 hover:text-ink"
+            >
+              <RebalanceIcon className="h-3.5 w-3.5" />
+              Change
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }

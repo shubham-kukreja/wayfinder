@@ -24,7 +24,19 @@ export function useBook(clients: Client[], range: Range, version = 0) {
   const { navs, error } = useNavs(codes, from);
 
   return useMemo(() => {
-    if (!navs) return { loading: !error && all.length > 0, error, points: [] as Point[], change: { pct: null, amount: 0 }, total: 0, invested: 0, holdings: [] as HoldingValue[], clients: [] as ClientBook[] };
+    if (!navs)
+      return {
+        loading: !error && all.length > 0,
+        error,
+        points: [] as Point[],
+        change: { pct: null, amount: 0 },
+        total: 0,
+        invested: 0,
+        holdings: [] as HoldingValue[],
+        clients: [] as ClientBook[],
+        navs: null,
+        asOf: null as string | null,
+      };
     const lots = lotsOf(all, navs);
     const dates = timeline(lots, navs);
     const full = series(lots, navs, dates);
@@ -56,6 +68,8 @@ export function useBook(clients: Client[], range: Range, version = 0) {
       invested: last?.invested ?? 0,
       holdings,
       clients: books,
+      navs,
+      asOf,
     };
   }, [navs, error, all, orders, range]);
 }

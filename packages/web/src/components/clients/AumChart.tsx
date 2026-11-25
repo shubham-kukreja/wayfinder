@@ -21,6 +21,29 @@ const fmtFull = (iso: string) =>
     year: "numeric",
   });
 
+/** Fritsch–Carlson monotone cubic through the points, as an SVG path. */
+function monotonePath(pts: Array<[number, number]>): string {
+  const n = pts.length;
+  const dx = (i: number) => pts[i + 1]![0] - pts[i]![0];
+  const slope = (i: number) => (pts[i + 1]![1] - pts[i]![1]) / dx(i);
+  const m: number[] = new Array(n).fill(0);
+  m[0] = slope(0);
+  m[n - 1] = slope(n - 2);
+  for (let i = 1; i < n - 1; i++) {
+    const a = slope(i - 1);
+    const b = slope(i);
+    m[i] = a * b <= 0 ? 0 : (2 * a * b) / (a + b); // harmonic mean keeps the curve monotone
+  }
+  let d = `M${pts[0]![0].toFixed(1)},${pts[0]![1].toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const h = dx(i) / 3;
+    const [x0, y0] = pts[i]!;
+    const [x1, y1] = pts[i + 1]!;
+    d += `C${(x0 + h).toFixed(1)},${(y0 + m[i]! * h).toFixed(1)} ${(x1 - h).toFixed(1)},${(y1 - m[i + 1]! * h).toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`;
+  }
+  return d;
+}
+
 function niceTicks(min: number, max: number, count = 5): number[] {
   if (max <= min) return [min];
   const raw = (max - min) / (count - 1);
@@ -50,9 +73,18 @@ export function AumChart({
   const ref = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
 
+  // Altruist draws a smooth line: thin the daily series to about 160 points
+  // (keeping the first and last) and draw a monotone cubic through them, so
+  // the curve never overshoots the real values between points.
+  const shown = useMemo(() => {
+    if (points.length <= 160) return points;
+    const step = (points.length - 1) / 159;
+    return Array.from({ length: 160 }, (_, i) => points[Math.round(i * step)]!);
+  }, [points]);
+
   const geo = useMemo(() => {
-    if (points.length < 2) return null;
-    const vals = points.map((p) => p.value);
+    if (shown.length < 2) return null;
+    const vals = shown.map((p) => p.value);
     let min = Math.min(...vals);
     let max = Math.max(...vals);
     const pad = (max - min) * 0.08 || max * 0.02 || 1;
@@ -61,21 +93,13 @@ export function AumChart({
     const ticks = niceTicks(min, max);
     min = Math.min(min, ticks[0]!);
     max = Math.max(max, ticks[ticks.length - 1]!);
-    const x = (i: number) =>
-      PAD.left + (i / (points.length - 1)) * (W - PAD.left - PAD.right);
-    const y = (v: number) =>
-      PAD.top + (1 - (v - min) / (max - min)) * (H - PAD.top - PAD.bottom);
-    const line = points
-      .map(
-        (p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`,
-      )
-      .join("");
-    const area = `${line}L${x(points.length - 1).toFixed(1)},${H - PAD.bottom}L${x(0).toFixed(1)},${H - PAD.bottom}Z`;
-    const xTicks = [0, 0.25, 0.5, 0.75, 1].map((f) =>
-      Math.round(f * (points.length - 1)),
-    );
+    const x = (i: number) => PAD.left + (i / (shown.length - 1)) * (W - PAD.left - PAD.right);
+    const y = (v: number) => PAD.top + (1 - (v - min) / (max - min)) * (H - PAD.top - PAD.bottom);
+    const line = monotonePath(shown.map((p, i) => [x(i), y(p.value)]));
+    const area = `${line}L${x(shown.length - 1).toFixed(1)},${H - PAD.bottom}L${x(0).toFixed(1)},${H - PAD.bottom}Z`;
+    const xTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(f * (shown.length - 1)));
     return { x, y, line, area, ticks, xTicks };
-  }, [points]);
+  }, [shown]);
 
   function onMove(e: React.MouseEvent<SVGSVGElement>) {
     if (!geo || !ref.current) return;
@@ -87,7 +111,7 @@ export function AumChart({
     setHover(Math.max(0, Math.min(points.length - 1, i)));
   }
 
-  const hp = hover != null ? points[hover] : null;
+  const hp = hover != null ? shown[hover] : null;
 
   return (
     <div className="flex flex-col">
@@ -168,7 +192,7 @@ export function AumChart({
                 className={`pointer-events-none absolute bottom-1.5 whitespace-nowrap text-[10px] text-muted ${k === 0 ? "" : k === 4 ? "-translate-x-full" : "-translate-x-1/2"}`}
                 style={{ left: `${(geo.x(i) / W) * 100}%` }}
               >
-                {fmtDay(points[i]!.date)}
+                {fmtDay(shown[i]!.date)}
               </span>
             ))}
           </>

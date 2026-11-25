@@ -1,4 +1,5 @@
 import type { Allocation } from "@wayfinder/engine";
+import { basketById, basketLabel } from "./baskets.js";
 import type { FundScore } from "./coreApi.js";
 
 // Clients, for now a frontend fixture: people, each in a basket (a
@@ -19,19 +20,22 @@ export interface Client {
   city: string;
 }
 
-// Every client is in A4 for now: the only archetype whose model portfolio
-// (core's Balanced profile) is set up.
-const balanced = { basket: "a4", basketName: "A4 · Affluent Professional" };
+// Clients sit in different archetypes; every archetype uses the Balanced
+// model for now (lib/baskets.ts).
+const A = (id: string) => {
+  const b = basketById(id)!;
+  return { basket: id, basketName: basketLabel(b) };
+};
 
 export const CLIENTS: Client[] = [
-  { id: "hrishikesh-patwardhan", name: "Hrishikesh Patwardhan", netWorth: 3_40_00_000, investable: 10_00_000, since: "2024-02-12", city: "Mumbai", ...balanced },
-  { id: "devika-ramaswamy", name: "Devika Ramaswamy", netWorth: 1_10_00_000, investable: 5_00_000, since: "2024-06-03", city: "Bengaluru", ...balanced },
-  { id: "kabir-sethi", name: "Kabir Sethi", netWorth: 6_75_00_000, investable: 25_00_000, since: "2024-03-18", city: "Delhi", ...balanced },
-  { id: "nandini-chaturvedi", name: "Nandini Chaturvedi", netWorth: 85_00_000, investable: 3_00_000, since: "2025-01-20", city: "Chennai", ...balanced },
-  { id: "arjun-venkataraman", name: "Arjun Venkataraman", netWorth: 2_20_00_000, investable: 10_00_000, since: "2024-09-09", city: "Jaipur", ...balanced },
-  { id: "ritika-bhattacharjee", name: "Ritika Bhattacharjee", netWorth: 1_60_00_000, investable: 5_00_000, since: "2025-04-14", city: "Pune", ...balanced },
-  { id: "zoya-merchant", name: "Zoya Merchant", netWorth: 4_10_00_000, investable: 15_00_000, since: "2025-07-07", city: "Gurugram", ...balanced },
-  { id: "parth-oberoi", name: "Parth Oberoi", netWorth: 70_00_000, investable: 2_00_000, since: "2026-08-25", city: "Hyderabad", ...balanced },
+  { id: "hrishikesh-patwardhan", name: "Hrishikesh Patwardhan", netWorth: 3_40_00_000, investable: 10_00_000, since: "2024-02-12", city: "Mumbai", ...A("a4") },
+  { id: "devika-ramaswamy", name: "Devika Ramaswamy", netWorth: 1_10_00_000, investable: 5_00_000, since: "2024-06-03", city: "Bengaluru", ...A("a5") },
+  { id: "kabir-sethi", name: "Kabir Sethi", netWorth: 6_75_00_000, investable: 25_00_000, since: "2024-03-18", city: "Delhi", ...A("a3b-ii") },
+  { id: "nandini-chaturvedi", name: "Nandini Chaturvedi", netWorth: 85_00_000, investable: 3_00_000, since: "2025-01-20", city: "Chennai", ...A("a2") },
+  { id: "arjun-venkataraman", name: "Arjun Venkataraman", netWorth: 2_20_00_000, investable: 10_00_000, since: "2024-09-09", city: "Jaipur", ...A("a3a") },
+  { id: "ritika-bhattacharjee", name: "Ritika Bhattacharjee", netWorth: 1_60_00_000, investable: 5_00_000, since: "2025-04-14", city: "Pune", ...A("a4") },
+  { id: "zoya-merchant", name: "Zoya Merchant", netWorth: 4_10_00_000, investable: 15_00_000, since: "2025-07-07", city: "Gurugram", ...A("a4") },
+  { id: "parth-oberoi", name: "Parth Oberoi", netWorth: 70_00_000, investable: 2_00_000, since: "2026-08-25", city: "Hyderabad", ...A("a1") },
 ];
 
 export const clientById = (id: string | undefined) => CLIENTS.find((c) => c.id === id) ?? null;
@@ -135,7 +139,7 @@ export interface Order {
   /** A past investment from the client records (not placed here). */
   seed?: boolean;
   /** invest: new money; rebalance: sells and buys that net to zero. */
-  kind?: "invest" | "rebalance";
+  kind?: "invest" | "rebalance" | "harvest";
 }
 
 // Past investments, split across one fund per sleeve in roughly the model's

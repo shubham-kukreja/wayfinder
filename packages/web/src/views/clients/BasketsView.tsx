@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { SleeveAllocation, type SleeveFilter } from "../../components/SleeveAllocation.js";
+import { AllocationBar, type AllocationDepth } from "../../components/AllocationBar.js";
+import { Breadcrumb } from "../../components/clients/ui.js";
+import { TabRow } from "../../components/ui/TabRow.js";
+
+const DEPTH_OPTIONS: ReadonlyArray<{ id: AllocationDepth; label: string }> = [
+  { id: "overview", label: "Asset classes" },
+  { id: "detail", label: "Sleeves" },
+];
 import { Pill } from "../../components/ui/Pill.js";
 import { useBook } from "../../hooks/useBook.js";
 import { useCoreAllocation } from "../../hooks/useCoreAllocation.js";
@@ -53,7 +61,7 @@ export function BasketsView() {
                     {b.code} · {b.name}
                   </span>
                   {b.profile ? (
-                    <span className="text-[12px] text-brand-800">Model portfolio live</span>
+                    <span className="text-[12px] text-muted">Balanced model for now</span>
                   ) : (
                     <span className="text-[12px] text-muted">Model portfolio not set up yet</span>
                   )}
@@ -72,11 +80,22 @@ export function BasketsView() {
   );
 }
 
+// Where an archetype sits on each dimension, 0 (left) to 1 (right).
+const HORIZON: Record<string, number> = { short: 0.12, "medium (3": 0.42, "medium (5": 0.5, "medium–long": 0.66, long: 0.9 };
+const RISK: Record<string, number> = { low: 0.12, limited: 0.3, medium: 0.5, balanced: 0.66, high: 0.9 };
+const LIQUIDITY: Record<string, number> = { "low–medium": 0.3, low: 0.12, "medium–high": 0.7, medium: 0.5, high: 0.9 };
+function place(map: Record<string, number>, text: string): number {
+  const t = text.toLowerCase();
+  const key = Object.keys(map).find((k) => t.startsWith(k));
+  return key ? map[key]! : 0.5;
+}
+
 export function BasketView() {
   const { id } = useParams();
   const navigate = useNavigate();
   const basket = basketById(id);
   const [filter, setFilter] = useState<SleeveFilter>("all");
+  const [depth, setDepth] = useState<AllocationDepth>("overview");
   const members = basket ? clientsIn(basket) : [];
   const book = useBook(members, "MAX");
   const { allocation, data } = useCoreAllocation();
@@ -88,97 +107,109 @@ export function BasketView() {
       </div>
     );
   }
+  const others = BASKETS.filter((b) => b.id !== basket.id);
   return (
     <div className="mx-auto w-full max-w-[1440px] px-8 py-8">
-      <nav className="text-[13px] text-muted" aria-label="Breadcrumb">
-        <Link to="/clients" className="hover:text-ink">
-          Clients
-        </Link>
-        <span className="px-2">/</span>
-        <Link to="/baskets" className="hover:text-ink">
-          Baskets
-        </Link>
-        <span className="px-2">/</span>
-        <span className="text-ink">{basket.code}</span>
-      </nav>
-      <header className="mt-4 flex flex-wrap items-end justify-between gap-6">
-        <div>
-          <span className="inline-block rounded-md bg-lilac px-2 py-0.5 text-[12px] font-semibold text-ink">{basket.code}</span>
-          <h1 className="mt-2 font-display text-[28px] leading-tight text-ink">{basket.name}</h1>
-          <p className="mt-1 max-w-2xl text-[13px] text-muted">{basket.goal}</p>
-        </div>
-        <dl className="flex flex-wrap gap-x-10 gap-y-3">
-          <div>
-            <dt className="text-[12px] text-muted">Clients</dt>
-            <dd className="mt-1 text-[22px] font-semibold tabular-nums text-ink">{members.length}</dd>
-          </div>
-          <div>
-            <dt className="text-[12px] text-muted">AUM</dt>
-            <dd className="mt-1 text-[22px] font-semibold tabular-nums text-ink">{members.length === 0 ? "–" : book.loading ? "…" : formatRupees(Math.round(book.total))}</dd>
-          </div>
-        </dl>
+      <Breadcrumb items={[{ label: "Clients", to: "/clients" }, { label: "Baskets", to: "/baskets" }, { label: basket.code }]} />
+
+      <header className="mt-4 max-w-3xl">
+        <span className="inline-block rounded-md bg-lilac px-2 py-0.5 text-[12px] font-semibold text-ink">{basket.code}</span>
+        <h1 className="mt-2 font-display text-[28px] leading-tight text-ink">{basket.name}</h1>
+        <p className="mt-2 text-[16px] leading-relaxed text-ink-2">{basket.who}</p>
       </header>
 
-      <div className="mt-6 grid grid-cols-2 rounded-xl border border-line sm:grid-cols-4 sm:divide-x sm:divide-line">
-        <Def label="Time horizon" value={basket.horizon} />
-        <Def label="Risk capacity" value={basket.riskCapacity} />
-        <Def label="Primary goal" value={basket.goal} />
-        <Def label="Liquidity needs" value={basket.liquidity} />
-      </div>
-
-      <div className="mt-6 grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-        {basket.profile && allocation ? (
-          <SleeveAllocation
-            allocation={allocation}
-            filter={filter}
-            onFilter={setFilter}
-            title="Model portfolio"
-            subtitle={
-              <>
-                {allocation.rollup.length} sleeves · {data?.version.kind === "draft" ? "shared draft" : "published"}, as of {data?.version.as_of}
-              </>
-            }
-          />
-        ) : (
-          <section className="rounded-xl border border-line bg-paper px-5 py-6">
-            <h2 className="text-lg font-semibold text-ink">Model portfolio</h2>
-            <p className="mt-2 text-[13px] text-muted">
-              {basket.profile ? "Loading the model allocation…" : `The model portfolio for ${basket.name} is not set up yet, so clients cannot be placed in this basket.`}
-            </p>
-          </section>
-        )}
-        <section className="overflow-hidden rounded-xl border border-line bg-paper">
-          <h2 className="px-5 pb-3 pt-5 text-lg font-semibold text-ink">Clients in {basket.code}</h2>
-          {members.length === 0 ? (
-            <p className="border-t border-line px-5 py-6 text-[13px] text-muted">No clients yet.</p>
-          ) : (
-            <ul className="divide-y divide-line border-t border-line">
-              {book.clients
-                .slice()
-                .sort((a, b) => b.value - a.value)
-                .map((c) => (
-                  <li key={c.client.id}>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/clients/${c.client.id}`)}
-                      className="flex w-full items-center justify-between gap-3 px-5 py-3 text-left hover:bg-paper-2"
-                    >
-                      <span>
-                        <span className="block text-[13px] font-semibold text-ink">{c.client.name}</span>
-                        <span className="text-[12px] text-muted">{c.client.city}</span>
-                      </span>
-                      <span className="text-[13px] tabular-nums text-ink">{formatRupees(Math.round(c.value))}</span>
-                    </button>
-                  </li>
-                ))}
-            </ul>
-          )}
-          {basket.profile && (
-            <div className="border-t border-line px-5 py-3">
-              <Pill tone="green">Model portfolio live</Pill>
+      <div className="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0 space-y-6">
+          <section className="rounded-xl border border-line bg-paper px-6 py-5">
+            <h2 className="text-[15px] font-semibold text-ink">Profile</h2>
+            <div className="mt-4 grid grid-cols-1 gap-x-10 gap-y-6 md:grid-cols-2">
+              <Scale label="Time horizon" value={basket.horizon} at={place(HORIZON, basket.horizon)} left="Under 3 years" right="10+ years" />
+              <Scale label="Risk capacity" value={basket.riskCapacity} at={place(RISK, basket.riskCapacity)} left="Low" right="High" />
+              <Scale label="Liquidity needs" value={basket.liquidity} at={place(LIQUIDITY, basket.liquidity)} left="Lock-in fine" right="Needs access" />
+              <div>
+                <p className="text-[13px] text-muted">Primary goal</p>
+                <p className="mt-1 text-[15px] text-ink">{basket.goal}</p>
+              </div>
             </div>
-          )}
-        </section>
+          </section>
+
+          <section className="rounded-xl border border-line bg-paper px-6 py-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-[15px] font-semibold text-ink">Model portfolio</h2>
+              <p className="text-[13px] text-muted">
+                Balanced model for now · {data?.version.kind === "draft" ? "shared draft" : "published"}
+                {data ? `, ${new Date(`${data.version.as_of}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}` : ""}
+              </p>
+            </div>
+            {allocation ? (
+              <div className="mt-4">
+                <TabRow options={DEPTH_OPTIONS} value={depth} onChange={setDepth} className="mb-5" />
+                <AllocationBar allocation={allocation} depth={depth} />
+              </div>
+            ) : (
+              <p className="mt-3 text-[13px] text-muted">Loading the model allocation…</p>
+            )}
+          </section>
+
+          {allocation && <SleeveAllocation allocation={allocation} filter={filter} onFilter={setFilter} />}
+        </div>
+
+        <aside className="space-y-6">
+          <section className="rounded-xl border border-line bg-paper px-5 py-4">
+            <p className="text-[13px] text-muted">In this basket</p>
+            <p className="mt-1 text-[15px] tabular-nums text-ink">
+              {members.length} client{members.length === 1 ? "" : "s"}
+              {members.length > 0 && !book.loading && <span className="text-muted"> · {formatRupees(Math.round(book.total))}</span>}
+            </p>
+            {members.length > 0 && (
+              <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
+                {members.map((m, i) => (
+                  <span key={m.id}>
+                    {i > 0 && ", "}
+                    <button type="button" onClick={() => navigate(`/clients/${m.id}`)} className="underline decoration-line underline-offset-4 hover:text-ink">
+                      {m.name}
+                    </button>
+                  </span>
+                ))}
+              </p>
+            )}
+          </section>
+          <section className="overflow-hidden rounded-xl border border-line bg-paper">
+            <h2 className="px-5 pb-3 pt-4 text-[15px] font-semibold text-ink">Other archetypes</h2>
+            <ul className="divide-y divide-line border-t border-line">
+              {others.map((b) => (
+                <li key={b.id}>
+                  <Link to={`/baskets/${b.id}`} className="block px-5 py-3 transition-colors duration-150 ease-out hover:bg-paper-2">
+                    <span className="block text-[13px] text-ink">
+                      {b.code} · {b.name}
+                    </span>
+                    <span className="text-[12px] text-muted">
+                      {b.horizon} · {b.riskCapacity} risk
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function Scale({ label, value, at, left, right }: { label: string; value: string; at: number; left: string; right: string }) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-[13px] text-muted">{label}</p>
+        <p className="text-[14px] text-ink">{value}</p>
+      </div>
+      <div className="relative mt-3 h-1 rounded-full bg-paper-2">
+        <span className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-paper bg-ink shadow-sm" style={{ left: `${at * 100}%` }} />
+      </div>
+      <div className="mt-2 flex justify-between text-[11px] text-muted">
+        <span>{left}</span>
+        <span>{right}</span>
       </div>
     </div>
   );
