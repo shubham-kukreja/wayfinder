@@ -1,13 +1,13 @@
 import { Fragment } from "react";
 import { NavLink } from "react-router-dom";
-import { ALLOCATION_ROUTES, BACKTESTING_ROUTES, FUNDS_ROUTES, GOVERNANCE_ROUTES, MODEL_ROUTES, NOTES_ROUTE, REFERENCE_ROUTES } from "../../lib/constants.js";
+import { ALLOCATION_ROUTES, BACKTESTING_ROUTES, CLIENTS_ROUTES, FUNDS_ROUTES, GOVERNANCE_ROUTES, MODEL_ROUTES, NOTES_ROUTE, REFERENCE_ROUTES } from "../../lib/constants.js";
 
 // The left rail is desktop-only, so below `lg` the same routes collapse into
 // a single horizontally scrollable strip. The rail's grouping survives as
 // hairline separators rather than headings — a heading per group would cost
 // more width than the labels themselves, but running all six together would
 // lose the structure entirely.
-const SECTIONS = [ALLOCATION_ROUTES, FUNDS_ROUTES, MODEL_ROUTES, BACKTESTING_ROUTES, GOVERNANCE_ROUTES, [NOTES_ROUTE], REFERENCE_ROUTES];
+const SECTIONS = [ALLOCATION_ROUTES, FUNDS_ROUTES, CLIENTS_ROUTES, MODEL_ROUTES, BACKTESTING_ROUTES, GOVERNANCE_ROUTES, [NOTES_ROUTE], REFERENCE_ROUTES];
 
 export function MobileNav() {
   return (

@@ -25,6 +25,7 @@ export function SearchableSelect({
   onQueryChange,
   onSelect,
   minQueryLength = 0,
+  autoFocus = false,
   className = "",
 }: {
   label?: string;
@@ -35,6 +36,8 @@ export function SearchableSelect({
   onQueryChange: (query: string) => void;
   onSelect: (option: SearchableSelectOption) => void;
   minQueryLength?: number;
+  /** Focus (and so open) on mount. */
+  autoFocus?: boolean;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -46,6 +49,10 @@ export function SearchableSelect({
   useEffect(() => {
     setQuery(value?.label ?? "");
   }, [value?.id]);
+
+  useEffect(() => {
+    if (autoFocus) inputRef.current?.focus();
+  }, [autoFocus]);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {

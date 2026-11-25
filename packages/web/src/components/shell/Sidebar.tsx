@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { ALLOCATION_ROUTES, BACKTESTING_ROUTES, FUNDS_ROUTES, GOVERNANCE_ROUTES, MODEL_ROUTES, NOTES_ROUTE, REFERENCE_ROUTES } from "../../lib/constants.js";
+import { ALLOCATION_ROUTES, BACKTESTING_ROUTES, CLIENTS_ROUTES, FUNDS_ROUTES, GOVERNANCE_ROUTES, MODEL_ROUTES, NOTES_ROUTE, REFERENCE_ROUTES } from "../../lib/constants.js";
 
 // Persistent left rail: wordmark up top, collapsible route groups beneath,
 // and a collapse affordance that narrows the rail to icons-off/labels-off.
@@ -14,6 +14,7 @@ import { ALLOCATION_ROUTES, BACKTESTING_ROUTES, FUNDS_ROUTES, GOVERNANCE_ROUTES,
 const GROUPS: Array<{ id: string; label: string; routes: readonly { path: string; label: string }[] }> = [
   { id: "allocation", label: "Allocation", routes: ALLOCATION_ROUTES },
   { id: "funds", label: "Funds", routes: FUNDS_ROUTES },
+  { id: "clients", label: "Clients", routes: CLIENTS_ROUTES },
   { id: "model", label: "Model", routes: MODEL_ROUTES },
   { id: "backtesting", label: "Backtesting", routes: BACKTESTING_ROUTES },
   { id: "governance", label: "Governance", routes: GOVERNANCE_ROUTES },

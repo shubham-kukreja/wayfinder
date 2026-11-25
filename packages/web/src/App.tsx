@@ -12,6 +12,8 @@ import { HistoryView } from "./views/HistoryView.js";
 import { NotesView } from "./views/NotesView.js";
 import { NoteEditorView } from "./views/NoteEditorView.js";
 import { FundRankingsView } from "./views/funds/FundRankingsView.js";
+import { ClientsView } from "./views/clients/ClientsView.js";
+import { ClientPlanView } from "./views/clients/ClientPlanView.js";
 import { CoreSessionGate } from "./components/CoreSessionGate.js";
 import { Sidebar } from "./components/shell/Sidebar.js";
 import { TopBar } from "./components/shell/TopBar.js";
@@ -35,6 +37,8 @@ export default function App() {
             <Route path="/" element={<Navigate to="/overview" replace />} />
             <Route path="/overview" element={<OverviewView />} />
             <Route path="/funds/*" element={<FundRankingsView />} />
+            <Route path="/clients" element={<ClientsView />} />
+            <Route path="/clients/:id" element={<ClientPlanView />} />
             <Route path="/model" element={<Navigate to="/model/signals" replace />} />
             <Route path="/model/signals" element={<DriversView />} />
             <Route path="/model/datapoints" element={<DataPointControlCenterView />} />

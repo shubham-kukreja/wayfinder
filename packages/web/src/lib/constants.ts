@@ -9,6 +9,10 @@ export const ALLOCATION_ROUTES: Array<{ path: string; label: string }> = [{ path
 // server: category rankings of mutual funds from the fund-scoring model.
 export const FUNDS_ROUTES: Array<{ path: string; label: string }> = [{ path: "/funds", label: "Fund Rankings" }];
 
+// Client plans: the model allocation applied to a client's money, fund by
+// fund. Clients are a demo fixture for now (lib/clients.ts).
+export const CLIENTS_ROUTES: Array<{ path: string; label: string }> = [{ path: "/clients", label: "All Clients" }];
+
 // Its own group, not folded into Allocation: this isn't a state of the
 // published/draft model, it's a separate workspace with its own queue of
 // runs — a "what you're testing" surface, distinct from "what you hold"
