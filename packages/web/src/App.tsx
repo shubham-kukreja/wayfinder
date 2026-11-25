@@ -15,6 +15,8 @@ import { FundRankingsView } from "./views/funds/FundRankingsView.js";
 import { ClientsView } from "./views/clients/ClientsView.js";
 import { ClientView } from "./views/clients/ClientView.js";
 import { InvestView } from "./views/clients/InvestView.js";
+import { RebalanceView } from "./views/clients/RebalanceView.js";
+import { BasketsView, BasketView } from "./views/clients/BasketsView.js";
 import { CoreSessionGate } from "./components/CoreSessionGate.js";
 import { Sidebar } from "./components/shell/Sidebar.js";
 import { TopBar } from "./components/shell/TopBar.js";
@@ -41,6 +43,9 @@ export default function App() {
             <Route path="/clients" element={<ClientsView />} />
             <Route path="/clients/:id" element={<ClientView />} />
             <Route path="/clients/:id/invest" element={<InvestView />} />
+            <Route path="/clients/:id/rebalance" element={<RebalanceView />} />
+            <Route path="/baskets" element={<BasketsView />} />
+            <Route path="/baskets/:id" element={<BasketView />} />
             <Route path="/model" element={<Navigate to="/model/signals" replace />} />
             <Route path="/model/signals" element={<DriversView />} />
             <Route path="/model/datapoints" element={<DataPointControlCenterView />} />

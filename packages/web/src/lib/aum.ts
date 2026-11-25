@@ -86,12 +86,19 @@ export function series(lots: Lot[], navs: NavMap, dates: string[]): Point[] {
   });
 }
 
-export type Range = "1W" | "1M" | "6M" | "YTD" | "1Y" | "MAX";
+export type Range = "1D" | "1W" | "1M" | "6M" | "YTD" | "1Y" | "5Y" | "MAX";
+/** The dashboard's ranges. */
 export const RANGES: Range[] = ["1W", "1M", "6M", "YTD", "1Y", "MAX"];
 
 export function rangeStart(range: Range, last: string): string {
   const d = new Date(`${last}T00:00:00Z`);
   switch (range) {
+    case "1D":
+      d.setUTCDate(d.getUTCDate() - 1);
+      break;
+    case "5Y":
+      d.setUTCFullYear(d.getUTCFullYear() - 5);
+      break;
     case "1W":
       d.setUTCDate(d.getUTCDate() - 7);
       break;
@@ -157,4 +164,62 @@ export function holdingValues(lots: Lot[], navs: NavMap, asOf: string, from: str
     h.navChange = a && b ? b / a - 1 : null;
   }
   return [...by.values()].sort((x, y) => y.value - x.value);
+}
+
+const DAY = 86_400_000;
+const days = (a: string, b: string) => (Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY;
+
+/**
+ * Time-weighted return over the points: each day's growth with that day's
+ * new money taken out, chained. Not affected by when money was added.
+ */
+export function twr(points: Point[]): number | null {
+  if (points.length < 2) return null;
+  let g = 1;
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1]!;
+    const cur = points[i]!;
+    if (prev.value <= 0) continue;
+    const flow = cur.invested - prev.invested;
+    g *= (cur.value - flow) / prev.value;
+  }
+  return g - 1;
+}
+
+/** CAGR: the time-weighted return, annualised. Null under a year. */
+export function cagr(points: Point[]): number | null {
+  if (points.length < 2) return null;
+  const span = days(points[0]!.date, points[points.length - 1]!.date);
+  const r = twr(points);
+  if (r == null || span < 365) return null;
+  return (1 + r) ** (365 / span) - 1;
+}
+
+/**
+ * XIRR: the annual rate that discounts the cash flows to zero — the value at
+ * the start (or the first investment) and each new investment going in, the
+ * value at the end coming out. Null under a year or when it does not solve.
+ */
+export function xirr(points: Point[]): number | null {
+  if (points.length < 2) return null;
+  const first = points[0]!;
+  const last = points[points.length - 1]!;
+  if (days(first.date, last.date) < 365) return null;
+  const flows: Array<{ t: number; v: number }> = [{ t: 0, v: -first.value }];
+  for (let i = 1; i < points.length; i++) {
+    const f = points[i]!.invested - points[i - 1]!.invested;
+    if (f !== 0) flows.push({ t: days(first.date, points[i]!.date) / 365, v: -f });
+  }
+  flows.push({ t: days(first.date, last.date) / 365, v: last.value });
+  const npv = (r: number) => flows.reduce((s, f) => s + f.v / (1 + r) ** f.t, 0);
+  let lo = -0.99;
+  let hi = 10;
+  if (npv(lo) * npv(hi) > 0) return null;
+  for (let i = 0; i < 200; i++) {
+    const mid = (lo + hi) / 2;
+    if (npv(lo) * npv(mid) <= 0) hi = mid;
+    else lo = mid;
+    if (hi - lo < 1e-7) break;
+  }
+  return (lo + hi) / 2;
 }

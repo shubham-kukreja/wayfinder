@@ -61,6 +61,7 @@ export function SleeveAllocation({
   action,
   onSelect,
   renderDetail,
+  renderValue,
   className = "",
 }: {
   allocation: Allocation;
@@ -74,6 +75,8 @@ export function SleeveAllocation({
   onSelect?: (id: string) => void;
   /** Extra content under a row (the invest flow's fund and amount). */
   renderDetail?: (id: string) => ReactNode;
+  /** Replaces the weight on the right of a row (e.g. weight and amount). */
+  renderValue?: (id: string, weight: number) => ReactNode;
   className?: string;
 }) {
   const rows = filter === "all" ? allocation.rollup : allocation.rollup.filter((r) => rollupGroup(r.id) === filter);
@@ -117,7 +120,9 @@ export function SleeveAllocation({
                     </span>
                   )}
                 </div>
-                <span className="shrink-0 text-[15px] font-semibold tabular-nums text-ink">{formatPct(row.portfolioWeight, 1)}</span>
+                <span className="shrink-0 text-[15px] font-semibold tabular-nums text-ink">
+                  {renderValue ? renderValue(row.id, row.portfolioWeight) : formatPct(row.portfolioWeight, 1)}
+                </span>
               </div>
               <div className="mt-1 flex items-baseline justify-between gap-4 pl-6">
                 <span className="truncate text-[13px] text-muted">

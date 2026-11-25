@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AumChart } from "../../components/clients/AumChart.js";
 import { useBook, type ClientBook } from "../../hooks/useBook.js";
 import { segmentColor } from "../../components/AllocationBar.js";
@@ -57,7 +57,7 @@ export function ClientsView() {
   const pct = book.change.pct;
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] px-6 py-8">
+    <div className="mx-auto w-full max-w-[1440px] px-8 py-8">
       <header className="flex flex-wrap items-start justify-between gap-6">
         <h1 className="font-display text-[28px] leading-tight text-ink">
           {greeting()}
@@ -80,11 +80,11 @@ export function ClientsView() {
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-6">
-          <section className="overflow-hidden border border-line bg-paper">
+          <section className="overflow-hidden rounded-xl border border-line bg-paper">
             <AumChart points={book.points} range={range} onRange={setRange} loading={book.loading} />
           </section>
 
-          <section className="border border-line bg-paper">
+          <section className="overflow-hidden rounded-xl border border-line bg-paper">
             <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-3 pt-5">
               <h2 className="text-lg font-semibold text-ink">Accounts</h2>
               <div className="flex items-center divide-x divide-line text-[13px]">
@@ -125,7 +125,7 @@ export function ClientsView() {
                   {book.loading && (
                     <tr>
                       <td colSpan={5} className="px-5 py-6 text-muted">
-                        Loading accounts…
+                        Loading accounts
                       </td>
                     </tr>
                   )}
@@ -135,7 +135,7 @@ export function ClientsView() {
           </section>
         </div>
 
-        <aside className="border border-line bg-paper lg:self-start">
+        <aside className="overflow-hidden rounded-xl border border-line bg-paper lg:self-start">
           <h2 className="px-5 pb-3 pt-5 text-lg font-semibold text-ink">Top Holdings</h2>
           <ul className="divide-y divide-line border-t border-line">
             {book.holdings.slice(0, 10).map((h) => (
@@ -143,7 +143,7 @@ export function ClientsView() {
                 <span className="flex min-w-0 items-center gap-2.5">
                   <span className="h-2.5 w-2.5 shrink-0" style={{ backgroundColor: segmentColor(h.sleeve, allocation ?? undefined) }} aria-hidden="true" />
                   <span className="min-w-0">
-                    <span className="block truncate bg-paper-2 px-2 py-1 text-[12px] font-semibold text-ink" title={h.schemeName}>
+                    <span className="block truncate rounded-md bg-paper-2 px-2 py-1 text-[12px] font-semibold text-ink" title={h.schemeName}>
                       {shortFundName(h.schemeName)}
                     </span>
                   </span>
@@ -190,7 +190,15 @@ function AccountRow({ book, onOpen }: { book: ClientBook; onOpen: () => void }) 
         <span className="block font-semibold text-ink">{book.client.name}</span>
         <span className="text-[12px] text-muted">{book.client.city}</span>
       </td>
-      <td className="px-3 py-3.5 text-ink-2">{book.client.basketName}</td>
+      <td className="px-3 py-3.5">
+        <Link
+          to={`/baskets/${book.client.basket}`}
+          onClick={(e) => e.stopPropagation()}
+          className="text-ink-2 underline decoration-line underline-offset-4 transition-colors duration-150 ease-out hover:text-ink"
+        >
+          {book.client.basketName}
+        </Link>
+      </td>
       <td className="px-3 py-3.5 text-ink-2">{fmtDay(book.client.since)}</td>
       <td className="px-3 py-3.5 text-ink-2">{fmtDay(book.lastActivity)}</td>
       <td className="px-5 py-3.5 text-right">

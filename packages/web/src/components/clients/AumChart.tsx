@@ -9,14 +9,24 @@ const W = 800;
 const H = 300;
 const PAD = { top: 16, right: 0, bottom: 28, left: 64 };
 
-const fmtDay = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-const fmtFull = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+const fmtDay = (iso: string) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+  });
+const fmtFull = (iso: string) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 
 function niceTicks(min: number, max: number, count = 5): number[] {
   if (max <= min) return [min];
   const raw = (max - min) / (count - 1);
   const mag = 10 ** Math.floor(Math.log10(raw));
-  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? raw;
+  const step =
+    [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? raw;
   const lo = Math.floor(min / step) * step;
   const out: number[] = [];
   for (let v = lo; v <= max + step / 2; v += step) out.push(v);
@@ -28,11 +38,14 @@ export function AumChart({
   range,
   onRange,
   loading,
+  ranges = RANGES,
 }: {
   points: Point[];
   range: Range;
-  onRange: (r: Range) => void;
+  /** Omit to hide the range buttons (when the page has its own toggle). */
+  onRange?: (r: Range) => void;
   loading?: boolean;
+  ranges?: Range[];
 }) {
   const ref = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
@@ -48,11 +61,19 @@ export function AumChart({
     const ticks = niceTicks(min, max);
     min = Math.min(min, ticks[0]!);
     max = Math.max(max, ticks[ticks.length - 1]!);
-    const x = (i: number) => PAD.left + (i / (points.length - 1)) * (W - PAD.left - PAD.right);
-    const y = (v: number) => PAD.top + (1 - (v - min) / (max - min)) * (H - PAD.top - PAD.bottom);
-    const line = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join("");
+    const x = (i: number) =>
+      PAD.left + (i / (points.length - 1)) * (W - PAD.left - PAD.right);
+    const y = (v: number) =>
+      PAD.top + (1 - (v - min) / (max - min)) * (H - PAD.top - PAD.bottom);
+    const line = points
+      .map(
+        (p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`,
+      )
+      .join("");
     const area = `${line}L${x(points.length - 1).toFixed(1)},${H - PAD.bottom}L${x(0).toFixed(1)},${H - PAD.bottom}Z`;
-    const xTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(f * (points.length - 1)));
+    const xTicks = [0, 0.25, 0.5, 0.75, 1].map((f) =>
+      Math.round(f * (points.length - 1)),
+    );
     return { x, y, line, area, ticks, xTicks };
   }, [points]);
 
@@ -60,15 +81,17 @@ export function AumChart({
     if (!geo || !ref.current) return;
     const r = ref.current.getBoundingClientRect();
     const px = ((e.clientX - r.left) / r.width) * W;
-    const i = Math.round(((px - PAD.left) / (W - PAD.left - PAD.right)) * (points.length - 1));
+    const i = Math.round(
+      ((px - PAD.left) / (W - PAD.left - PAD.right)) * (points.length - 1),
+    );
     setHover(Math.max(0, Math.min(points.length - 1, i)));
   }
 
   const hp = hover != null ? points[hover] : null;
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="relative bg-paper-2">
+    <div className="flex flex-col">
+      <div className="relative bg-[#F5F5F5]">
         {geo ? (
           <svg
             ref={ref}
@@ -81,16 +104,34 @@ export function AumChart({
             aria-label={`AUM from ${fmtFull(points[0]!.date)} to ${fmtFull(points[points.length - 1]!.date)}`}
           >
             <defs>
+              {/* Altruist's area: solid bright green fading out toward the axis. */}
               <linearGradient id="aum-fill" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="#2BD46A" stopOpacity="1" />
-                <stop offset="100%" stopColor="#2BD46A" stopOpacity="0.08" />
+                <stop offset="0%" stopColor="#2CD46B" stopOpacity="1" />
+                <stop offset="55%" stopColor="#2CD46B" stopOpacity="0.85" />
+                <stop offset="100%" stopColor="#2CD46B" stopOpacity="0.05" />
               </linearGradient>
             </defs>
             {geo.ticks.map((t) => (
-              <line key={t} x1={PAD.left} x2={W} y1={geo.y(t)} y2={geo.y(t)} stroke="currentColor" className="text-line" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+              <line
+                key={t}
+                x1={PAD.left}
+                x2={W}
+                y1={geo.y(t)}
+                y2={geo.y(t)}
+                stroke="currentColor"
+                className="text-line"
+                strokeWidth="1"
+                vectorEffect="non-scaling-stroke"
+              />
             ))}
             <path d={geo.area} fill="url(#aum-fill)" />
-            <path d={geo.line} fill="none" stroke="#14532D" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+            <path
+              d={geo.line}
+              fill="none"
+              stroke="#22C55E"
+              strokeWidth="1.5"
+              vectorEffect="non-scaling-stroke"
+            />
             {hp && (
               <line
                 x1={geo.x(hover!)}
@@ -105,7 +146,9 @@ export function AumChart({
             )}
           </svg>
         ) : (
-          <div className="flex h-[300px] items-center justify-center text-[13px] text-muted">{loading ? "Loading values…" : "No history yet"}</div>
+          <div className="flex h-[300px] items-center justify-center text-[13px] text-muted">
+            {loading ? "Loading values…" : "No history yet"}
+          </div>
         )}
         {/* Axis labels as HTML so they do not stretch with the SVG. */}
         {geo && (
@@ -133,28 +176,40 @@ export function AumChart({
         {hp && geo && (
           <div
             className="pointer-events-none absolute top-3 z-10 border border-line bg-paper px-3 py-2 text-[12px] shadow-md"
-            style={{ left: `${Math.min(80, Math.max(8, (geo.x(hover!) / W) * 100))}%` }}
+            style={{
+              left: `${Math.min(80, Math.max(8, (geo.x(hover!) / W) * 100))}%`,
+            }}
           >
             <p className="text-muted">{fmtFull(hp.date)}</p>
-            <p className="text-[14px] font-semibold tabular-nums text-ink">{formatRupees(Math.round(hp.value))}</p>
+            <p className="text-[14px] font-semibold tabular-nums text-ink">
+              {formatRupees(Math.round(hp.value))}
+            </p>
           </div>
         )}
       </div>
-      <div className="flex items-center justify-center gap-1 py-3" role="group" aria-label="Range">
-        {RANGES.map((r) => (
-          <button
-            key={r}
-            type="button"
-            onClick={() => onRange(r)}
-            aria-pressed={r === range}
-            className={`h-7 min-w-[40px] rounded-sm px-2 text-[12px] font-semibold transition-colors duration-100 ease-in ${
-              r === range ? "bg-paper-2 text-ink" : "text-muted hover:text-ink"
-            }`}
-          >
-            {r}
-          </button>
-        ))}
-      </div>
+      {onRange && (
+        <div
+          className="flex items-center justify-center gap-1 py-3"
+          role="group"
+          aria-label="Range"
+        >
+          {ranges.map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => onRange(r)}
+              aria-pressed={r === range}
+              className={`h-7 min-w-[40px] rounded-sm px-2 text-[12px] font-semibold transition-colors duration-100 ease-in ${
+                r === range
+                  ? "bg-[#F0F0F0] text-ink"
+                  : "text-muted hover:text-ink"
+              }`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

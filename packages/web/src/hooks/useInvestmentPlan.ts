@@ -6,19 +6,41 @@ import { candidatesFor, planLines, sleeveCategory, type FundChoice, type PlanLin
 import { fundScoresApi, type FundScoreRanking } from "../lib/coreApi.js";
 import { useCoreAllocation } from "./useCoreAllocation.js";
 
-export interface PlannedLine extends PlanLine {
+/** One fund buy within a sleeve. */
+export interface FundSlot {
+  slot: number;
   fund: FundChoice | null;
+  amount: number;
+  overridden: boolean;
+}
+
+export interface PlannedLine extends PlanLine {
+  funds: FundSlot[];
   /** Ranked alternatives for the sleeve, best first. */
   options: FundChoice[];
   /** The sleeve's default fund, for sleeves with no ranking. */
   fallback: FundChoice | null;
-  overridden: boolean;
+}
+
+// A sleeve gets two funds when it is big enough to split: at least 8% of the
+// plan and ₹50,000. The first fund takes 60%, the second 40%. Smaller sleeves,
+// and sleeves with no ranking to pick a second from, get one fund.
+const SPLIT_MIN_WEIGHT = 0.08;
+const SPLIT_MIN_AMOUNT = 50_000;
+const FIRST_SHARE = 0.6;
+
+function slotAmounts(l: PlanLine, ranked: number): number[] {
+  if (ranked >= 2 && l.weight >= SPLIT_MIN_WEIGHT && l.amount >= SPLIT_MIN_AMOUNT) {
+    const first = Math.round((l.amount * FIRST_SHARE) / 100) * 100;
+    return [first, l.amount - first];
+  }
+  return [l.amount];
 }
 
 /**
- * An amount split over the model allocation (published, else the draft), one
- * fund per sleeve: the top of the sleeve's Fund Rankings shortlist unless
- * the user picked another. Lines come in the model's sleeve order.
+ * An amount split over the model allocation (published, else the draft), in
+ * the model's sleeve order, with one or two funds per sleeve: the top of the
+ * sleeve's Fund Rankings shortlist unless the user picked another.
  */
 export function useInvestmentPlan(amount: number) {
   const { data, allocation, loading, error } = useCoreAllocation();
@@ -58,8 +80,17 @@ export function useInvestmentPlan(amount: number) {
       const cat = sleeveCategory(l.sleeve);
       const options = cat ? candidatesFor(l.sleeve, rankings[cat.category]?.funds ?? []) : [];
       const fallback = defaults[l.sleeve] ?? null;
-      const pick = picks[l.sleeve];
-      return { ...l, options, fallback, fund: pick ?? options[0] ?? fallback, overridden: !!pick };
+      // Automatic picks only use funds that pass every hard filter; a fund
+      // that fails one can still be chosen by hand from the rankings.
+      const eligible = options.filter((o) => o.status === "shortlist" || o.status === "below_cutoff");
+      const used = new Set<string>();
+      const funds = slotAmounts(l, eligible.length).map((amt, slot) => {
+        const pick = picks[`${l.sleeve}:${slot}`];
+        const fund = pick ?? eligible.find((o) => !used.has(o.schemeCode)) ?? (slot === 0 ? (options[0] ?? fallback) : null);
+        if (fund) used.add(fund.schemeCode);
+        return { slot, fund, amount: amt, overridden: !!pick };
+      });
+      return { ...l, options, fallback, funds };
     });
   }, [allocation, amount, rankings, defaults, picks]);
 
@@ -76,11 +107,11 @@ export function useInvestmentPlan(amount: number) {
       if (!r || !cat) return null;
       return cat.match ? { ...r, funds: r.funds.filter((f) => cat.match!.test(f.name)) } : r;
     },
-    pick: (sleeve: string, f: FundChoice) => setPicks((p) => ({ ...p, [sleeve]: f })),
-    reset: (sleeve: string) =>
+    pick: (sleeve: string, slot: number, f: FundChoice) => setPicks((p) => ({ ...p, [`${sleeve}:${slot}`]: f })),
+    reset: (sleeve: string, slot: number) =>
       setPicks((p) => {
         const next = { ...p };
-        delete next[sleeve];
+        delete next[`${sleeve}:${slot}`];
         return next;
       }),
   };

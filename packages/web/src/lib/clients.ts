@@ -12,24 +12,26 @@ export interface Client {
   netWorth: number;
   /** The suggested amount for the next investment, ₹. */
   investable: number;
-  /** Core risk profile key. */
+  /** Basket (client archetype) id, lib/baskets.ts. */
   basket: string;
   basketName: string;
   since: string;
   city: string;
 }
 
-const balanced = { basket: "balanced", basketName: "Balanced" };
+// Every client is in A4 for now: the only archetype whose model portfolio
+// (core's Balanced profile) is set up.
+const balanced = { basket: "a4", basketName: "A4 · Affluent Professional" };
 
 export const CLIENTS: Client[] = [
-  { id: "aarav-mehta", name: "Aarav Mehta", netWorth: 3_40_00_000, investable: 10_00_000, since: "2024-02-12", city: "Mumbai", ...balanced },
-  { id: "priya-nair", name: "Priya Nair", netWorth: 1_10_00_000, investable: 5_00_000, since: "2024-06-03", city: "Bengaluru", ...balanced },
-  { id: "rohan-kapoor", name: "Rohan Kapoor", netWorth: 6_75_00_000, investable: 25_00_000, since: "2024-03-18", city: "Delhi", ...balanced },
-  { id: "ananya-iyer", name: "Ananya Iyer", netWorth: 85_00_000, investable: 3_00_000, since: "2025-01-20", city: "Chennai", ...balanced },
-  { id: "vikram-singh", name: "Vikram Singh", netWorth: 2_20_00_000, investable: 10_00_000, since: "2024-09-09", city: "Jaipur", ...balanced },
-  { id: "meera-joshi", name: "Meera Joshi", netWorth: 1_60_00_000, investable: 5_00_000, since: "2025-04-14", city: "Pune", ...balanced },
-  { id: "karan-malhotra", name: "Karan Malhotra", netWorth: 4_10_00_000, investable: 15_00_000, since: "2025-07-07", city: "Gurugram", ...balanced },
-  { id: "sneha-reddy", name: "Sneha Reddy", netWorth: 70_00_000, investable: 2_00_000, since: "2026-08-25", city: "Hyderabad", ...balanced },
+  { id: "hrishikesh-patwardhan", name: "Hrishikesh Patwardhan", netWorth: 3_40_00_000, investable: 10_00_000, since: "2024-02-12", city: "Mumbai", ...balanced },
+  { id: "devika-ramaswamy", name: "Devika Ramaswamy", netWorth: 1_10_00_000, investable: 5_00_000, since: "2024-06-03", city: "Bengaluru", ...balanced },
+  { id: "kabir-sethi", name: "Kabir Sethi", netWorth: 6_75_00_000, investable: 25_00_000, since: "2024-03-18", city: "Delhi", ...balanced },
+  { id: "nandini-chaturvedi", name: "Nandini Chaturvedi", netWorth: 85_00_000, investable: 3_00_000, since: "2025-01-20", city: "Chennai", ...balanced },
+  { id: "arjun-venkataraman", name: "Arjun Venkataraman", netWorth: 2_20_00_000, investable: 10_00_000, since: "2024-09-09", city: "Jaipur", ...balanced },
+  { id: "ritika-bhattacharjee", name: "Ritika Bhattacharjee", netWorth: 1_60_00_000, investable: 5_00_000, since: "2025-04-14", city: "Pune", ...balanced },
+  { id: "zoya-merchant", name: "Zoya Merchant", netWorth: 4_10_00_000, investable: 15_00_000, since: "2025-07-07", city: "Gurugram", ...balanced },
+  { id: "parth-oberoi", name: "Parth Oberoi", netWorth: 70_00_000, investable: 2_00_000, since: "2026-08-25", city: "Hyderabad", ...balanced },
 ];
 
 export const clientById = (id: string | undefined) => CLIENTS.find((c) => c.id === id) ?? null;
@@ -132,6 +134,8 @@ export interface Order {
   lines: OrderLine[];
   /** A past investment from the client records (not placed here). */
   seed?: boolean;
+  /** invest: new money; rebalance: sells and buys that net to zero. */
+  kind?: "invest" | "rebalance";
 }
 
 // Past investments, split across one fund per sleeve in roughly the model's
@@ -160,14 +164,14 @@ function seedOrder(id: string, date: string, amount: number, altLarge = false): 
 }
 
 const SEED_ORDERS: Record<string, Order[]> = {
-  "aarav-mehta": [seedOrder("a1", "2024-02-12", 60_00_000), seedOrder("a2", "2025-03-10", 25_00_000)],
-  "priya-nair": [seedOrder("p1", "2024-06-03", 30_00_000, true)],
-  "rohan-kapoor": [seedOrder("r1", "2024-03-18", 1_50_00_000), seedOrder("r2", "2025-06-16", 40_00_000), seedOrder("r3", "2026-05-11", 20_00_000)],
-  "ananya-iyer": [seedOrder("n1", "2025-01-20", 18_00_000, true)],
-  "vikram-singh": [seedOrder("v1", "2024-09-09", 55_00_000), seedOrder("v2", "2026-02-02", 12_00_000)],
-  "meera-joshi": [seedOrder("m1", "2025-04-14", 35_00_000, true)],
-  "karan-malhotra": [seedOrder("k1", "2025-07-07", 90_00_000), seedOrder("k2", "2026-09-14", 15_00_000)],
-  "sneha-reddy": [seedOrder("s1", "2026-08-25", 12_00_000, true)],
+  "hrishikesh-patwardhan": [seedOrder("a1", "2024-02-12", 60_00_000), seedOrder("a2", "2025-03-10", 25_00_000)],
+  "devika-ramaswamy": [seedOrder("p1", "2024-06-03", 30_00_000, true)],
+  "kabir-sethi": [seedOrder("r1", "2024-03-18", 1_50_00_000), seedOrder("r2", "2025-06-16", 40_00_000), seedOrder("r3", "2026-05-11", 20_00_000)],
+  "nandini-chaturvedi": [seedOrder("n1", "2025-01-20", 18_00_000, true)],
+  "arjun-venkataraman": [seedOrder("v1", "2024-09-09", 55_00_000), seedOrder("v2", "2026-02-02", 12_00_000)],
+  "ritika-bhattacharjee": [seedOrder("m1", "2025-04-14", 35_00_000, true)],
+  "zoya-merchant": [seedOrder("k1", "2025-07-07", 90_00_000), seedOrder("k2", "2026-09-14", 15_00_000)],
+  "parth-oberoi": [seedOrder("s1", "2026-08-25", 12_00_000, true)],
 };
 
 const ordersKey = (id: string) => `core.clients.${id}.orders`;
