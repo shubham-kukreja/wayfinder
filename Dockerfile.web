@@ -1,5 +1,5 @@
 # Web service: builds the Vite SPA, then serves it with server.mjs (static
-# files + an /api proxy that injects x-api-secret server-side).
+# files + a /v1 proxy to core-jobs-service over Railway's private network).
 #
 # Build context is the REPO ROOT — @wayfinder/web depends on
 # @wayfinder/engine via `workspace:*`.
@@ -19,12 +19,8 @@ RUN pnpm install --frozen-lockfile --filter @wayfinder/web...
 COPY packages/engine ./packages/engine
 COPY packages/web ./packages/web
 
-# Vite inlines import.meta.env at BUILD time, so this must be set here —
-# a runtime variable would silently do nothing. Empty string makes
-# API_BASE_URL fall back to same-origin (constants.ts), so the browser
-# calls /api/* on this service and server.mjs proxies onward. That is what
-# keeps the secret out of the bundle.
-ENV VITE_API_BASE_URL=""
+# The app calls /v1 on its own origin (coreApi.ts); server.mjs proxies it.
+ENV VITE_CORE_API_BASE_URL=""
 RUN pnpm --filter @wayfinder/web build
 
 # --- runtime ---
